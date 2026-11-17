@@ -25,6 +25,8 @@ To run the desktop app instead:
 pnpm dev:desktop
 ```
 
+Development runs keep their stuffs, settings and game data in their own folder, `Dofus Gear Explorer Dev` (next to the installed app's `Dofus Gear Explorer`), so they never share storage with an installed copy. Set `DDE_DATA_DIR` to reuse game data you already imported, for example `DDE_DATA_DIR=$PWD/apps/api/data pnpm dev:desktop`. Only one copy of the app runs at a time: opening it again brings back the window already open.
+
 ### Packaging the desktop app
 
 Releases are built by the `Release` workflow when a `vX.Y.Z` tag is pushed (see CONTRIBUTING.md). To build locally:

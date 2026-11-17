@@ -7,19 +7,34 @@ import { startUpdates } from "./updates"
 
 const appName = "Dofus Gear Explorer"
 app.setName(appName)
-const userData = join(app.getPath("appData"), appName)
+// Two apps sharing one folder cannot both open its storage: the second one would
+// silently forget the stuffs and settings it saves. Development runs get their own.
+const userData = join(app.getPath("appData"), app.isPackaged ? appName : `${appName} Dev`)
 
 // The app was called Dofus Database Explorer before 0.1.0: keep its stuffs and game data.
 const legacyData = join(app.getPath("appData"), "Dofus Database Explorer")
-if (existsSync(legacyData) && !existsSync(userData)) {
+if (app.isPackaged && existsSync(legacyData) && !existsSync(userData)) {
   try {
     renameSync(legacyData, userData)
   } catch {
     // A fresh folder works too: the data downloads again and the stuffs start empty.
   }
 }
-// Development and packaged runs share one folder, whatever package.json says.
 app.setPath("userData", userData)
+
+// For the same reason, opening the app again brings back the window already open.
+const primary = app.requestSingleInstanceLock()
+if (!primary) app.exit(0)
+app.on("second-instance", () => {
+  const window = BrowserWindow.getAllWindows()[0]
+  if (!window) return
+  if (window.isMinimized()) window.restore()
+  window.focus()
+})
+
+// Ctrl-C in a terminal and the development watcher end the app with a signal; quitting
+// properly lets Chromium write the storage to disk first.
+for (const signal of ["SIGINT", "SIGTERM"] as const) process.on(signal, () => app.quit())
 
 app.setAboutPanelOptions({
   applicationName: appName,
@@ -113,6 +128,7 @@ function createWindow() {
 ipcMain.handle("dde:config", () => ({ apiBaseUrl, version: app.getVersion() }))
 
 app.whenReady().then(async () => {
+  if (!primary) return
   try {
     apiBaseUrl = await startApi()
   } catch (error) {
