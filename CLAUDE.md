@@ -14,7 +14,7 @@ pnpm monorepo: a Go API (`apps/api`), a shared React interface (`packages/app`) 
 - `pnpm notices`: write `THIRD_PARTY_NOTICES.md` again after changing dependencies (CI fails when it is stale)
 - `pnpm build:desktop:mac|win|linux`: local installers in `apps/desktop/release/<version>` (never published)
 - Branches: work lands in `develop` (default branch, squash merges); `main` only receives `develop` through a merge-commit pull request before each release.
-- `pnpm release X.Y.Z`: bumps every `package.json`, merges it into `develop`, then `develop` into `main` (`scripts/release.mjs`, through `gh`); the maintainer then runs the Release workflow on `main`, which tags, builds and publishes. Developer reference: `docs/DEVELOPMENT.md`.
+- `pnpm release X.Y.Z`: bumps every `package.json`, merges it into `develop`, then `develop` into `main` (`scripts/release.mjs`, through `gh`); the maintainer then runs the Release workflow, which always releases `main`: it tags, builds and publishes. Developer reference: `docs/DEVELOPMENT.md`.
 
 ## Conventions
 
@@ -24,7 +24,7 @@ pnpm monorepo: a Go API (`apps/api`), a shared React interface (`packages/app`) 
 - Every user-facing string has an entry in each language file of `packages/app/src/locales` (French, English, Spanish, Portuguese). French defines the keys, so a missing key fails `pnpm typecheck`; use the game data's own terms for stats, slots and classes in each language, and a `{ one, other }` message where a count changes the words.
 - Colours come from the tokens in `packages/app/src/styles.css`; see `DESIGN.md` and `PRODUCT.md` before changing the look.
 - The app never asks for an account or personal data, and only goes online for the game data and its own updates (README, PRIVACY.md). Don't add telemetry, logins or other network access.
-- Never commit Ankama content (game data, images); the app downloads it at run time. Every place the app is described says it is unofficial and not affiliated with Ankama.
+- Never commit Ankama content (game data, images); the app downloads it at run time. The README screenshots (`docs/screenshots`) are taken without the item icons, so the app shows its slot glyphs instead. Every place the app is described says it is unofficial and not affiliated with Ankama.
 - dofusbook (d-bk.net) is the reference for formulas. Compare by reading its rendered pages; never call its private API.
 - React: no `setState` in effects to reset state; adjust it during render or in the event handler (oxlint enforces it).
 - Before using ui-sdk, read `packages/app/node_modules/@ui-sdk/react/docs/llms.txt` and the page of the component you use.

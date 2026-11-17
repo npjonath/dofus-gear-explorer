@@ -34,7 +34,7 @@ Data comes straight from the game files, as published by doduda in the dofusdude
 - The Go backend runs locally beside the desktop app and holds the SQLite database.
 - Game data updates arrive as new GitHub releases after each game patch.
 - Interface and item names in French and English (user answer: "fr / en"), then Spanish and Portuguese, the other languages the game data is published in (2026-11-17).
-- Distributed as installers for macOS (Apple silicon and Intel), Windows and Linux on GitHub Releases. Not signed with paid certificates: the system warns on first opening, and on macOS updates are a notice with a download link instead of an automatic install.
+- Distributed as installers for macOS (Apple silicon and Intel), Windows and Linux on GitHub Releases. Not signed with paid certificates: the system warns on first opening. Updates install themselves on every system; on macOS the app replaces its own bundle, since the native updater needs a paid signature.
 - A community project (user decision, 2026-11-17): issues and pull requests are welcome, contributions are published under MIT, and the README, CONTRIBUTING.md and docs/DEVELOPMENT.md explain how to take part.
 
 ## Capabilities and Constraints

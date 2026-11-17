@@ -17,7 +17,7 @@ The app is not signed with a paid certificate, so your system warns you once.
 - **Windows**: if SmartScreen stops the installer, press "More info", then "Run anyway".
 - **Linux**: make the AppImage executable (`chmod +x`) and run it.
 
-On first launch the app downloads the game data (a few minutes). Later versions install themselves on Windows and Linux; on macOS the app tells you when a new version is out.
+On first launch the app downloads the game data (a few minutes). Later versions download and install themselves on every system (on macOS, keep the app in the Applications folder).
 
 ## Première ouverture (français)
 
@@ -27,4 +27,4 @@ L'application n'est pas signée avec un certificat payant : votre système vous 
 - **Windows** : si SmartScreen bloque l'installeur, cliquez sur « Informations complémentaires », puis « Exécuter quand même ».
 - **Linux** : rendez l'AppImage exécutable (`chmod +x`) et lancez-la.
 
-Au premier lancement, l'application télécharge les données du jeu (quelques minutes). Les versions suivantes s'installent toutes seules sur Windows et Linux ; sur macOS, l'application vous prévient quand une nouvelle version sort.
+Au premier lancement, l'application télécharge les données du jeu (quelques minutes). Les versions suivantes se téléchargent et s'installent toutes seules, sur tous les systèmes (sur macOS, gardez l'application dans le dossier Applications).

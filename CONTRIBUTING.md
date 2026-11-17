@@ -58,8 +58,8 @@ The architecture, the HTTP API, the forgemagic rules and the solver are describe
 Only the maintainer publishes releases: the Release workflow refuses to run for anyone else, and release tags can't be moved or deleted.
 
 1. Run `pnpm release X.Y.Z` (it needs the GitHub CLI, `gh`, signed in). It sets the version in every `package.json` on a `release/vX.Y.Z` branch and merges that pull request into `develop` once CI passes. Then it opens a pull request from `develop` to `main` and merges it with a merge commit once its checks pass. Both pull requests carry `skip-changelog`. If a check fails, fix it and run the command again: it picks up where it stopped.
-2. On GitHub, open Actions, then **Release**, then **Run workflow**, and keep the `main` branch. The workflow checks the version, runs the checks, builds the installers for macOS, Windows and Linux, and publishes them in a release tagged `vX.Y.Z` with generated notes. Installed apps then update to it.
+2. On GitHub, open Actions, then **Release**, then **Run workflow**. Whatever branch the form shows, the workflow releases `main`: it checks the version, runs the checks, builds the installers for macOS, Windows and Linux, and publishes them in a release tagged `vX.Y.Z` with generated notes. Installed apps then update to it.
 
-If a packaging job fails (for example, no macOS runner is free), use **Re-run failed jobs**: the release is published once every installer is attached. Tick **Dry run** to only build the installers, as workflow artifacts, from any branch.
+If a packaging job fails (for example, no macOS runner is free), use **Re-run failed jobs**: the release is published once every installer is attached. Tick **Dry run** to only build the installers of the chosen branch, as workflow artifacts.
 
 The release notes group the merged pull requests by label: `enhancement` under New features, `bug` under Fixes, `dependencies` under Dependencies. `skip-changelog` leaves a pull request out.
