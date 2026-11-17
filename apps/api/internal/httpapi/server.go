@@ -27,14 +27,14 @@ type Server struct {
 	updater *updater.Updater
 	log     *slog.Logger
 	// engine is swapped atomically when a new release is imported.
-	engine     atomic.Pointer[engine.Engine]
-	corsOrigin string
-	webDir     string
-	results    results
+	engine  atomic.Pointer[engine.Engine]
+	access  Access
+	webDir  string
+	results results
 }
 
-func New(st *store.Store, log *slog.Logger, corsOrigin, webDir string) *Server {
-	return &Server{store: st, log: log, corsOrigin: corsOrigin, webDir: webDir}
+func New(st *store.Store, log *slog.Logger, access Access, webDir string) *Server {
+	return &Server{store: st, log: log, access: access, webDir: webDir}
 }
 
 func (s *Server) SetUpdater(u *updater.Updater) { s.updater = u }
@@ -65,23 +65,7 @@ func (s *Server) Handler() http.Handler {
 	if s.webDir != "" {
 		mux.Handle("/", spaHandler(s.webDir))
 	}
-	return s.cors(compress(mux))
-}
-
-func (s *Server) cors(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if s.corsOrigin != "" {
-			w.Header().Set("Access-Control-Allow-Origin", s.corsOrigin)
-			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-			w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
-			w.Header().Set("Access-Control-Max-Age", "600")
-		}
-		if r.Method == http.MethodOptions {
-			w.WriteHeader(http.StatusNoContent)
-			return
-		}
-		next.ServeHTTP(w, r)
-	})
+	return s.guard(compress(mux))
 }
 
 func spaHandler(dir string) http.Handler {

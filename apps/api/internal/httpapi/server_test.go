@@ -24,7 +24,7 @@ func newServer(t *testing.T, withData bool) *httptest.Server {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { st.Close() })
-	srv := New(st, slog.New(slog.NewTextHandler(io.Discard, nil)), "*", "")
+	srv := New(st, slog.New(slog.NewTextHandler(io.Discard, nil)), Access{AllowedOrigins: []string{devOrigin}, LocalOnly: true}, "")
 	if withData {
 		ds := gametest.Dataset()
 		if err := st.Import(context.Background(), ds, "2026-01-01T00:00:00Z"); err != nil {
