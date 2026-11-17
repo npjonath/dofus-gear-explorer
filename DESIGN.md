@@ -438,7 +438,7 @@ The Mes équipements toolbar ends with two buttons: Importer (outlined, paste ic
 
 The last control of the top strip is an icon button (info icon) named "À propos et mentions légales". Its menu opens with the product name and the version in `ink-3`, then two items with icons: About and Legal notice. Each opens a dialog (34rem wide at most, height capped to the window):
 
-- **About:** the product name, one sentence on what it does, a two-column list of facts (app version, game data version, licence) with values in bold tabular figures, the doduda credit and the unofficial line in `ink-2`, then links in `accent`, weight 600, each with a small external-link icon: the source code (with its address in `ink-3`) and the third-party licences.
+- **About:** the product name, one sentence on what it does, a two-column list of facts (app version, game data version, licence) with values in bold tabular figures, the doduda credit and the unofficial line in `ink-2`, then links in `accent`, weight 600: the source code, led by the GitHub mark, and the third-party licences, followed by a small external-link icon.
 - **Legal notice:** titled sections (unofficial tool, trademarks and game content, your data, calculations, contact and removal, licence), each a bold title over `ink-2` text; the body scrolls while the title and the Close button stay.
 
 ### Update notice

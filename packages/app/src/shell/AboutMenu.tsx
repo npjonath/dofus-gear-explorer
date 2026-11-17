@@ -6,6 +6,7 @@ import { useDataStatus } from "../api/queries"
 import { useI18n, type MessageKey } from "../i18n"
 import { noticesUrl, repositoryUrl } from "../lib/project"
 import { usePlatform } from "../platform"
+import { GitHubIcon } from "../ui/GitHubIcon"
 
 type Panel = "about" | "legal"
 
@@ -89,10 +90,9 @@ export function AboutMenu() {
               <ul className="about-links">
                 <li>
                   <a href={repositoryUrl} target="_blank" rel="noreferrer">
+                    <GitHubIcon />
                     {t("about.source")}
-                    <ExternalLinkIcon aria-hidden="true" />
                   </a>
-                  <span className="about-link-url">{repositoryUrl.replace("https://", "")}</span>
                 </li>
                 <li>
                   <a href={noticesUrl} target="_blank" rel="noreferrer">
