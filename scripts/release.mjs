@@ -3,7 +3,8 @@
 // 1. Sets X.Y.Z in every package.json, on a branch from develop, and merges
 //    that pull request into develop once CI passes.
 // 2. Merges develop into main through a pull request (merge commit).
-// 3. Leaves one step: press "Run workflow" on the Release workflow, on main.
+// 3. Leaves one step: press "Run workflow" on the Release workflow, which
+//    always releases main.
 //
 // It runs as you, through the GitHub CLI (gh), and changes nothing locally
 // besides switching back to an up-to-date develop.
@@ -152,5 +153,5 @@ console.log(`
 ✓ main is ready for ${tag}.
 
 Last step: open https://github.com/${repo}/actions/workflows/release.yml,
-press "Run workflow", keep "main" and leave "Dry run" unticked.
+press "Run workflow" and leave "Dry run" unticked (it always releases main).
 It builds the installers and publishes the release (about 15 minutes).`)
