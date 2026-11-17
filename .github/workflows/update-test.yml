@@ -40,6 +40,10 @@ jobs:
             api: mac-arm64
     runs-on: ${{ matrix.os }}
     timeout-minutes: 40
+    env:
+      # electron-builder skips signing on pull requests; the macOS app is signed ad hoc
+      # (no secret), and the updater refuses a bundle without a valid signature.
+      CSC_FOR_PULL_REQUEST: "true"
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
