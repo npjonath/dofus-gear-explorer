@@ -1,7 +1,7 @@
 {
   "name": "@dde/web",
   "private": true,
-  "version": "0.1.1",
+  "version": "0.2.0",
   "description": "Web shell of Dofus Gear Explorer.",
   "license": "MIT",
   "type": "module",
