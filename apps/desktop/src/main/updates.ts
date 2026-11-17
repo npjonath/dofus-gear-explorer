@@ -73,7 +73,10 @@ export function startUpdates(window: () => BrowserWindow | null) {
           send({ state: "ready", version: update.version })
         })
         // Offline or a broken download: try again at the next check.
-        .catch((error: unknown) => console.error(`update ${info.version} not installed:`, error instanceof Error ? error.message : error))
+        .catch((error: unknown) => {
+          const detail = (error as { stderr?: string }).stderr?.trim()
+          console.error(`update ${info.version} not installed:`, error instanceof Error ? error.message : error, detail ?? "")
+        })
         .finally(() => {
           preparing = null
         })
