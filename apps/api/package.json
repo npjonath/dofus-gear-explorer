@@ -1,7 +1,7 @@
 {
   "name": "@dde/api",
   "private": true,
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "Go backend: imports Dofus game data into SQLite and serves the equipment, build and solver API.",
   "license": "MIT",
   "scripts": {
