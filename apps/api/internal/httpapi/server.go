@@ -663,6 +663,18 @@ func (s *Server) handleSolve(w http.ResponseWriter, r *http.Request, eng *engine
 		writeError(w, http.StatusBadRequest, "too_many_criteria", "Use at most 24 constraints and 24 stats to maximize.")
 		return
 	}
+	for _, c := range req.Constraints {
+		if c.Value < 0 {
+			writeError(w, http.StatusBadRequest, "negative_value", "A condition's value must be 0 or more.")
+			return
+		}
+	}
+	for _, g := range req.Damage {
+		if g.Value < 1 {
+			writeError(w, http.StatusBadRequest, "negative_value", "A damage to reach must be 1 or more.")
+			return
+		}
+	}
 	started := time.Now()
 	resp, err := solver.Solve(r.Context(), eng, req)
 	if err != nil {

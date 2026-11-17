@@ -87,3 +87,15 @@ describe("stuff tabs", () => {
     expect(useStore.getState().builds[0]!.items).toEqual({ hat: 1 })
   })
 })
+
+describe("saved state", () => {
+  it("raises a negative search condition to 0", () => {
+    const migrate = useStore.persist.getOptions().migrate!
+    const saved = {
+      builds: [],
+      solver: { constraints: [{ statId: 1, op: "gte", value: -5 }, { statId: 23, op: "gte", value: 6 }] },
+    }
+    const state = migrate(saved, 11) as { solver: { constraints: { value: number }[] } }
+    expect(state.solver.constraints.map((c) => c.value)).toEqual([0, 6])
+  })
+})
