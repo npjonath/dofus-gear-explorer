@@ -19,6 +19,38 @@ Browse every piece of equipment in the game, assemble a stuff with its real char
 - **Sharing**: copy a stuff's code and send it to a friend, who pastes it in "Import". Nothing goes through a server.
 - French, English, Spanish and Portuguese, for the interface and the game data. Dark and light theme.
 
+## Screenshots
+
+**Items**: every piece of equipment, filtered and sorted, with its card.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/items-dark.png">
+  <img src="docs/screenshots/items-light.png" alt="The Items screen: filters on the left, the equipment table in the middle, the card of the selected item on the right.">
+</picture>
+
+**Stuff builder**: the 16 slots, characteristic points, set bonuses and the stuff's characteristics.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/build-dark.png">
+  <img src="docs/screenshots/build-light.png" alt="The stuff builder: total characteristics on the left, the 16 slots around the characteristic points and set bonuses, and the worn items below.">
+</picture>
+
+**Damage**: what the weapon and each spell of the class hit for.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/damage-dark.png">
+  <img src="docs/screenshots/damage-light.png" alt="The damage view of a Strength Iop: the weapon and the Iop spells with their normal and critical damage.">
+</picture>
+
+**Stuff search**: conditions to meet, what to maximize, and the best stuffs found.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/search-dark.png">
+  <img src="docs/screenshots/search-light.png" alt="The stuff search: conditions on the left (11 AP, 6 MP, 300 Wisdom, maximize Strength) and the stuffs found on the right.">
+</picture>
+
+The screenshots leave out the item artwork, which belongs to Ankama; in the app, every item shows its icon.
+
 ## Your data stays yours
 
 - **The app never asks for your Dofus or Ankama account, your password, or any personal information.** It has no account, no analytics, no tracking and no ads.
