@@ -1,4 +1,4 @@
-export type Lang = "fr" | "en"
+export type Lang = "fr" | "en" | "es" | "pt"
 
 export type Slot =
   | "amulet"

@@ -14,6 +14,9 @@ func TestRenderEffect(t *testing.T) {
 		{"#1{{~1~2 à }}#2 Dommage{{~ps}}{{~zs}} Feu", 1, 1, "1 Dommage Feu"},
 		{"#1{{~1~2 à }}#2 Dommage{{~ps}}{{~zs}} Feu", 5, 7, "5 à 7 Dommages Feu"},
 		{"#1{{~1~2 to }}#2% Air Resistance", 3, 6, "3 to 6% Air Resistance"},
+		{"#1{{~1~2 a }}#2 Invocaç{{~pões}}{{~zões}}{{~são}}", 1, 1, "1 Invocação"},
+		{"#1{{~1~2 a }}#2 Invocaç{{~pões}}{{~zões}}{{~são}}", 1, 2, "1 a 2 Invocações"},
+		{"#1{{~1~2 a }}#2 Invocaç{{~pões}}{{~zões}}{{~são}}", 0, 0, "0 Invocações"},
 	}
 	for _, c := range cases {
 		if got := RenderEffect(c.template, c.min, c.max); got != c.want {
@@ -27,6 +30,11 @@ func TestStatLabel(t *testing.T) {
 		{"#1{{~1~2 à }}#2% Résistance Air", "Résistance Air", "%"},
 		{"#1{{~1~2 à }}#2 Dommage{{~ps}}{{~zs}} Feu", "Dommages Feu", ""},
 		{"#1{{~1~2 to }}#2 Fire Damage{{~p}}{{~z}}", "Fire Damage", ""},
+		{"#1{{~1~2 a }}#2 de daño{{~p}}{{~z}} de tierra", "daño de tierra", ""},
+		{"#1{{~1~2 a }}#2 al retiro de PA", "retiro de PA", ""},
+		{"#1{{~1~2 a }}#2 % crítico", "crítico", "%"},
+		{"#1{{~1~2 a }}#2% de esquiva PA", "esquiva PA", "%"},
+		{"#1{{~1~2 a }}#2 Invocaç{{~pões}}{{~zões}}{{~são}}", "Invocações", ""},
 		{"Change l'apparence", "", ""},
 	}
 	for _, c := range cases {

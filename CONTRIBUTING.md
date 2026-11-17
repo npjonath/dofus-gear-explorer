@@ -18,7 +18,7 @@ The project is under the [MIT licence](LICENSE). By opening a pull request you a
 - **No Ankama content in the repository.** Do not commit game data, item images, sounds or any other file taken from the game or from Ankama's sites. The app downloads the game data at run time from the [doduda](https://github.com/dofusdude/doduda) releases.
 - **No private APIs.** Do not call the private APIs of other sites (dofusbook and the like). When a formula has to be checked, compare with what their pages display.
 - **No accounts, no tracking.** The app never asks for a Dofus account or personal information, and its only network use is downloading game data and its own updates. Pull requests that add analytics, telemetry, ads or a login will not be merged.
-- **Both languages.** Every string the user sees has a French and an English entry in `packages/app/src/i18n.ts`.
+- **Every language.** Every string the user sees has an entry in each of `packages/app/src/locales/fr.ts`, `en.ts`, `es.ts` and `pt.ts`. A missing key fails `pnpm typecheck`. If you don't speak one of them, say so in the pull request and someone will check the wording.
 - **Game rules live in Go.** Stats, set bonuses, conditions, forgemagic and damage are computed in `apps/api/internal/engine`; the interface asks the API instead of recomputing them.
 - Be kind. The [code of conduct](CODE_OF_CONDUCT.md) applies everywhere in the project.
 

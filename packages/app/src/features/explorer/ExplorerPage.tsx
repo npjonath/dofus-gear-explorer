@@ -59,7 +59,7 @@ function useDebounced<T>(value: T, delay: number): T {
 }
 
 export function ExplorerPage({ meta }: { meta: Meta }) {
-  const { t, slotName, number } = useI18n()
+  const { t, slotName } = useI18n()
   const statColumns = useStore((s) => s.statColumns)
   const setStatColumns = useStore((s) => s.setStatColumns)
 
@@ -319,7 +319,7 @@ export function ExplorerPage({ meta }: { meta: Meta }) {
             onChange={(event) => setSearch(event.target.value)}
           />
           <p className="m-0 font-semibold whitespace-nowrap lg:flex-1" role="status">
-            {result.isPending ? t("common.loading") : total === 1 ? t("items.count.one") : t("items.count", { count: number(total) })}
+            {result.isPending ? t("common.loading") : t("items.count", { count: total })}
           </p>
           <Select
             multiple

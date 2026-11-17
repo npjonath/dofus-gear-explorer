@@ -13,7 +13,7 @@ interface Props {
 
 // An item at a glance: who it is, then every line as it counts.
 export function ItemSummary({ item, stats, forged }: Props) {
-  const { t } = useI18n()
+  const { t, colon } = useI18n()
   const weaponLines = item.effects.filter((effect) => effect.kind === "weapon")
   return (
     <>
@@ -38,7 +38,7 @@ export function ItemSummary({ item, stats, forged }: Props) {
       {item.condition && <span className="text-ink-2">{item.condition}</span>}
       {item.passive && (
         <span className="text-ink-2">
-          <strong className="text-ink">{item.passive.name}</strong> : {item.passive.description}
+          <strong className="text-ink">{item.passive.name}</strong>{colon}{item.passive.description}
         </span>
       )}
     </>

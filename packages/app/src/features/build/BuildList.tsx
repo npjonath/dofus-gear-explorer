@@ -16,8 +16,7 @@ const PAGE = 50
 // Every saved stuff, in a table the player searches and sorts. Opening one
 // puts it in a tab.
 export function BuildList({ meta, onNew }: { meta: Meta; onNew(): void }) {
-  const { t } = useI18n()
-  const lang = useStore((s) => s.lang)
+  const { t, colon, locale } = useI18n()
   const builds = useStore((s) => s.builds)
   const openIds = useStore((s) => s.openBuildIds)
   const { selectBuild, addBuild, removeBuild } = useStore.getState()
@@ -30,7 +29,7 @@ export function BuildList({ meta, onNew }: { meta: Meta; onNew(): void }) {
     (build: Build) => meta.breeds.find((b) => b.id === build.breedId)?.name ?? "",
     [meta]
   )
-  const date = React.useMemo(() => new Intl.DateTimeFormat(lang, { dateStyle: "medium", timeStyle: "short" }), [lang])
+  const date = React.useMemo(() => new Intl.DateTimeFormat(locale, { dateStyle: "medium", timeStyle: "short" }), [locale])
 
   const rows = React.useMemo(() => {
     const needle = fold(query.trim())
@@ -167,7 +166,7 @@ export function BuildList({ meta, onNew }: { meta: Meta; onNew(): void }) {
                     <button
                       type="button"
                       className="icon-btn"
-                      aria-label={`${t("build.duplicate")} : ${build.name}`}
+                      aria-label={`${t("build.duplicate")}${colon}${build.name}`}
                       title={t("build.duplicate")}
                       onClick={(event) => {
                         event.stopPropagation()
@@ -179,7 +178,7 @@ export function BuildList({ meta, onNew }: { meta: Meta; onNew(): void }) {
                     <button
                       type="button"
                       className="icon-btn"
-                      aria-label={`${t("build.delete")} : ${build.name}`}
+                      aria-label={`${t("build.delete")}${colon}${build.name}`}
                       title={t("build.delete")}
                       onClick={(event) => {
                         event.stopPropagation()
