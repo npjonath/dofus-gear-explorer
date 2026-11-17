@@ -48,13 +48,17 @@ The architecture, the HTTP API, the forgemagic rules and the solver are describe
 
 ## Pull requests
 
-- Branch from `main` and open a pull request; CI (lint, typecheck, tests, build, and the API tests on Windows) must pass.
-- Pull requests are squash-merged. Give the pull request a label (`bug`, `enhancement`, `dependencies`) so it lands in the right section of the release notes.
+- `develop` is the development branch and the default one: branch from it and open your pull request against it. `main` only holds released versions.
+- CI (lint, typecheck, tests, build, and the API tests on Windows) and CodeQL must pass. Only the maintainer merges pull requests.
+- Pull requests are squash-merged into `develop`. Give the pull request a label (`bug`, `enhancement`, `dependencies`) so it lands in the right section of the release notes.
 - Dependabot opens weekly pull requests for GitHub Actions, Go modules and npm packages, a week after each version is published. Actions are pinned to a commit SHA with the version in a comment; Dependabot keeps both in step.
 
 ## Releases
 
-1. Set the new version in every `package.json` (`node scripts/check-version.mjs X.Y.Z` confirms they agree) and merge that change.
-2. Optionally run the **Release** workflow by hand (Actions tab, "Run workflow"): it builds the installers for macOS, Windows and Linux as workflow artifacts without publishing anything.
-3. Push a tag `vX.Y.Z` on `main`. The workflow checks the version, runs the checks, builds the installers and attaches them, with generated notes, to a draft GitHub release.
-4. Read the draft, then publish it. Installed apps pick up the new version from the published release; a draft is invisible to them.
+Only the maintainer publishes releases: `v*` tags can only be created by a repository admin.
+
+1. Set the new version in every `package.json` (`node scripts/check-version.mjs X.Y.Z` confirms they agree) and merge that change into `develop`.
+2. Open a pull request from `develop` to `main`, label it `skip-changelog`, and merge it with a merge commit (the only method `main` accepts, so both branches keep the same history).
+3. Optionally run the **Release** workflow by hand (Actions tab, "Run workflow"): it builds the installers for macOS, Windows and Linux as workflow artifacts without publishing anything.
+4. Push a tag `vX.Y.Z` on `main`. The workflow checks the version, runs the checks, builds the installers and attaches them, with generated notes, to a draft GitHub release.
+5. Read the draft, then publish it. Installed apps pick up the new version from the published release; a draft is invisible to them.

@@ -13,7 +13,8 @@ pnpm monorepo: a Go API (`apps/api`), a shared React interface (`packages/app`) 
 - `pnpm data:sync` / `pnpm data:check`: import or check the game data release
 - `pnpm notices`: write `THIRD_PARTY_NOTICES.md` again after changing dependencies (CI fails when it is stale)
 - `pnpm build:desktop:mac|win|linux`: local installers in `apps/desktop/release/<version>` (never published)
-- Releases: push a tag `vX.Y.Z` matching every `package.json` (`scripts/check-version.mjs`); `.github/workflows/release.yml` builds and uploads a draft release. Developer reference: `docs/DEVELOPMENT.md`.
+- Branches: work lands in `develop` (default branch, squash merges); `main` only receives `develop` through a merge-commit pull request before each release.
+- Releases: push a tag `vX.Y.Z` on `main` matching every `package.json` (`scripts/check-version.mjs`); `.github/workflows/release.yml` builds and uploads a draft release. Developer reference: `docs/DEVELOPMENT.md`.
 
 ## Conventions
 
