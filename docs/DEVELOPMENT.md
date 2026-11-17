@@ -29,7 +29,7 @@ Development runs keep their stuffs, settings and game data in their own folder, 
 
 ### Packaging the desktop app
 
-Releases are built by the `Release` workflow when a `vX.Y.Z` tag is pushed (see CONTRIBUTING.md). To build locally:
+Releases are built and published by the `Release` workflow, run by hand on `main` after `pnpm release X.Y.Z` (see CONTRIBUTING.md). To build locally:
 
 ```bash
 pnpm build:desktop:mac

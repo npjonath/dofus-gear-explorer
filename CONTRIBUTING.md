@@ -55,10 +55,11 @@ The architecture, the HTTP API, the forgemagic rules and the solver are describe
 
 ## Releases
 
-Only the maintainer publishes releases: `v*` tags can only be created by a repository admin.
+Only the maintainer publishes releases: the Release workflow refuses to run for anyone else, and release tags can't be moved or deleted.
 
-1. Set the new version in every `package.json` (`node scripts/check-version.mjs X.Y.Z` confirms they agree) and merge that change into `develop`.
-2. Open a pull request from `develop` to `main`, label it `skip-changelog`, and merge it with a merge commit (the only method `main` accepts, so both branches keep the same history).
-3. Optionally run the **Release** workflow by hand (Actions tab, "Run workflow"): it builds the installers for macOS, Windows and Linux as workflow artifacts without publishing anything.
-4. Push a tag `vX.Y.Z` on `main`. The workflow checks the version, runs the checks, builds the installers and attaches them, with generated notes, to a draft GitHub release.
-5. Read the draft, then publish it. Installed apps pick up the new version from the published release; a draft is invisible to them.
+1. Run `pnpm release X.Y.Z` (it needs the GitHub CLI, `gh`, signed in). It sets the version in every `package.json` on a `release/vX.Y.Z` branch and merges that pull request into `develop` once CI passes. Then it opens a pull request from `develop` to `main` and merges it with a merge commit once its checks pass. Both pull requests carry `skip-changelog`. If a check fails, fix it and run the command again: it picks up where it stopped.
+2. On GitHub, open Actions, then **Release**, then **Run workflow**, and keep the `main` branch. The workflow checks the version, runs the checks, builds the installers for macOS, Windows and Linux, and publishes them in a release tagged `vX.Y.Z` with generated notes. Installed apps then update to it.
+
+If a packaging job fails (for example, no macOS runner is free), use **Re-run failed jobs**: the release is published once every installer is attached. Tick **Dry run** to only build the installers, as workflow artifacts, from any branch.
+
+The release notes group the merged pull requests by label: `enhancement` under New features, `bug` under Fixes, `dependencies` under Dependencies. `skip-changelog` leaves a pull request out.
