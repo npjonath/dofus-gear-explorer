@@ -31,6 +31,8 @@ app.setAboutPanelOptions({
 const binaryName = process.platform === "win32" ? "dde-api.exe" : "dde-api"
 let api: ChildProcess | null = null
 let apiBaseUrl = ""
+// Development runs load the interface from electron-vite's server instead of the bundled files.
+const devUrl = app.isPackaged ? undefined : process.env.ELECTRON_RENDERER_URL
 
 function apiBinary(): string {
   if (app.isPackaged) return join(process.resourcesPath, "bin", binaryName)
@@ -51,7 +53,16 @@ function startApi(): Promise<string> {
   return new Promise((resolveUrl, reject) => {
     const child = spawn(
       binary,
-      ["serve", "--addr", "127.0.0.1:0", "--data-dir", dataDir, "--exit-with-stdin"],
+      [
+        "serve",
+        "--addr",
+        "127.0.0.1:0",
+        "--data-dir",
+        dataDir,
+        "--exit-with-stdin",
+        // The bundled file:// pages send no Origin; only the dev server's pages need allowing.
+        ...(devUrl ? ["--cors-origin", new URL(devUrl).origin] : []),
+      ],
       // The API watches its stdin and stops when this process goes away, however it ends.
       { stdio: ["pipe", "pipe", "inherit"], windowsHide: true }
     )
@@ -95,8 +106,7 @@ function createWindow() {
     return { action: "deny" }
   })
 
-  const devUrl = process.env.ELECTRON_RENDERER_URL
-  if (!app.isPackaged && devUrl) void window.loadURL(devUrl)
+  if (devUrl) void window.loadURL(devUrl)
   else void window.loadFile(join(__dirname, "../renderer/index.html"))
 }
 

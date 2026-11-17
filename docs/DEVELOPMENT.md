@@ -129,10 +129,17 @@ cd apps/api && go run ./cmd/dde-api sync --source /path/to/doduda/output
 | `--check-interval` | | `6h` | Delay between release checks. |
 | `--auto-update` | `DDE_AUTO_UPDATE` | off | Import new releases automatically. |
 | `--image-size` | | `128` | Icon size to import, `64` or `128`. Changing it downloads the icons again at the next start. |
-| `--cors-origin` | `DDE_CORS_ORIGIN` | `*` | Allowed origin for browsers. |
+| `--cors-origin` | `DDE_CORS_ORIGIN` | `http://localhost:5173,http://127.0.0.1:5173` | Browser origins allowed to call the API, comma separated. `*` allows any. |
 | `--web-dir` | `DDE_WEB_DIR` | | Serve a built web app from the API. |
 
 Set `GITHUB_TOKEN` if you hit GitHub's anonymous rate limit.
+
+The API runs on the player's computer, where any web page open in their browser could send it requests. It answers only:
+
+- requests without an `Origin` header (the desktop app's `file://` pages send none, nor do tools like `curl`);
+- requests from its own pages (`--web-dir`) or from an origin listed in `--cors-origin`; every other page gets `403 forbidden_origin`.
+
+When it listens on a loopback address (the default), it also rejects requests addressed to any other host name (`403 forbidden_host`), so a page cannot rebind its own domain to `127.0.0.1` to pass as same-origin. If you serve the web app from another address, add its origin to `--cors-origin`.
 
 ## HTTP API
 
