@@ -1159,7 +1159,6 @@ th[aria-sort="descending"] .th-sort svg { opacity: 1; }
 
 .about-links a:hover { text-decoration: underline; }
 .about-links svg { width: 0.9rem; height: 0.9rem; }
-.about-link-url { color: var(--ink-3); font-size: 0.86rem; }
 .about-facts dd { margin: 0; font-weight: 700; font-variant-numeric: tabular-nums; }
 
 .apply-list[data-slot="radio-group"] {
