@@ -567,6 +567,7 @@ export function SolverPage({ meta }: { meta: Meta }) {
               key={constraint.statId}
               meta={meta}
               filter={constraint}
+              min={0}
               exclude={usedStats}
               onChange={(next) =>
                 updateSolver({ constraints: draft.constraints.map((c, i) => (i === index ? next : c)) })

@@ -166,6 +166,15 @@ func TestEvaluateAndSolve(t *testing.T) {
 	if status := postJSON(t, ts.URL+"/api/solver/search", `{"character":{"level":200}}`, &bad); status != http.StatusBadRequest || bad.Error != "nothing_to_search" {
 		t.Errorf("empty search: status = %d, body = %+v", status, bad)
 	}
+	for name, body := range map[string]string{
+		"negative condition":  `{"character":{"level":200},"constraints":[{"statId":1,"op":"gte","value":-1}]}`,
+		"damage goal at zero": `{"character":{"level":200},"damage":[{"kind":"element","element":"fire","value":0}]}`,
+	} {
+		var negative apiError
+		if status := postJSON(t, ts.URL+"/api/solver/search", body, &negative); status != http.StatusBadRequest || negative.Error != "negative_value" {
+			t.Errorf("%s: status = %d, body = %+v", name, status, negative)
+		}
+	}
 }
 
 func TestClassesSpellsAndDamage(t *testing.T) {

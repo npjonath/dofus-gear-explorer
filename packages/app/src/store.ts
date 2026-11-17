@@ -78,6 +78,7 @@ function upgradeDraft(saved: SolverDraft & { levelMin?: number }): SolverDraft {
     .map(({ goal }): MaximizeEntry => ({ kind: goal.kind, id: goal.id, measure: goal.measure, element: goal.element }))
   return {
     ...rest,
+    constraints: (rest.constraints ?? []).map((c) => ({ ...c, value: Math.max(0, c.value) })),
     damage: goals.filter((g) => g.goal.value > 0).map((g) => g.goal),
     maximize: [...attacks, ...stats],
   }
@@ -334,7 +335,7 @@ export const useStore = create<State>()(
     },
     {
       name: "dofus-database-explorer",
-      version: 11,
+      version: 12,
       // Version 2 added forgemagic to builds and to the search options;
       // version 3 the characteristic point options of the search; version 4
       // its required items; version 5 dropped its minimum item level;
@@ -342,7 +343,8 @@ export const useStore = create<State>()(
       // the tabs, which start with the stuff that was active; version 8 made
       // the search a tab of the Stuff screen; version 9 gave damage goals a
       // measure; version 10 put weapons and spells in the list to maximize;
-      // version 11 added the forbidden items.
+      // version 11 added the forbidden items; version 12 raised negative
+      // condition values to 0.
       migrate: (persisted) => {
         const state = persisted as State
         return {
