@@ -1,0 +1,17 @@
+node_modules/
+dist/
+out/
+apps/desktop/release/
+*.tsbuildinfo
+.DS_Store
+
+# Go API
+apps/api/bin/
+apps/api/data/
+
+# Local env
+.env
+.env.local
+
+# Design review captures
+.impeccable/review/

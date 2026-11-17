@@ -1,0 +1,114 @@
+name: Release
+
+# A tag vX.Y.Z that matches every package.json builds the installers and
+# attaches them to a draft GitHub release; publishing that draft makes
+# installed apps update. Run it by hand to build the installers as workflow
+# artifacts without releasing anything.
+on:
+  push:
+    tags: ["v*.*.*"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    name: Check version, lint and tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: write
+    env:
+      ELECTRON_SKIP_BINARY_DOWNLOAD: "1"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+          cache: pnpm
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: apps/api/go.mod
+          cache-dependency-path: apps/api/go.sum
+      - name: Tag matches every package.json
+        if: github.ref_type == 'tag'
+        run: node scripts/check-version.mjs "${GITHUB_REF_NAME#v}"
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm lint
+      - run: pnpm typecheck
+      - run: pnpm test
+      # One draft for the three packaging jobs, so they don't each create their own.
+      - name: Create the draft release
+        if: github.ref_type == 'tag'
+        run: >
+          gh release create "$GITHUB_REF_NAME" --draft --verify-tag
+          --repo "$GITHUB_REPOSITORY"
+          --title "Dofus Gear Explorer ${GITHUB_REF_NAME#v}"
+          --notes-file .github/release-notes.md
+          --generate-notes
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  package:
+    name: Package ${{ matrix.target }}
+    needs: verify
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: mac
+            os: macos-latest
+            api: mac-arm64 mac-x64
+          - target: win
+            os: windows-latest
+            api: win-x64
+          - target: linux
+            os: ubuntu-latest
+            api: linux-x64
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    permissions:
+      contents: write
+    env:
+      PUBLISH: ${{ github.ref_type == 'tag' && 'always' || 'never' }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+          cache: pnpm
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: apps/api/go.mod
+          cache-dependency-path: apps/api/go.sum
+      - run: pnpm install --frozen-lockfile
+      - name: Build the API
+        run: pnpm --filter @dde/api build:targets ${{ matrix.api }}
+      - name: Build the interface
+        run: pnpm --filter @dde/desktop exec electron-vite build
+      - name: Package (and upload to the draft release on a tag)
+        shell: bash
+        run: pnpm --filter @dde/desktop exec electron-builder --${{ matrix.target }} --publish "$PUBLISH"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Keep the installers of a manual run
+        if: github.ref_type != 'tag'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: installers-${{ matrix.target }}
+          path: |
+            apps/desktop/release/*/Dofus-Gear-Explorer-*
+            apps/desktop/release/*/latest*.yml
+          retention-days: 7
+          if-no-files-found: error

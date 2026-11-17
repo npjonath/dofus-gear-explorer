@@ -1,0 +1,40 @@
+name: Bug or wrong number
+description: Something breaks, or a stat or damage value differs from the game.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the report. Never paste your Ankama account, password or any personal information here: the app never needs them.
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you did, what the app showed, and what you expected.
+    validations:
+      required: true
+  - type: textarea
+    id: stuff
+    attributes:
+      label: Stuff
+      description: For a wrong number: paste the stuff's code (share button of the stuff, "Copy the build code") and the value shown by the game or dofusbook.
+  - type: input
+    id: version
+    attributes:
+      label: App version
+      description: Shown in the (i) menu, top right.
+      placeholder: 0.1.0
+    validations:
+      required: true
+  - type: dropdown
+    id: system
+    attributes:
+      label: System
+      options:
+        - macOS (Apple silicon)
+        - macOS (Intel)
+        - Windows
+        - Linux
+        - Web version
+    validations:
+      required: true

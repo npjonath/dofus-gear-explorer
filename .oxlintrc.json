@@ -1,0 +1,41 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "plugins": [
+    "typescript",
+    "react",
+    "unicorn",
+    "oxc",
+    "import"
+  ],
+  "categories": {
+    "correctness": "error",
+    "suspicious": "warn"
+  },
+  "rules": {
+    "react-hooks/rules-of-hooks": "error",
+    "react-hooks/exhaustive-deps": "warn",
+    "react/jsx-key": "error",
+    "react/react-in-jsx-scope": "off",
+    "react/no-unstable-nested-components": [
+      "warn",
+      {
+        "allowAsProps": true
+      }
+    ],
+    "react/hooks": "off",
+    "react/incompatible-library": "off",
+    "react/exhaustive-effect-dependencies": "off",
+    "import/no-cycle": "error",
+    "import/no-unassigned-import": "off",
+    "unicorn/no-array-sort": "off",
+    "unicorn/consistent-function-scoping": "off",
+    "no-underscore-dangle": "off"
+  },
+  "ignorePatterns": [
+    "**/dist/**",
+    "**/out/**",
+    "**/release/**",
+    "**/node_modules/**",
+    "apps/api/data/**"
+  ]
+}

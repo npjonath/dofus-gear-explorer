@@ -1,0 +1,766 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-11-16T21:41:20Z",
+  "title": "Design System: Dofus Gear Explorer",
+  "extensions": {
+    "colorMeta": {
+      "ground": {
+        "role": "neutral",
+        "displayName": "Board Sage",
+        "canonical": "oklch(0.955 0.012 258)",
+        "dark": "oklch(0.2 0.018 258)",
+        "tonalRamp": [
+          "oklch(0.15 0.012 258)",
+          "oklch(0.27 0.012 258)",
+          "oklch(0.38 0.012 258)",
+          "oklch(0.5 0.012 258)",
+          "oklch(0.62 0.012 258)",
+          "oklch(0.74 0.012 258)",
+          "oklch(0.85 0.012 258)",
+          "oklch(0.95 0.012 258)"
+        ]
+      },
+      "tile": {
+        "role": "neutral",
+        "displayName": "Checker Sage",
+        "canonical": "oklch(0.928 0.018 258)",
+        "dark": "oklch(0.245 0.022 258)",
+        "tonalRamp": [
+          "oklch(0.15 0.018 258)",
+          "oklch(0.27 0.018 258)",
+          "oklch(0.38 0.018 258)",
+          "oklch(0.5 0.018 258)",
+          "oklch(0.62 0.018 258)",
+          "oklch(0.74 0.018 258)",
+          "oklch(0.85 0.018 258)",
+          "oklch(0.95 0.018 258)"
+        ]
+      },
+      "panel": {
+        "role": "neutral",
+        "displayName": "Sheet",
+        "canonical": "oklch(0.99 0.004 258)",
+        "dark": "oklch(0.255 0.02 258)",
+        "tonalRamp": [
+          "oklch(0.15 0.004 258)",
+          "oklch(0.27 0.004 258)",
+          "oklch(0.38 0.004 258)",
+          "oklch(0.5 0.004 258)",
+          "oklch(0.62 0.004 258)",
+          "oklch(0.74 0.004 258)",
+          "oklch(0.85 0.004 258)",
+          "oklch(0.95 0.004 258)"
+        ]
+      },
+      "panel-2": {
+        "role": "neutral",
+        "displayName": "Sheet Shade",
+        "canonical": "oklch(0.968 0.009 258)",
+        "dark": "oklch(0.225 0.018 258)",
+        "tonalRamp": [
+          "oklch(0.15 0.009 258)",
+          "oklch(0.27 0.009 258)",
+          "oklch(0.38 0.009 258)",
+          "oklch(0.5 0.009 258)",
+          "oklch(0.62 0.009 258)",
+          "oklch(0.74 0.009 258)",
+          "oklch(0.85 0.009 258)",
+          "oklch(0.95 0.009 258)"
+        ]
+      },
+      "line": {
+        "role": "neutral",
+        "displayName": "Cell Line",
+        "canonical": "oklch(0.885 0.014 258)",
+        "dark": "oklch(0.33 0.02 258)",
+        "tonalRamp": [
+          "oklch(0.15 0.014 258)",
+          "oklch(0.27 0.014 258)",
+          "oklch(0.38 0.014 258)",
+          "oklch(0.5 0.014 258)",
+          "oklch(0.62 0.014 258)",
+          "oklch(0.74 0.014 258)",
+          "oklch(0.85 0.014 258)",
+          "oklch(0.95 0.014 258)"
+        ]
+      },
+      "line-strong": {
+        "role": "neutral",
+        "displayName": "Cell Edge",
+        "canonical": "oklch(0.72 0.025 258)",
+        "dark": "oklch(0.5 0.03 258)",
+        "tonalRamp": [
+          "oklch(0.15 0.025 258)",
+          "oklch(0.27 0.025 258)",
+          "oklch(0.38 0.025 258)",
+          "oklch(0.5 0.025 258)",
+          "oklch(0.62 0.025 258)",
+          "oklch(0.74 0.025 258)",
+          "oklch(0.85 0.025 258)",
+          "oklch(0.95 0.025 258)"
+        ]
+      },
+      "ink": {
+        "role": "neutral",
+        "displayName": "Slate Ink",
+        "canonical": "oklch(0.25 0.03 220)",
+        "dark": "oklch(0.95 0.008 160)",
+        "tonalRamp": [
+          "oklch(0.15 0.03 220)",
+          "oklch(0.27 0.03 220)",
+          "oklch(0.38 0.03 220)",
+          "oklch(0.5 0.03 220)",
+          "oklch(0.62 0.03 220)",
+          "oklch(0.74 0.03 220)",
+          "oklch(0.85 0.03 220)",
+          "oklch(0.95 0.03 220)"
+        ]
+      },
+      "ink-2": {
+        "role": "neutral",
+        "displayName": "Slate Ink Soft",
+        "canonical": "oklch(0.42 0.03 215)",
+        "dark": "oklch(0.82 0.015 180)",
+        "tonalRamp": [
+          "oklch(0.15 0.03 215)",
+          "oklch(0.27 0.03 215)",
+          "oklch(0.38 0.03 215)",
+          "oklch(0.5 0.03 215)",
+          "oklch(0.62 0.03 215)",
+          "oklch(0.74 0.03 215)",
+          "oklch(0.85 0.03 215)",
+          "oklch(0.95 0.03 215)"
+        ]
+      },
+      "ink-3": {
+        "role": "neutral",
+        "displayName": "Slate Ink Quiet",
+        "canonical": "oklch(0.5 0.027 210)",
+        "dark": "oklch(0.7 0.02 190)",
+        "tonalRamp": [
+          "oklch(0.15 0.027 210)",
+          "oklch(0.27 0.027 210)",
+          "oklch(0.38 0.027 210)",
+          "oklch(0.5 0.027 210)",
+          "oklch(0.62 0.027 210)",
+          "oklch(0.74 0.027 210)",
+          "oklch(0.85 0.027 210)",
+          "oklch(0.95 0.027 210)"
+        ]
+      },
+      "cell-bg": {
+        "role": "neutral",
+        "displayName": "Cell Ground",
+        "canonical": "oklch(0.928 0.018 258)",
+        "dark": "oklch(0.47 0.02 264)",
+        "tonalRamp": [
+          "oklch(0.15 0.018 258)",
+          "oklch(0.27 0.018 258)",
+          "oklch(0.38 0.018 258)",
+          "oklch(0.5 0.018 258)",
+          "oklch(0.62 0.018 258)",
+          "oklch(0.74 0.018 258)",
+          "oklch(0.85 0.018 258)",
+          "oklch(0.95 0.018 258)"
+        ]
+      },
+      "slot-bg": {
+        "role": "neutral",
+        "displayName": "Slot Face",
+        "canonical": "oklch(0.99 0.004 258)",
+        "dark": "oklch(0.47 0.02 264)",
+        "tonalRamp": [
+          "oklch(0.15 0.004 258)",
+          "oklch(0.27 0.004 258)",
+          "oklch(0.38 0.004 258)",
+          "oklch(0.5 0.004 258)",
+          "oklch(0.62 0.004 258)",
+          "oklch(0.74 0.004 258)",
+          "oklch(0.85 0.004 258)",
+          "oklch(0.95 0.004 258)"
+        ]
+      },
+      "accent": {
+        "role": "primary",
+        "displayName": "Range Blue",
+        "canonical": "oklch(0.5 0.17 258)",
+        "dark": "oklch(0.72 0.13 255)",
+        "tonalRamp": [
+          "oklch(0.15 0.17 258)",
+          "oklch(0.27 0.17 258)",
+          "oklch(0.38 0.17 258)",
+          "oklch(0.5 0.17 258)",
+          "oklch(0.62 0.17 258)",
+          "oklch(0.74 0.17 258)",
+          "oklch(0.85 0.17 258)",
+          "oklch(0.95 0.17 258)"
+        ]
+      },
+      "accent-ink": {
+        "role": "primary",
+        "displayName": "Range Blue Ink",
+        "canonical": "oklch(0.99 0.005 258)",
+        "dark": "oklch(0.18 0.04 255)",
+        "tonalRamp": [
+          "oklch(0.15 0.005 258)",
+          "oklch(0.27 0.005 258)",
+          "oklch(0.38 0.005 258)",
+          "oklch(0.5 0.005 258)",
+          "oklch(0.62 0.005 258)",
+          "oklch(0.74 0.005 258)",
+          "oklch(0.85 0.005 258)",
+          "oklch(0.95 0.005 258)"
+        ]
+      },
+      "accent-soft": {
+        "role": "primary",
+        "displayName": "Range Blue Wash",
+        "canonical": "oklch(0.93 0.04 256)",
+        "dark": "oklch(0.33 0.075 255)",
+        "tonalRamp": [
+          "oklch(0.15 0.04 256)",
+          "oklch(0.27 0.04 256)",
+          "oklch(0.38 0.04 256)",
+          "oklch(0.5 0.04 256)",
+          "oklch(0.62 0.04 256)",
+          "oklch(0.74 0.04 256)",
+          "oklch(0.85 0.04 256)",
+          "oklch(0.95 0.04 256)"
+        ]
+      },
+      "ok": {
+        "role": "secondary",
+        "displayName": "Movement Green",
+        "canonical": "oklch(0.5 0.13 152)",
+        "dark": "oklch(0.76 0.15 152)",
+        "tonalRamp": [
+          "oklch(0.15 0.13 152)",
+          "oklch(0.27 0.13 152)",
+          "oklch(0.38 0.13 152)",
+          "oklch(0.5 0.13 152)",
+          "oklch(0.62 0.13 152)",
+          "oklch(0.74 0.13 152)",
+          "oklch(0.85 0.13 152)",
+          "oklch(0.95 0.13 152)"
+        ]
+      },
+      "ok-soft": {
+        "role": "secondary",
+        "displayName": "Movement Green Wash",
+        "canonical": "oklch(0.94 0.05 152)",
+        "dark": "oklch(0.31 0.06 152)",
+        "tonalRamp": [
+          "oklch(0.15 0.05 152)",
+          "oklch(0.27 0.05 152)",
+          "oklch(0.38 0.05 152)",
+          "oklch(0.5 0.05 152)",
+          "oklch(0.62 0.05 152)",
+          "oklch(0.74 0.05 152)",
+          "oklch(0.85 0.05 152)",
+          "oklch(0.95 0.05 152)"
+        ]
+      },
+      "bad": {
+        "role": "secondary",
+        "displayName": "Impact Red",
+        "canonical": "oklch(0.53 0.2 27)",
+        "dark": "oklch(0.74 0.16 27)",
+        "tonalRamp": [
+          "oklch(0.15 0.2 27)",
+          "oklch(0.27 0.2 27)",
+          "oklch(0.38 0.2 27)",
+          "oklch(0.5 0.2 27)",
+          "oklch(0.62 0.2 27)",
+          "oklch(0.74 0.2 27)",
+          "oklch(0.85 0.2 27)",
+          "oklch(0.95 0.2 27)"
+        ]
+      },
+      "bad-soft": {
+        "role": "secondary",
+        "displayName": "Impact Red Wash",
+        "canonical": "oklch(0.945 0.035 27)",
+        "dark": "oklch(0.32 0.08 27)",
+        "tonalRamp": [
+          "oklch(0.15 0.035 27)",
+          "oklch(0.27 0.035 27)",
+          "oklch(0.38 0.035 27)",
+          "oklch(0.5 0.035 27)",
+          "oklch(0.62 0.035 27)",
+          "oklch(0.74 0.035 27)",
+          "oklch(0.85 0.035 27)",
+          "oklch(0.95 0.035 27)"
+        ]
+      },
+      "el-earth": {
+        "role": "tertiary",
+        "displayName": "Earth Brown",
+        "canonical": "oklch(0.5 0.09 62)",
+        "dark": "oklch(0.74 0.09 65)",
+        "tonalRamp": [
+          "oklch(0.15 0.09 62)",
+          "oklch(0.27 0.09 62)",
+          "oklch(0.38 0.09 62)",
+          "oklch(0.5 0.09 62)",
+          "oklch(0.62 0.09 62)",
+          "oklch(0.74 0.09 62)",
+          "oklch(0.85 0.09 62)",
+          "oklch(0.95 0.09 62)"
+        ]
+      },
+      "el-fire": {
+        "role": "tertiary",
+        "displayName": "Fire Orange-Red",
+        "canonical": "oklch(0.56 0.19 38)",
+        "dark": "oklch(0.74 0.15 40)",
+        "tonalRamp": [
+          "oklch(0.15 0.19 38)",
+          "oklch(0.27 0.19 38)",
+          "oklch(0.38 0.19 38)",
+          "oklch(0.5 0.19 38)",
+          "oklch(0.62 0.19 38)",
+          "oklch(0.74 0.19 38)",
+          "oklch(0.85 0.19 38)",
+          "oklch(0.95 0.19 38)"
+        ]
+      },
+      "el-water": {
+        "role": "tertiary",
+        "displayName": "Water Blue",
+        "canonical": "oklch(0.54 0.13 240)",
+        "dark": "oklch(0.75 0.11 235)",
+        "tonalRamp": [
+          "oklch(0.15 0.13 240)",
+          "oklch(0.27 0.13 240)",
+          "oklch(0.38 0.13 240)",
+          "oklch(0.5 0.13 240)",
+          "oklch(0.62 0.13 240)",
+          "oklch(0.74 0.13 240)",
+          "oklch(0.85 0.13 240)",
+          "oklch(0.95 0.13 240)"
+        ]
+      },
+      "el-air": {
+        "role": "tertiary",
+        "displayName": "Air Green",
+        "canonical": "oklch(0.54 0.14 150)",
+        "dark": "oklch(0.77 0.14 150)",
+        "tonalRamp": [
+          "oklch(0.15 0.14 150)",
+          "oklch(0.27 0.14 150)",
+          "oklch(0.38 0.14 150)",
+          "oklch(0.5 0.14 150)",
+          "oklch(0.62 0.14 150)",
+          "oklch(0.74 0.14 150)",
+          "oklch(0.85 0.14 150)",
+          "oklch(0.95 0.14 150)"
+        ]
+      },
+      "el-neutral": {
+        "role": "tertiary",
+        "displayName": "Neutral Grey",
+        "canonical": "oklch(0.52 0.012 250)",
+        "dark": "oklch(0.74 0.012 250)",
+        "tonalRamp": [
+          "oklch(0.15 0.012 250)",
+          "oklch(0.27 0.012 250)",
+          "oklch(0.38 0.012 250)",
+          "oklch(0.5 0.012 250)",
+          "oklch(0.62 0.012 250)",
+          "oklch(0.74 0.012 250)",
+          "oklch(0.85 0.012 250)",
+          "oklch(0.95 0.012 250)"
+        ]
+      },
+      "st-vitality": {
+        "role": "tertiary",
+        "displayName": "Vitality Rose",
+        "canonical": "oklch(0.55 0.19 12)",
+        "dark": "oklch(0.74 0.14 12)",
+        "tonalRamp": [
+          "oklch(0.15 0.19 12)",
+          "oklch(0.27 0.19 12)",
+          "oklch(0.38 0.19 12)",
+          "oklch(0.5 0.19 12)",
+          "oklch(0.62 0.19 12)",
+          "oklch(0.74 0.19 12)",
+          "oklch(0.85 0.19 12)",
+          "oklch(0.95 0.19 12)"
+        ]
+      },
+      "st-wisdom": {
+        "role": "tertiary",
+        "displayName": "Wisdom Violet",
+        "canonical": "oklch(0.5 0.16 305)",
+        "dark": "oklch(0.76 0.12 305)",
+        "tonalRamp": [
+          "oklch(0.15 0.16 305)",
+          "oklch(0.27 0.16 305)",
+          "oklch(0.38 0.16 305)",
+          "oklch(0.5 0.16 305)",
+          "oklch(0.62 0.16 305)",
+          "oklch(0.74 0.16 305)",
+          "oklch(0.85 0.16 305)",
+          "oklch(0.95 0.16 305)"
+        ]
+      },
+      "st-ap": {
+        "role": "tertiary",
+        "displayName": "AP Blue",
+        "canonical": "oklch(0.5 0.17 258)",
+        "dark": "oklch(0.74 0.13 255)",
+        "tonalRamp": [
+          "oklch(0.15 0.17 258)",
+          "oklch(0.27 0.17 258)",
+          "oklch(0.38 0.17 258)",
+          "oklch(0.5 0.17 258)",
+          "oklch(0.62 0.17 258)",
+          "oklch(0.74 0.17 258)",
+          "oklch(0.85 0.17 258)",
+          "oklch(0.95 0.17 258)"
+        ]
+      },
+      "st-mp": {
+        "role": "tertiary",
+        "displayName": "MP Green",
+        "canonical": "oklch(0.52 0.14 135)",
+        "dark": "oklch(0.79 0.14 135)",
+        "tonalRamp": [
+          "oklch(0.15 0.14 135)",
+          "oklch(0.27 0.14 135)",
+          "oklch(0.38 0.14 135)",
+          "oklch(0.5 0.14 135)",
+          "oklch(0.62 0.14 135)",
+          "oklch(0.74 0.14 135)",
+          "oklch(0.85 0.14 135)",
+          "oklch(0.95 0.14 135)"
+        ]
+      },
+      "st-range": {
+        "role": "tertiary",
+        "displayName": "Range Teal",
+        "canonical": "oklch(0.5 0.1 200)",
+        "dark": "oklch(0.77 0.09 200)",
+        "tonalRamp": [
+          "oklch(0.15 0.1 200)",
+          "oklch(0.27 0.1 200)",
+          "oklch(0.38 0.1 200)",
+          "oklch(0.5 0.1 200)",
+          "oklch(0.62 0.1 200)",
+          "oklch(0.74 0.1 200)",
+          "oklch(0.85 0.1 200)",
+          "oklch(0.95 0.1 200)"
+        ]
+      },
+      "st-critical": {
+        "role": "tertiary",
+        "displayName": "Critical Amber",
+        "canonical": "oklch(0.56 0.15 55)",
+        "dark": "oklch(0.79 0.13 60)",
+        "tonalRamp": [
+          "oklch(0.15 0.15 55)",
+          "oklch(0.27 0.15 55)",
+          "oklch(0.38 0.15 55)",
+          "oklch(0.5 0.15 55)",
+          "oklch(0.62 0.15 55)",
+          "oklch(0.74 0.15 55)",
+          "oklch(0.85 0.15 55)",
+          "oklch(0.95 0.15 55)"
+        ]
+      },
+      "st-prospecting": {
+        "role": "tertiary",
+        "displayName": "Prospecting Gold",
+        "canonical": "oklch(0.55 0.12 88)",
+        "dark": "oklch(0.82 0.12 92)",
+        "tonalRamp": [
+          "oklch(0.15 0.12 88)",
+          "oklch(0.27 0.12 88)",
+          "oklch(0.38 0.12 88)",
+          "oklch(0.5 0.12 88)",
+          "oklch(0.62 0.12 88)",
+          "oklch(0.74 0.12 88)",
+          "oklch(0.85 0.12 88)",
+          "oklch(0.95 0.12 88)"
+        ]
+      }
+    },
+    "typographyMeta": {
+      "headline": {
+        "displayName": "Headline",
+        "purpose": "The one title a panel may carry: search form heading, setup and offline stages."
+      },
+      "title": {
+        "displayName": "Title",
+        "purpose": "The name of the thing in a detail panel: item name, picker heading, results count."
+      },
+      "section": {
+        "displayName": "Section",
+        "purpose": "Group headings inside a panel: stat categories, Effects, Conditions, Set."
+      },
+      "body": {
+        "displayName": "Body",
+        "purpose": "Sentences, effect lines and row text; supporting sentences in ink-2."
+      },
+      "data": {
+        "displayName": "Data",
+        "purpose": "Values: bold, tabular, right-aligned in columns."
+      },
+      "label": {
+        "displayName": "Label",
+        "purpose": "Field labels, table headers, the second line under an item name."
+      },
+      "numeral": {
+        "displayName": "Numeral",
+        "purpose": "The four vital figures of a stuff (HP, AP, MP, range) and nothing else."
+      }
+    },
+    "shadows": [
+      {
+        "name": "shadow-pop",
+        "value": "0 1px 2px oklch(0.25 0.03 220 / 0.08), 0 10px 28px -10px oklch(0.25 0.03 220 / 0.28)",
+        "dark": "0 1px 2px oklch(0 0 0 / 0.4), 0 12px 30px -10px oklch(0 0 0 / 0.7)",
+        "purpose": "The only shadow: popovers, menus, select lists, toasts, the item sheet when it overlays the table, and the builder's picker as a bottom sheet."
+      },
+      {
+        "name": "slot-ring",
+        "value": "0 0 0 2px var(--accent)",
+        "purpose": "State outline of the selected slot (red when the slot is also invalid). Not elevation."
+      }
+    ],
+    "motion": [
+      {
+        "name": "ease-out",
+        "value": "cubic-bezier(0.16, 1, 0.3, 1)",
+        "purpose": "The one easing curve for every state transition."
+      },
+      {
+        "name": "control",
+        "value": "160ms",
+        "purpose": "Buttons, chips, slots, inputs, popup fade and scale."
+      },
+      {
+        "name": "indicator",
+        "value": "220ms",
+        "purpose": "Destination underline, slot press."
+      },
+      {
+        "name": "drop-in",
+        "value": "260ms",
+        "purpose": "Item art landing in a slot (fade and scale from 0.7)."
+      },
+      {
+        "name": "pulse",
+        "value": "1.4s ease-in-out infinite",
+        "purpose": "Loading skeleton blocks."
+      },
+      {
+        "name": "reduced-motion",
+        "value": "0.01ms",
+        "purpose": "All animations and transitions collapse under prefers-reduced-motion."
+      }
+    ],
+    "breakpoints": [
+      {
+        "name": "board-and-top-strip",
+        "value": "40rem"
+      },
+      {
+        "name": "sm",
+        "value": "40rem"
+      },
+      {
+        "name": "md",
+        "value": "48rem"
+      },
+      {
+        "name": "lg",
+        "value": "64rem"
+      },
+      {
+        "name": "xl",
+        "value": "80rem"
+      }
+    ]
+  },
+  "components": [
+    {
+      "name": "Solid Button",
+      "kind": "button",
+      "refersTo": "button-solid",
+      "description": "The one committed action of a panel: equip, run the search, update the data.",
+      "html": "<button class=\"ds-btn-solid\">Équiper dans le stuff</button>",
+      "css": ".ds-btn-solid { display: inline-flex; align-items: center; justify-content: center; gap: 0.375rem; height: 2rem; padding: 0 0.75rem; border: 1px solid var(--line-strong); border-radius: 6px; background: var(--panel); color: var(--ink); font-family: 'Figtree Variable', ui-sans-serif, system-ui, sans-serif; font-feature-settings: 'tnum' 1; font-size: 0.875rem; font-weight: 600; white-space: nowrap; cursor: pointer; transition: background-color 160ms cubic-bezier(0.16, 1, 0.3, 1), border-color 160ms cubic-bezier(0.16, 1, 0.3, 1), color 160ms cubic-bezier(0.16, 1, 0.3, 1); border-color: var(--accent); background: var(--accent); color: var(--accent-ink); } .ds-btn-solid:hover { background: color-mix(in oklab, var(--accent) 85%, var(--panel)); } .ds-btn-solid:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }"
+    },
+    {
+      "name": "Default Button",
+      "kind": "button",
+      "refersTo": "button-default",
+      "description": "The everyday button: add a condition, new stuff, open in the builder.",
+      "html": "<button class=\"ds-btn\">Ouvrir dans le stuff</button>",
+      "css": ".ds-btn { display: inline-flex; align-items: center; justify-content: center; gap: 0.375rem; height: 2rem; padding: 0 0.75rem; border: 1px solid var(--line-strong); border-radius: 6px; background: var(--panel); color: var(--ink); font-family: 'Figtree Variable', ui-sans-serif, system-ui, sans-serif; font-feature-settings: 'tnum' 1; font-size: 0.875rem; font-weight: 600; white-space: nowrap; cursor: pointer; transition: background-color 160ms cubic-bezier(0.16, 1, 0.3, 1), border-color 160ms cubic-bezier(0.16, 1, 0.3, 1), color 160ms cubic-bezier(0.16, 1, 0.3, 1); } .ds-btn:hover { background: var(--panel-2); } .ds-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }"
+    },
+    {
+      "name": "Ghost Button",
+      "kind": "button",
+      "refersTo": "button-ghost",
+      "description": "Resets and low-priority triggers; no edge until hovered.",
+      "html": "<button class=\"ds-btn-ghost\">Réinitialiser</button>",
+      "css": ".ds-btn-ghost { display: inline-flex; align-items: center; justify-content: center; gap: 0.375rem; height: 2rem; padding: 0 0.75rem; border: 1px solid var(--line-strong); border-radius: 6px; background: var(--panel); color: var(--ink); font-family: 'Figtree Variable', ui-sans-serif, system-ui, sans-serif; font-feature-settings: 'tnum' 1; font-size: 0.875rem; font-weight: 600; white-space: nowrap; cursor: pointer; transition: background-color 160ms cubic-bezier(0.16, 1, 0.3, 1), border-color 160ms cubic-bezier(0.16, 1, 0.3, 1), color 160ms cubic-bezier(0.16, 1, 0.3, 1); border-color: transparent; background: transparent; color: var(--ink-2); } .ds-btn-ghost:hover { background: var(--panel-2); color: var(--ink); } .ds-btn-ghost:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }"
+    },
+    {
+      "name": "Slot Filter Chip",
+      "kind": "chip",
+      "refersTo": "chip",
+      "description": "Toggle for one equipment slot, led by the slot's authored glyph; solid blue when pressed.",
+      "html": "<div class=\"ds-chips\"><button class=\"ds-chip\" aria-pressed=\"false\"><svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.6\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"M5 16c0-6 2.5-10 7-10s7 4 7 10\"/><path d=\"M2.5 16h19c0 1.7-1.3 3-3 3h-13c-1.7 0-3-1.3-3-3z\"/></svg>Chapeau</button><button class=\"ds-chip\" aria-pressed=\"true\"><svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.6\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><circle cx=\"12\" cy=\"14.5\" r=\"6\"/><path d=\"M9.5 6l2.5-3 2.5 3-2.5 2.5z\"/></svg>Anneau</button><button class=\"ds-chip\" aria-pressed=\"false\"><svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.6\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"M12 3l7.5 2.5v6c0 4.5-3 7.8-7.5 9.5-4.5-1.7-7.5-5-7.5-9.5v-6z\"/></svg>Bouclier</button></div>",
+      "css": ".ds-chips { display: flex; flex-wrap: wrap; gap: 0.375rem; } .ds-chip { display: inline-flex; align-items: center; gap: 0.4rem; height: 1.9rem; padding: 0 0.6rem; border: 1px solid var(--line-strong); border-radius: 6px; background: var(--panel); color: var(--ink-2); font-family: 'Figtree Variable', ui-sans-serif, system-ui, sans-serif; font-feature-settings: 'tnum' 1; font-weight: 600; font-size: 0.93rem; cursor: pointer; transition: background-color 160ms cubic-bezier(0.16, 1, 0.3, 1), border-color 160ms cubic-bezier(0.16, 1, 0.3, 1), color 160ms cubic-bezier(0.16, 1, 0.3, 1); } .ds-chip svg { width: 1rem; height: 1rem; } .ds-chip:hover { color: var(--ink); background: var(--panel-2); } .ds-chip[aria-pressed=\"true\"] { border-color: var(--accent); background: var(--accent); color: var(--accent-ink); } .ds-chip:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }"
+    },
+    {
+      "name": "Text Input and Number Field",
+      "kind": "input",
+      "refersTo": "text-input",
+      "description": "Search field with its label, and the compact right-aligned number box used for levels, points and thresholds.",
+      "html": "<label class=\"ds-field\"><span class=\"ds-field-label\">Rechercher un objet</span><input class=\"ds-text-input\" type=\"search\" placeholder=\"Nom de l'objet…\"></label><div class=\"ds-num-row\"><input class=\"ds-num-input\" inputmode=\"numeric\" value=\"1\" aria-label=\"Niveau minimum\"><span>–</span><input class=\"ds-num-input\" inputmode=\"numeric\" value=\"200\" aria-label=\"Niveau maximum\"><input class=\"ds-num-input\" inputmode=\"numeric\" value=\"1020\" aria-invalid=\"true\" aria-label=\"Exemple invalide\"></div>",
+      "css": ".ds-field { display: block; font-family: 'Figtree Variable', ui-sans-serif, system-ui, sans-serif; font-feature-settings: 'tnum' 1; } .ds-field-label { display: block; margin-bottom: 0.35rem; color: var(--ink-2); font-weight: 600; font-size: 0.86rem; } .ds-text-input { width: 100%; box-sizing: border-box; height: 2.3rem; padding: 0 0.7rem; border: 1px solid var(--line-strong); border-radius: 6px; background: var(--panel); color: var(--ink); font: inherit; } .ds-text-input::placeholder { color: var(--ink-3); } .ds-num-row { display: flex; align-items: center; gap: 0.5rem; margin-top: 0.75rem; color: var(--ink-3); font-family: 'Figtree Variable', ui-sans-serif, system-ui, sans-serif; font-feature-settings: 'tnum' 1; } .ds-num-input { width: 4.4rem; height: 2rem; box-sizing: border-box; padding: 0 0.5rem; border: 1px solid var(--line-strong); border-radius: 6px; background: var(--panel); color: var(--ink); font: inherit; font-weight: 600; text-align: right; } .ds-num-input[aria-invalid=\"true\"] { border-color: var(--bad); color: var(--bad); } .ds-text-input:focus-visible, .ds-num-input:focus-visible { outline: 2px solid var(--accent); outline-offset: 0; border-color: var(--accent); }"
+    },
+    {
+      "name": "Top Strip Navigation",
+      "kind": "nav",
+      "refersTo": "nav-link",
+      "description": "Brand mark of four pips and the three destinations; the current one gets a blue bar on the strip's bottom edge.",
+      "html": "<header class=\"ds-topbar\"><span class=\"ds-brand\"><span class=\"ds-brand-mark\" aria-hidden=\"true\"><i></i><i></i><i></i><i></i></span>Dofus Gear Explorer</span><nav class=\"ds-nav\"><a href=\"#\" aria-current=\"page\">Objets</a><a href=\"#\">Stuff</a><a href=\"#\">Recherche de stuffs</a></nav></header>",
+      "css": ".ds-topbar { display: flex; align-items: center; gap: 0.75rem; height: 3.5rem; padding: 0 1rem; background: var(--panel); border-bottom: 1px solid var(--line); color: var(--ink); font-family: 'Figtree Variable', ui-sans-serif, system-ui, sans-serif; font-feature-settings: 'tnum' 1; } .ds-brand { display: flex; align-items: center; gap: 0.6rem; font-weight: 700; letter-spacing: -0.01em; white-space: nowrap; } .ds-brand-mark { display: grid; grid-template-columns: repeat(2, 0.6rem); gap: 2px; } .ds-brand-mark i { width: 0.6rem; height: 0.6rem; border-radius: 2px; background: var(--accent); } .ds-brand-mark i:nth-child(2) { background: var(--ok); } .ds-brand-mark i:nth-child(3) { background: var(--bad); } .ds-brand-mark i:nth-child(4) { background: var(--line-strong); } .ds-nav { display: flex; align-items: stretch; gap: 0.25rem; height: 100%; margin-left: 0.75rem; } .ds-nav a { position: relative; display: flex; align-items: center; padding: 0 0.85rem; color: var(--ink-2); font-weight: 600; text-decoration: none; white-space: nowrap; transition: color 160ms cubic-bezier(0.16, 1, 0.3, 1); } .ds-nav a:hover { color: var(--ink); } .ds-nav a::after { content: ''; position: absolute; inset: auto 0.6rem 0; height: 3px; border-radius: 3px 3px 0 0; background: var(--accent); transform: scaleX(0); transition: transform 220ms cubic-bezier(0.16, 1, 0.3, 1); } .ds-nav a[aria-current=\"page\"] { color: var(--ink); } .ds-nav a[aria-current=\"page\"]::after { transform: scaleX(1); } .ds-nav a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }"
+    },
+    {
+      "name": "Equipment Slot on the Board",
+      "kind": "custom",
+      "refersTo": "slot",
+      "description": "The builder's cell on the checker ground: empty with its glyph, selected with a blue ring, invalid in red.",
+      "html": "<div class=\"ds-board\"><button class=\"ds-slot\" aria-pressed=\"false\" aria-label=\"Chapeau, vide\"><svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.6\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"M5 16c0-6 2.5-10 7-10s7 4 7 10\"/><path d=\"M2.5 16h19c0 1.7-1.3 3-3 3h-13c-1.7 0-3-1.3-3-3z\"/></svg></button><button class=\"ds-slot\" aria-pressed=\"true\" aria-label=\"Anneau, sélectionné\"><svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.6\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><circle cx=\"12\" cy=\"14.5\" r=\"6\"/><path d=\"M9.5 6l2.5-3 2.5 3-2.5 2.5z\"/></svg></button><button class=\"ds-slot\" data-invalid aria-pressed=\"false\" aria-label=\"Bouclier, condition non remplie\"><svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.6\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"M12 3l7.5 2.5v6c0 4.5-3 7.8-7.5 9.5-4.5-1.7-7.5-5-7.5-9.5v-6z\"/></svg><span class=\"ds-slot-level\">200</span></button><button class=\"ds-slot\" aria-pressed=\"false\" aria-label=\"Dofus, vide\"><svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.6\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"M12 3c4 0 7 5 7 10a7 7 0 0 1-14 0c0-5 3-10 7-10z\"/><path d=\"M9 9.5c.5-1.5 1.5-2.5 3-3\"/></svg></button></div>",
+      "css": ".ds-board { display: flex; flex-wrap: wrap; gap: 0.5rem; padding: 1.5rem; background-color: var(--ground); background-image: conic-gradient(var(--tile) 25%, transparent 0 50%, var(--tile) 0 75%, transparent 0); background-size: 4rem 4rem; } .ds-slot { position: relative; display: grid; place-items: center; width: 4.5rem; height: 4.5rem; padding: 0; border: 1px solid var(--line-strong); border-radius: 8px; background: var(--slot-bg); color: var(--ink-3); cursor: pointer; font-family: 'Figtree Variable', ui-sans-serif, system-ui, sans-serif; font-feature-settings: 'tnum' 1; transition: border-color 160ms cubic-bezier(0.16, 1, 0.3, 1), background-color 160ms cubic-bezier(0.16, 1, 0.3, 1), box-shadow 160ms cubic-bezier(0.16, 1, 0.3, 1), scale 220ms cubic-bezier(0.16, 1, 0.3, 1); } .ds-slot svg { width: 46%; height: 46%; } .ds-slot:hover { border-color: var(--accent); background: var(--accent-soft); } .ds-slot:active { scale: 0.96; } .ds-slot[aria-pressed=\"true\"] { border-color: var(--accent); background: var(--accent-soft); box-shadow: 0 0 0 2px var(--accent); } .ds-slot[data-invalid] { border-color: var(--bad); background: var(--bad-soft); } .ds-slot[data-invalid][aria-pressed=\"true\"] { box-shadow: 0 0 0 2px var(--bad); } .ds-slot-level { position: absolute; right: 3px; bottom: 2px; padding: 0 3px; border-radius: 3px; background: var(--panel); color: var(--ink-2); font-weight: 700; font-size: 0.72rem; line-height: 1.3; } .ds-slot:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }"
+    },
+    {
+      "name": "Vital Tiles and Stat Sheet Rows",
+      "kind": "custom",
+      "refersTo": "vital",
+      "description": "The four vital figures in their stat tone, then sheet rows: pip in the stat's tone (hollow when the stat has none), quiet label, bold value.",
+      "html": "<div class=\"ds-sheet\"><div class=\"ds-vitals\"><div class=\"ds-vital\" style=\"--tone: var(--st-vitality)\"><span class=\"ds-vital-value\">4 150</span><span class=\"ds-vital-label\">PV</span></div><div class=\"ds-vital\" style=\"--tone: var(--st-ap)\"><span class=\"ds-vital-value\">11</span><span class=\"ds-vital-label\">PA</span></div><div class=\"ds-vital\" style=\"--tone: var(--st-mp)\"><span class=\"ds-vital-value\">6</span><span class=\"ds-vital-label\">PM</span></div><div class=\"ds-vital\" style=\"--tone: var(--st-range)\"><span class=\"ds-vital-value\">1</span><span class=\"ds-vital-label\">Portée</span></div></div><div class=\"ds-row\"><span class=\"ds-pip\" style=\"--tone: var(--el-earth)\"></span><span class=\"ds-row-label\">Force</span><span class=\"ds-row-value\">1 390</span></div><div class=\"ds-row\"><span class=\"ds-pip\" style=\"--tone: var(--el-fire)\"></span><span class=\"ds-row-label\">Intelligence</span><span class=\"ds-row-value\">130</span></div><div class=\"ds-row\"><span class=\"ds-pip\" style=\"--tone: var(--el-water)\"></span><span class=\"ds-row-label\">Chance</span><span class=\"ds-row-value\">70</span></div><div class=\"ds-row\"><span class=\"ds-pip\" style=\"--tone: var(--st-wisdom)\"></span><span class=\"ds-row-label\">Sagesse</span><span class=\"ds-row-value\">400</span></div><div class=\"ds-row\"><span class=\"ds-pip\" data-tone=\"plain\"></span><span class=\"ds-row-label\">Puissance</span><span class=\"ds-row-value\" data-zero>0</span></div><div class=\"ds-row\"><span class=\"ds-pip\" data-tone=\"plain\"></span><span class=\"ds-row-label\">Tacle</span><span class=\"ds-row-value\" data-negative>-3</span></div></div>",
+      "css": ".ds-sheet { display: grid; gap: 0.1rem; max-width: 20rem; padding: 1rem; background: var(--panel); color: var(--ink); font-family: 'Figtree Variable', ui-sans-serif, system-ui, sans-serif; font-feature-settings: 'tnum' 1; } .ds-vitals { display: grid; grid-template-columns: 1fr 1fr; gap: 0.375rem; margin-bottom: 0.9rem; } .ds-vital { display: grid; grid-template-columns: 1fr auto; align-items: baseline; gap: 0.1rem; padding: 0.55rem 0.7rem; border: 1px solid var(--line); border-radius: 8px; background: var(--panel-2); } .ds-vital-value { order: 2; font-weight: 800; font-size: 1.3rem; line-height: 1.2; color: var(--tone, var(--ink)); } .ds-vital-label { color: var(--ink-2); font-weight: 600; font-size: 0.86rem; } .ds-row { display: flex; align-items: center; gap: 0.5rem; min-height: 1.75rem; padding: 0 0.25rem; } .ds-pip { flex: none; width: 0.6rem; height: 0.6rem; border-radius: 2px; background: var(--tone, var(--ink-3)); } .ds-pip[data-tone=\"plain\"] { background: none; box-shadow: inset 0 0 0 1px var(--line-strong); } .ds-row-label { flex: 1; color: var(--ink-2); } .ds-row-value { font-weight: 700; } .ds-row-value[data-zero] { color: var(--ink-3); font-weight: 500; } .ds-row-value[data-negative] { color: var(--bad); }"
+    },
+    {
+      "name": "Goal Marks",
+      "kind": "chip",
+      "refersTo": "goal",
+      "description": "One tag per solver condition on a result: green wash and tick when met, red wash and cross when not; other stats follow as plain pips.",
+      "html": "<div class=\"ds-goals\"><span class=\"ds-goal\"><svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"M20 6 9 17l-5-5\"/></svg><span class=\"ds-goal-label\">PA</span><strong>11</strong></span><span class=\"ds-goal\"><svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"M20 6 9 17l-5-5\"/></svg><span class=\"ds-goal-label\">PM</span><strong>6</strong></span><span class=\"ds-goal\" data-state=\"bad\"><svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"M18 6 6 18M6 6l12 12\"/></svg><span class=\"ds-goal-label\">Sagesse</span><strong>280</strong></span><span class=\"ds-extra\"><span class=\"ds-goal-pip\" style=\"--tone: var(--el-earth)\"></span><span class=\"ds-goal-label\">Force</span><strong>1 390</strong></span></div>",
+      "css": ".ds-goals { display: flex; flex-wrap: wrap; align-items: center; gap: 0.375rem; color: var(--ink); font-family: 'Figtree Variable', ui-sans-serif, system-ui, sans-serif; font-feature-settings: 'tnum' 1; font-size: 0.93rem; } .ds-goal { display: inline-flex; align-items: center; gap: 0.35rem; height: 1.7rem; padding: 0 0.5rem; border-radius: 5px; background: var(--ok-soft); font-weight: 600; } .ds-goal svg { width: 0.9rem; height: 0.9rem; color: var(--ok); } .ds-goal[data-state=\"bad\"] { background: var(--bad-soft); } .ds-goal[data-state=\"bad\"] svg { color: var(--bad); } .ds-goal-label { color: var(--ink-2); } .ds-extra { display: inline-flex; align-items: center; gap: 0.375rem; height: 1.7rem; padding: 0 0.25rem; } .ds-goal-pip { width: 0.6rem; height: 0.6rem; border-radius: 2px; background: var(--tone, var(--ink-3)); }"
+    },
+    {
+      "name": "Item Table Rows",
+      "kind": "custom",
+      "refersTo": "table-row",
+      "description": "Compact item rows: pinned name column on the left, stat values right-aligned in their tone; the selected row takes the blue wash.",
+      "html": "<table class=\"ds-table\"><thead><tr><th>Objet</th><th>Niv.</th><th>PA</th><th>Vitalité</th><th>Sagesse</th><th>Force</th></tr></thead><tbody><tr><td><span class=\"ds-item\"><span class=\"ds-cell\"></span><span><b>Ailes du Chaos</b><small>Cape</small></span></span></td><td><b>200</b></td><td><b style=\"color: var(--st-ap)\">1</b></td><td><b style=\"color: var(--st-vitality)\">400</b></td><td><b style=\"color: var(--st-wisdom)\">30</b></td><td></td></tr><tr aria-selected=\"true\"><td><span class=\"ds-item\"><span class=\"ds-cell\"></span><span><b>Alliance du Dark Vlad</b><small>Anneau · Panoplie du Dark Vlad</small></span></span></td><td><b>200</b></td><td></td><td><b style=\"color: var(--st-vitality)\">300</b></td><td><b style=\"color: var(--st-wisdom)\">30</b></td><td></td></tr><tr><td><span class=\"ds-item\"><span class=\"ds-cell\"></span><span><b>Alliance Brûlâme</b><small>Anneau · Panoplie Brûlâme</small></span></span></td><td><b>200</b></td><td></td><td><b style=\"color: var(--st-vitality)\">300</b></td><td><b style=\"color: var(--st-wisdom)\">30</b></td><td><b style=\"color: var(--el-earth)\">60</b></td></tr></tbody></table>",
+      "css": ".ds-table { width: 100%; border-collapse: separate; border-spacing: 0; background: var(--panel); color: var(--ink); font-family: 'Figtree Variable', ui-sans-serif, system-ui, sans-serif; font-feature-settings: 'tnum' 1; font-size: 0.93rem; } .ds-table th { height: 2.4rem; padding: 0 0.45rem; border-bottom: 1px solid var(--line-strong); background: var(--tile); color: var(--ink-2); font-weight: 700; font-size: 0.86rem; text-align: right; white-space: nowrap; } .ds-table td { height: 48px; padding: 0 0.45rem; border-bottom: 1px solid var(--line); background: var(--row-bg); text-align: right; white-space: nowrap; } .ds-table th:first-child, .ds-table td:first-child { position: sticky; left: 0; border-right: 1px solid var(--line); text-align: left; padding-left: 1rem; } .ds-table tbody tr { --row-bg: var(--panel); cursor: pointer; } .ds-table tbody tr:hover { --row-bg: var(--panel-2); } .ds-table tbody tr[aria-selected=\"true\"] { --row-bg: var(--accent-soft); } .ds-item { display: flex; align-items: center; gap: 0.625rem; } .ds-item > span:last-child { display: grid; } .ds-item b { font-weight: 600; } .ds-item small { color: var(--ink-3); font-size: 0.86rem; } .ds-cell { flex: none; width: 2.5rem; height: 2.5rem; border: 1px solid var(--line); border-radius: 6px; background: var(--cell-bg); }"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Combat Board",
+    "namingNote": "Naming note: the North Star and the descriptive colour names in this file (Range Blue, Movement Green, Impact Red, Board Sage and the rest) were derived from the build's direction contract. The user has not confirmed them yet; the token names in `styles.css` are the stable reference.",
+    "overview": "The interface borrows the surface a Dofus player already stares at in a fight: a tinted ground laid out in a two-tone checker, square cells, and the three zone colours the game uses to say what a cell means. Blue is where the player's hand is (the game's spell range), green is what is valid (movement), red is what fails (impact). Characteristics are read in the colour of their element. Nothing else on the screen carries hue, so every colour a player sees is information they already know how to read.\n\nIt is a working tool, dense on purpose. The root size is small (14px), rows are fixed and compact, numbers are tabular and bold, and labels step back to a softer ink so that values are what the eye lands on. The three screens share one frame: a top strip with the three destinations and the data release, then columns that fill the window and scroll on their own. There is no page chrome, no hero, no marketing voice.\n\nIt refuses two looks by construction: the dark neon gamer dashboard (no glow, no gradients on controls, the dark theme is the same sage board at night, not black) and the white SaaS admin table (the ground is tinted, state is carried by game colours, item cells and slots are the recurring shape instead of cards).\n\nTokens live in one place, `packages/app/src/styles.css`: the light theme on `:root`, the dark theme on `:root[data-theme=\"dark\"]`. That file is normative. The frontmatter above is the light theme as it stood when this was written; if a value there and the stylesheet disagree, the stylesheet is right and the role described here still holds.",
+    "keyCharacteristics": [
+      "A sage board ground in both themes: plain under the rails that hold controls, in a two-tone checker wherever pieces are placed or nothing has been picked or asked yet.",
+      "Square cells for every item image and every equipment slot, in three sizes of the same shape.",
+      "Three zone colours used only as state: blue selected, green valid, red failing.",
+      "Twelve stat tones, resolved from the stat itself, shown as a cell-shaped pip or as the colour of the number.",
+      "One typeface, four weights, tabular numerals everywhere.",
+      "Flat panels separated by one-pixel lines; shadow only under things that float.",
+      "Light and dark themes with the same roles; both are first-class."
+    ],
+    "rules": [
+      {
+        "name": "The Zone Colour Rule",
+        "body": "Blue, green and red are states, never decoration. Blue says \"this is selected, or this is the move\"; green says \"this passes\"; red says \"this fails or is negative\". A surface that is none of those stays neutral.",
+        "section": "colors"
+      },
+      {
+        "name": "The Soft-Fill Rule",
+        "body": "State on a surface is the soft wash as fill, with the strong colour kept for the border, the icon or a two-pixel ring; text on a wash stays ink. The strong colour is used as a fill only where blue means \"pressed\" or \"do it\" (solid button, pressed chip).",
+        "section": "colors"
+      },
+      {
+        "name": "The Element Rule",
+        "body": "A stat's colour is decided by the stat, in one function. No screen assigns a stat colour locally, and a tone is applied only to a pip or to the number itself, never to a panel, a border or a button. A mark that is not a stat (the update dot) gets its own tone name instead of borrowing a stat's.",
+        "section": "colors"
+      },
+      {
+        "name": "The State Never Rides On Colour Alone Rule",
+        "body": "Every zone colour arrives with a second signal: a tick, cross or warning icon, a status word, a ring. A stuff is never shown valid by default; the mark appears only once the evaluation says so.",
+        "section": "colors"
+      },
+      {
+        "name": "The Numbers First Rule",
+        "body": "In any label-and-value pair the value is bold ink and the label is `ink-2`. A zero drops to weight 500 and `ink-3` so non-zero values stand out in a long sheet.",
+        "section": "typography"
+      },
+      {
+        "name": "The Tabular Rule",
+        "body": "Tabular numerals are on for the whole document. Numeric columns are right-aligned; names are left-aligned and truncate with an ellipsis rather than wrap.",
+        "section": "typography"
+      },
+      {
+        "name": "The Four Weights Rule",
+        "body": "400 for prose, 600 for labels and controls, 700 for values and titles, 800 for vitals. No italics, no tracked uppercase labels, no letter-spacing other than a slight tightening on the product name.",
+        "section": "typography"
+      },
+      {
+        "name": "The Ground Rule",
+        "body": "The ground is for rails, stages and empty states; data sits on `panel`. Plain `ground` is the filter rail. The checker is where pieces are placed or where nothing is there yet: the builder's board, the item-sheet column before an item is picked, the setup and offline stages, the first load, the search screen before a run. Tables, lists and sheets sit on `panel`, edge to edge, with no ground showing between their rows.",
+        "section": "layout"
+      },
+      {
+        "name": "The Why-It-Matches Rule",
+        "body": "A stat the player filters on always gets a column in the table, so the reason a row is there is visible.",
+        "section": "layout"
+      },
+      {
+        "name": "The Flat Board Rule",
+        "body": "Nothing resting on the frame casts a shadow. If it does not float over other content, it gets a line, not a shadow.",
+        "section": "elevation"
+      },
+      {
+        "name": "The Square Cell Rule",
+        "body": "Anything that is an item, a slot or a stat marker is a square cell. Item art never appears in a circle, a bare image or a card.",
+        "section": "shapes"
+      },
+      {
+        "name": "The Pip Rule",
+        "body": "A characteristic is marked by one pip in its tone, never by a pictogram. The pip sits before the label; the label still names the stat. A stat with no tone keeps a hollow pip, so the column stays aligned without inventing a colour.",
+        "section": "shapes"
+      }
+    ],
+    "dos": [
+      "Do take every colour from the tokens in `styles.css` and define both themes when adding one.",
+      "Do resolve a stat's colour through `toneOf` and show it as a pip or as the number's colour.",
+      "Do pair every zone colour with an icon, a word or a ring, and keep text on a wash in ink.",
+      "Do put item art in a square cell at one of the existing sizes, with the slot glyph as its fallback.",
+      "Do keep values bold and right-aligned, labels in `ink-2`, and zero values quiet.",
+      "Do keep one solid blue button per panel; everything else is default or ghost.",
+      "Do separate panels with one-pixel lines and let each column scroll on its own.",
+      "Do keep the ground for rails, stages and empty states: plain under a rail of controls, checker behind slots and wherever nothing has been picked or asked yet.",
+      "Do put item art on `cell-bg` or `slot-bg`, never straight on a panel, so dark art stays readable in the dark theme.",
+      "Do give a mark that is not a stat its own tone name, and keep set markers outside the blue, green and red state hues."
+    ],
+    "donts": [
+      "Don't use `accent`, `ok` or `bad` to decorate; if a surface is not selected, valid or failing, it stays neutral.",
+      "Don't apply a stat tone to a panel, border or button, and don't give a stat a colour outside the tone map.",
+      "Don't replace pips with stat pictograms, or item cells with circles, bare images or cards.",
+      "Don't add shadows to panels, rows or cells; only floating layers cast one.",
+      "Don't add glow, gradient fills on buttons, panels or text, or a black neon dark theme; the dark ground is the same sage, at night.",
+      "Don't lay data tables, lists or sheets on the ground or the checker, or box result rows into cards.",
+      "Don't show a stuff as valid before its evaluation says so, or hide a failing condition behind colour alone.",
+      "Don't introduce a second typeface, tracked uppercase labels, or weights outside the four in use (a quiet zero at 500 is the one exception)."
+    ]
+  }
+}

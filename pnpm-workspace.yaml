@@ -1,0 +1,13 @@
+packages:
+  - apps/*
+  - packages/*
+
+onlyBuiltDependencies:
+  - electron
+  - esbuild
+
+# electron-builder still depends on minimatch 9 and 10, affected by
+# GHSA advisory "potential denial of service via globparts amplification".
+# Drop this override once electron-builder moves to a patched minimatch.
+overrides:
+  minimatch@>=7.0.0 <11.0.1: 11.0.7

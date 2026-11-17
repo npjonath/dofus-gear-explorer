@@ -1,0 +1,17 @@
+{
+  "name": "@dde/api",
+  "private": true,
+  "version": "0.1.1",
+  "description": "Go backend: imports Dofus game data into SQLite and serves the equipment, build and solver API.",
+  "license": "MIT",
+  "scripts": {
+    "dev": "go run ./cmd/dde-api serve",
+    "build": "go build -o bin/dde-api ./cmd/dde-api",
+    "build:targets": "node scripts/build-targets.mjs",
+    "data:sync": "go run ./cmd/dde-api sync",
+    "data:check": "go run ./cmd/dde-api check",
+    "test": "go test ./...",
+    "typecheck": "go vet ./...",
+    "lint": "node scripts/lint.mjs"
+  }
+}

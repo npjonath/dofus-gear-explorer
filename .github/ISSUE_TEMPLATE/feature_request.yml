@@ -1,0 +1,20 @@
+name: Idea or feature
+description: Suggest something the app should do.
+labels: [enhancement]
+body:
+  - type: textarea
+    id: goal
+    attributes:
+      label: What are you trying to do?
+      description: Describe the situation in the game, for example "find a stuff with 12 AP that keeps 40% crit".
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: How could the app help?
+  - type: textarea
+    id: other
+    attributes:
+      label: How do you do it today?
+      description: Another site, a spreadsheet, by hand…
