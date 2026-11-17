@@ -37,6 +37,8 @@ export function createI18n(lang: Lang): I18n {
     colon: data.colon,
     t: (key, params) => {
       const message = data.messages[key]
+      // Keys built at run time (an issue code from the API, say) may be unknown.
+      if (message === undefined) return key
       const count = params?.count
       let text =
         typeof message === "string"

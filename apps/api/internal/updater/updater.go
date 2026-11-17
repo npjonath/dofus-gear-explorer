@@ -87,6 +87,9 @@ type Updater struct {
 	progress          *Progress
 	lastError         string
 	latestPublishedAt string
+	// langImportFailed is the release whose language import failed in this
+	// process; it is not tried again, so the release checks keep running.
+	langImportFailed string
 }
 
 func New(st *store.Store, client *release.Client, opts Options, log *slog.Logger, onLoaded func(*game.Dataset)) *Updater {
@@ -346,10 +349,16 @@ func (u *Updater) langsMissing(ctx context.Context, version string) bool {
 	return false
 }
 
+func (u *Updater) langImportFailedFor() string {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	return u.langImportFailed
+}
+
 // StartLanguageImport imports a release again, in the background, to add
 // the languages it lacks. The installed data keeps working meanwhile, so a
-// failed import (no network, say) is logged and tried again at the next
-// check, not reported as a failed update.
+// failed import (no network, say) is logged, not reported as a failed
+// update, and tried again at the next start.
 func (u *Updater) StartLanguageImport(version string) error {
 	if err := u.begin(StateUpdating); err != nil {
 		return err
@@ -357,6 +366,9 @@ func (u *Updater) StartLanguageImport(version string) error {
 	go func() {
 		if err := u.update(context.Background(), version); err != nil {
 			u.log.Warn("language import failed", "error", err)
+			u.mu.Lock()
+			u.langImportFailed = version
+			u.mu.Unlock()
 		}
 		u.end(nil)
 	}()
@@ -445,7 +457,7 @@ func (u *Updater) Run(ctx context.Context) {
 		}
 		// Languages asked for since the last import (a new default, say) are
 		// imported from the release already installed, without upgrading it.
-		if u.langsMissing(ctx, st.InstalledVersion) {
+		if u.langsMissing(ctx, st.InstalledVersion) && u.langImportFailedFor() != st.InstalledVersion {
 			if err := u.StartLanguageImport(st.InstalledVersion); err != nil && !errors.Is(err, ErrBusy) {
 				u.log.Error("cannot start the language import", "error", err)
 			}
