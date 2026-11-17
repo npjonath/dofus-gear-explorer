@@ -61,6 +61,8 @@ On every system the new version downloads in the background; a notice offers to 
 
 The update feed is the repository the release workflow ran in, written into the app at build time (`app-update.yml`). The `latest*.yml` files and the macOS `.zip` files in a release are what the updater reads; keep them in every release.
 
+The **Update test** workflow checks a real update on Windows, Linux and macOS whenever `apps/desktop` changes. `apps/desktop/scripts/update-test.mjs` packages the app as 1.0.0 and 1.0.1, both pointing at a feed served on the machine. It installs 1.0.0 (the NSIS installer silently, the AppImage, the macOS zip), starts it with remote debugging, and waits for the update to be ready. Then it presses restart through the same bridge as the notice and checks that 1.0.1 is installed. To run it locally, build the API for your system (`pnpm --filter @dde/api build:targets mac-arm64`) and the interface (`pnpm --filter @dde/desktop exec electron-vite build`), quit the installed app, then run `node scripts/update-test.mjs` from `apps/desktop`.
+
 ## Layout
 
 ```
