@@ -14,7 +14,7 @@ pnpm monorepo: a Go API (`apps/api`), a shared React interface (`packages/app`) 
 - `pnpm notices`: write `THIRD_PARTY_NOTICES.md` again after changing dependencies (CI fails when it is stale)
 - `pnpm build:desktop:mac|win|linux`: local installers in `apps/desktop/release/<version>` (never published)
 - Branches: work lands in `develop` (default branch, squash merges); `main` only receives `develop` through a merge-commit pull request before each release.
-- `pnpm release X.Y.Z`: bumps every `package.json`, merges it into `develop`, then `develop` into `main` (`scripts/release.mjs`, through `gh`); the maintainer then runs the Release workflow on `main`, which tags, builds and publishes. Developer reference: `docs/DEVELOPMENT.md`.
+- `pnpm release X.Y.Z`: bumps every `package.json`, merges it into `develop`, then `develop` into `main` (`scripts/release.mjs`, through `gh`); the maintainer then runs the Release workflow, which always releases `main`: it tags, builds and publishes. Developer reference: `docs/DEVELOPMENT.md`.
 
 ## Conventions
 
