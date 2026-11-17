@@ -255,6 +255,8 @@ func (n *node) checkable() bool {
 var criteriaWords = map[string]map[string]string{
 	"fr": {"and": " et ", "or": " ou ", "special": "Condition spéciale", "sets": "Bonus de panoplie", "base": " de base"},
 	"en": {"and": " and ", "or": " or ", "special": "Special condition", "sets": "Set bonuses", "base": " (base)"},
+	"es": {"and": " y ", "or": " o ", "special": "Condición especial", "sets": "Bonus de sets", "base": " base"},
+	"pt": {"and": " e ", "or": " ou ", "special": "Condição especial", "sets": "Bônus de conjuntos", "base": " base"},
 }
 
 // Text renders the condition in a language, e.g. "PA < 12 ou PM < 6".

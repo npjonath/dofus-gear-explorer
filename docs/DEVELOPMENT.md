@@ -126,7 +126,7 @@ cd apps/api && go run ./cmd/dde-api sync --source /path/to/doduda/output
 | --- | --- | --- | --- |
 | `--addr` | `DDE_ADDR` | `127.0.0.1:8787` | Listen address. Port `0` picks a free port. |
 | `--data-dir` | `DDE_DATA_DIR` | `data` | SQLite database and icons. |
-| `--langs` | `DDE_LANGS` | `fr,en` | Languages to import. |
+| `--langs` | `DDE_LANGS` | `fr,en,es,pt` | Languages to import. A language missing from the installed data is imported again from the same release at the next start. |
 | `--repo` | `DDE_RELEASE_REPO` | `dofusdude/dofus3-main` | Repository publishing the releases. |
 | `--check-interval` | | `6h` | Delay between release checks. |
 | `--auto-update` | `DDE_AUTO_UPDATE` | off | Import new releases automatically. |

@@ -21,7 +21,7 @@ pnpm monorepo: a Go API (`apps/api`), a shared React interface (`packages/app`) 
 - Interface code goes in `packages/app`; the shells only provide the API address, the app version and, on desktop, the update bridge (`Platform.updates`). Never import Electron or Node APIs from `packages/app`.
 - Game rules live in Go (`apps/api/internal/engine`): stats, set bonuses, equip conditions, forgemagic, weapon and spell damage. The interface asks `/api/builds/evaluate` and `/api/builds/damage` instead of recomputing them.
 - SQLite is the store of record (`internal/store`). Changing a table means bumping `schemaVersion`, which drops the game data and triggers a re-import.
-- Every user-facing string has a French and an English entry in `packages/app/src/i18n.ts`.
+- Every user-facing string has an entry in each language file of `packages/app/src/locales` (French, English, Spanish, Portuguese). French defines the keys, so a missing key fails `pnpm typecheck`; use the game data's own terms for stats, slots and classes in each language, and a `{ one, other }` message where a count changes the words.
 - Colours come from the tokens in `packages/app/src/styles.css`; see `DESIGN.md` and `PRODUCT.md` before changing the look.
 - The app never asks for an account or personal data, and only goes online for the game data and its own updates (README, PRIVACY.md). Don't add telemetry, logins or other network access.
 - Never commit Ankama content (game data, images); the app downloads it at run time. Every place the app is described says it is unofficial and not affiliated with Ankama.

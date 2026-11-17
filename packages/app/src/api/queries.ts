@@ -19,6 +19,15 @@ export function useDataStatus() {
   })
 }
 
+/**
+ * Identifies the imported data in query keys. It changes with every import,
+ * including one of the same release that adds a language.
+ */
+function useDataKey(): string | undefined {
+  const status = useDataStatus().data
+  return status && `${status.installedVersion}@${status.importedAt}`
+}
+
 export function useCheckForUpdate() {
   const api = useApi()
   const client = useQueryClient()
@@ -40,7 +49,7 @@ export function useStartUpdate() {
 export function useMeta() {
   const api = useApi()
   const lang = useStore((s) => s.lang)
-  const version = useDataStatus().data?.installedVersion
+  const version = useDataKey()
   return useQuery({
     queryKey: ["meta", lang, version],
     queryFn: () => api.meta(lang),
@@ -53,7 +62,7 @@ export function useMeta() {
 export function useItems(query: ItemQuery) {
   const api = useApi()
   const lang = useStore((s) => s.lang)
-  const version = useDataStatus().data?.installedVersion
+  const version = useDataKey()
   return useInfiniteQuery({
     queryKey: ["items", lang, version, query],
     queryFn: ({ pageParam, signal }) => api.items(lang, query, PAGE_SIZE, pageParam, signal),
@@ -71,7 +80,7 @@ export function useItems(query: ItemQuery) {
 export function useItem(id: number | null) {
   const api = useApi()
   const lang = useStore((s) => s.lang)
-  const version = useDataStatus().data?.installedVersion
+  const version = useDataKey()
   return useQuery({
     queryKey: ["item", lang, version, id],
     queryFn: () => api.item(lang, id!),
@@ -83,7 +92,7 @@ export function useItem(id: number | null) {
 export function useEvaluation(build: BuildInput) {
   const api = useApi()
   const lang = useStore((s) => s.lang)
-  const version = useDataStatus().data?.installedVersion
+  const version = useDataKey()
   return useQuery({
     queryKey: ["evaluate", lang, version, build],
     queryFn: ({ signal }) => api.evaluate(lang, build, signal),
@@ -96,7 +105,7 @@ export function useEvaluation(build: BuildInput) {
 export function useDamage(build: BuildInput, breedId: number | null, range: AttackRange, mastery: boolean) {
   const api = useApi()
   const lang = useStore((s) => s.lang)
-  const version = useDataStatus().data?.installedVersion
+  const version = useDataKey()
   return useQuery({
     queryKey: ["damage", lang, version, build, breedId, range, mastery],
     queryFn: ({ signal }) => api.damage(lang, build, breedId, range, mastery, signal),

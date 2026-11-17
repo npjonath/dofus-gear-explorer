@@ -16,7 +16,7 @@ export function nextBuildName(template: (n: number) => string, taken: string[]):
 // The Stuff screen's tabs: the list of stuffs and the stuff search, which
 // never close, then one tab per open stuff. Closing a tab keeps the stuff.
 export function BuildTabs({ meta, onNew }: { meta: Meta; onNew(): void }) {
-  const { t } = useI18n()
+  const { t, colon } = useI18n()
   const builds = useStore((s) => s.builds)
   const openIds = useStore((s) => s.openBuildIds)
   const activeId = useStore((s) => s.activeBuildId)
@@ -72,7 +72,7 @@ export function BuildTabs({ meta, onNew }: { meta: Meta; onNew(): void }) {
               <button
                 type="button"
                 className="build-tab-close"
-                aria-label={`${t("build.closeTab")} : ${b.name || t("build.unnamed")}`}
+                aria-label={`${t("build.closeTab")}${colon}${b.name || t("build.unnamed")}`}
                 title={t("build.closeTab")}
                 onClick={() => closeBuild(b.id)}
               >

@@ -60,7 +60,7 @@ const example = {
 
 // An item the search must wear, as a removable row.
 function RequiredItem({ id, unplaced, onRemove }: { id: number; unplaced: boolean; onRemove(): void }) {
-  const { t } = useI18n()
+  const { t, colon } = useI18n()
   const item = useItem(id).data
   return (
     <li className="flex items-center gap-2">
@@ -76,7 +76,7 @@ function RequiredItem({ id, unplaced, onRemove }: { id: number; unplaced: boolea
       <button
         type="button"
         className="icon-btn"
-        aria-label={`${t("common.remove")} : ${item?.name ?? ""}`}
+        aria-label={`${t("common.remove")}${colon}${item?.name ?? ""}`}
         onClick={onRemove}
       >
         <XIcon aria-hidden="true" />
@@ -210,7 +210,7 @@ function ResultRow({
   onAdd(item: Item, from: { position: string; mods?: ItemMods }): void
   onExclude(item: Item): void
 }) {
-  const { t, number, primaryName } = useI18n()
+  const { t, number, primaryName, colon } = useI18n()
   const byId = new Map(meta.stats.map((s) => [s.id, s]))
   const evaluation = solution.evaluation
   const value = (id: number) => evaluation.stats[String(id)] ?? 0
@@ -244,7 +244,7 @@ function ResultRow({
   for (const [position, mods] of Object.entries(solution.mods ?? {})) {
     const item = evaluation.items[position]
     for (const exo of mods.exos ?? []) {
-      forgeNotes.push(`${t("forge.origin.exo")} ${byId.get(exo.statId)?.label ?? ""} : ${item?.name ?? ""}`)
+      forgeNotes.push(`${t("forge.origin.exo")} ${byId.get(exo.statId)?.label ?? ""}${colon}${item?.name ?? ""}`)
     }
     const rune = meta.forge.runes.find((r) => r.id === mods.transcendence)
     if (rune) runeCounts.set(rune.name, (runeCounts.get(rune.name) ?? 0) + 1)
@@ -268,7 +268,7 @@ function ResultRow({
                 key={constraint.statId}
                 className="goal"
                 data-state={met ? "ok" : "bad"}
-                title={`${met ? t("solver.met") : t("solver.unmet")} : ${statLabel(stat)} ${constraint.op === "gte" ? "≥" : "≤"} ${constraint.value}`}
+                title={`${met ? t("solver.met") : t("solver.unmet")}${colon}${statLabel(stat)} ${constraint.op === "gte" ? "≥" : "≤"} ${constraint.value}`}
               >
                 {met ? <CheckIcon aria-hidden="true" /> : <XIcon aria-hidden="true" />}
                 <span className="text-ink-2">{stat?.label}</span>
@@ -355,13 +355,13 @@ function ResultRow({
 
       {request.autoPoints && pointNotes.length > 0 && (
         <p className="m-0 text-ink-2">
-          <strong className="text-ink">{t("solver.points")}</strong> : {pointNotes.join(" · ")}
+          <strong className="text-ink">{t("solver.points")}</strong>{colon}{pointNotes.join(" · ")}
         </p>
       )}
 
       {forgeNotes.length > 0 && (
         <p className="m-0 text-ink-2">
-          <strong className="text-ink">{t("forge.title")}</strong> : {forgeNotes.join(" · ")}
+          <strong className="text-ink">{t("forge.title")}</strong>{colon}{forgeNotes.join(" · ")}
         </p>
       )}
     </li>
@@ -369,7 +369,7 @@ function ResultRow({
 }
 
 export function SolverPage({ meta }: { meta: Meta }) {
-  const { t, number } = useI18n()
+  const { t, number, colon } = useI18n()
   const build = useActiveBuild()
   const draft = useStore((s) => s.solver)
   const updateSolver = useStore((s) => s.updateSolver)
@@ -675,7 +675,7 @@ export function SolverPage({ meta }: { meta: Meta }) {
                       <button
                         type="button"
                         className="icon-btn size-6!"
-                        aria-label={`${t("solver.moveUp")} : ${name ?? index + 1}`}
+                        aria-label={`${t("solver.moveUp")}${colon}${name ?? index + 1}`}
                         disabled={index === 0}
                         onClick={() => move(index - 1)}
                       >
@@ -684,7 +684,7 @@ export function SolverPage({ meta }: { meta: Meta }) {
                       <button
                         type="button"
                         className="icon-btn size-6!"
-                        aria-label={`${t("solver.moveDown")} : ${name ?? index + 1}`}
+                        aria-label={`${t("solver.moveDown")}${colon}${name ?? index + 1}`}
                         disabled={index === draft.maximize.length - 1}
                         onClick={() => move(index + 1)}
                       >
@@ -693,7 +693,7 @@ export function SolverPage({ meta }: { meta: Meta }) {
                       <button
                         type="button"
                         className="icon-btn size-6!"
-                        aria-label={`${t("common.remove")} : ${name ?? index + 1}`}
+                        aria-label={`${t("common.remove")}${colon}${name ?? index + 1}`}
                         onClick={() => updateSolver({ maximize: draft.maximize.filter((_, i) => i !== index) })}
                       >
                         <XIcon aria-hidden="true" />
@@ -965,7 +965,7 @@ export function SolverPage({ meta }: { meta: Meta }) {
             <header className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 border-b border-line bg-panel-2 px-5 py-3">
               {response.feasible > 0 ? (
                 <h2 className="m-0 text-base font-bold" tabIndex={-1}>
-                  {response.feasible === 1 ? t("solver.results.one") : t("solver.results", { count: response.feasible })}
+                  {t("solver.results", { count: response.feasible })}
                 </h2>
               ) : (
                 <div>

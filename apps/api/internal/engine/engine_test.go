@@ -129,6 +129,21 @@ func TestCriteria(t *testing.T) {
 	}
 }
 
+func TestCriteriaWordsCoverEveryLanguage(t *testing.T) {
+	for _, lang := range []string{"fr", "en", "es", "pt"} {
+		words, ok := criteriaWords[lang]
+		if !ok {
+			t.Errorf("no criteria words for %s", lang)
+			continue
+		}
+		for _, key := range []string{"and", "or", "special", "sets", "base"} {
+			if words[key] == "" {
+				t.Errorf("%s: no %q", lang, key)
+			}
+		}
+	}
+}
+
 // withPrysmaradites adds two prysmaradites, each worth one AP.
 func withPrysmaradites() *Engine {
 	ds := gametest.Dataset()

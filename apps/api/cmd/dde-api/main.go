@@ -55,7 +55,7 @@ func parseFlags(name string, args []string) (*config, error) {
 	fs := flag.NewFlagSet(name, flag.ContinueOnError)
 	fs.StringVar(&cfg.addr, "addr", env("DDE_ADDR", "127.0.0.1:8787"), "address to listen on (use port 0 for a free port)")
 	fs.StringVar(&cfg.dataDir, "data-dir", env("DDE_DATA_DIR", "data"), "directory for the SQLite database and item icons")
-	fs.StringVar(&cfg.langs, "langs", env("DDE_LANGS", "fr,en"), "languages to import, comma separated")
+	fs.StringVar(&cfg.langs, "langs", env("DDE_LANGS", "fr,en,es,pt"), "languages to import, comma separated")
 	fs.StringVar(&cfg.repo, "repo", env("DDE_RELEASE_REPO", release.DefaultRepo), "GitHub repository publishing the game data")
 	fs.IntVar(&cfg.imageSize, "image-size", 128, "item icon size to import: 64 or 128")
 	fs.DurationVar(&cfg.checkInterval, "check-interval", 6*time.Hour, "how often to look for a new release")
@@ -129,7 +129,7 @@ func run(command string, cfg *config, log *slog.Logger) error {
 		if cfg.source != "" {
 			version := cfg.version
 			if version == "" {
-				version = "local-" + time.Now().UTC().Format("20060102-150405")
+				version = updater.LocalVersionPrefix + time.Now().UTC().Format("20060102-150405")
 			}
 			return up.ImportLocal(ctx, cfg.source, version)
 		}
