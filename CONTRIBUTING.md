@@ -18,7 +18,7 @@ The project is under the [MIT licence](LICENSE). By opening a pull request you a
 - **No Ankama content in the repository.** Do not commit game data, item images, sounds or any other file taken from the game or from Ankama's sites. The app downloads the game data at run time from the [doduda](https://github.com/dofusdude/doduda) releases.
 - **No private APIs.** Do not call the private APIs of other sites (dofusbook and the like). When a formula has to be checked, compare with what their pages display.
 - **No accounts, no tracking.** The app never asks for a Dofus account or personal information, and its only network use is downloading game data and its own updates. Pull requests that add analytics, telemetry, ads or a login will not be merged.
-- **Both languages.** Every string the user sees has a French and an English entry in `packages/app/src/i18n.ts`.
+- **Every language.** Every string the user sees has an entry in each of `packages/app/src/locales/fr.ts`, `en.ts`, `es.ts` and `pt.ts`. A missing key fails `pnpm typecheck`. If you don't speak one of them, say so in the pull request and someone will check the wording.
 - **Game rules live in Go.** Stats, set bonuses, conditions, forgemagic and damage are computed in `apps/api/internal/engine`; the interface asks the API instead of recomputing them.
 - Be kind. The [code of conduct](CODE_OF_CONDUCT.md) applies everywhere in the project.
 
@@ -48,13 +48,18 @@ The architecture, the HTTP API, the forgemagic rules and the solver are describe
 
 ## Pull requests
 
-- Branch from `main` and open a pull request; CI (lint, typecheck, tests, build, and the API tests on Windows) must pass.
-- Pull requests are squash-merged. Give the pull request a label (`bug`, `enhancement`, `dependencies`) so it lands in the right section of the release notes.
+- `develop` is the development branch and the default one: branch from it and open your pull request against it. `main` only holds released versions.
+- CI (lint, typecheck, tests, build, and the API tests on Windows) and CodeQL must pass. Only the maintainer merges pull requests.
+- Pull requests are squash-merged into `develop`. Give the pull request a label (`bug`, `enhancement`, `dependencies`) so it lands in the right section of the release notes.
 - Dependabot opens weekly pull requests for GitHub Actions, Go modules and npm packages, a week after each version is published. Actions are pinned to a commit SHA with the version in a comment; Dependabot keeps both in step.
 
 ## Releases
 
-1. Set the new version in every `package.json` (`node scripts/check-version.mjs X.Y.Z` confirms they agree) and merge that change.
-2. Optionally run the **Release** workflow by hand (Actions tab, "Run workflow"): it builds the installers for macOS, Windows and Linux as workflow artifacts without publishing anything.
-3. Push a tag `vX.Y.Z` on `main`. The workflow checks the version, runs the checks, builds the installers and attaches them, with generated notes, to a draft GitHub release.
-4. Read the draft, then publish it. Installed apps pick up the new version from the published release; a draft is invisible to them.
+Only the maintainer publishes releases: the Release workflow refuses to run for anyone else, and release tags can't be moved or deleted.
+
+1. Run `pnpm release X.Y.Z` (it needs the GitHub CLI, `gh`, signed in). It sets the version in every `package.json` on a `release/vX.Y.Z` branch and merges that pull request into `develop` once CI passes. Then it opens a pull request from `develop` to `main` and merges it with a merge commit once its checks pass. Both pull requests carry `skip-changelog`. If a check fails, fix it and run the command again: it picks up where it stopped.
+2. On GitHub, open Actions, then **Release**, then **Run workflow**, and keep the `main` branch. The workflow checks the version, runs the checks, builds the installers for macOS, Windows and Linux, and publishes them in a release tagged `vX.Y.Z` with generated notes. Installed apps then update to it.
+
+If a packaging job fails (for example, no macOS runner is free), use **Re-run failed jobs**: the release is published once every installer is attached. Tick **Dry run** to only build the installers, as workflow artifacts, from any branch.
+
+The release notes group the merged pull requests by label: `enhancement` under New features, `bug` under Fixes, `dependencies` under Dependencies. `skip-changelog` leaves a pull request out.

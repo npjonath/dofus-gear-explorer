@@ -55,13 +55,13 @@ func parseFlags(name string, args []string) (*config, error) {
 	fs := flag.NewFlagSet(name, flag.ContinueOnError)
 	fs.StringVar(&cfg.addr, "addr", env("DDE_ADDR", "127.0.0.1:8787"), "address to listen on (use port 0 for a free port)")
 	fs.StringVar(&cfg.dataDir, "data-dir", env("DDE_DATA_DIR", "data"), "directory for the SQLite database and item icons")
-	fs.StringVar(&cfg.langs, "langs", env("DDE_LANGS", "fr,en"), "languages to import, comma separated")
+	fs.StringVar(&cfg.langs, "langs", env("DDE_LANGS", "fr,en,es,pt"), "languages to import, comma separated")
 	fs.StringVar(&cfg.repo, "repo", env("DDE_RELEASE_REPO", release.DefaultRepo), "GitHub repository publishing the game data")
 	fs.IntVar(&cfg.imageSize, "image-size", 128, "item icon size to import: 64 or 128")
 	fs.DurationVar(&cfg.checkInterval, "check-interval", 6*time.Hour, "how often to look for a new release")
 	fs.BoolVar(&cfg.autoUpdate, "auto-update", env("DDE_AUTO_UPDATE", "") == "true", "import new releases automatically instead of only reporting them")
 	fs.BoolVar(&cfg.keepCache, "keep-cache", false, "keep downloaded release files after import")
-	fs.StringVar(&cfg.corsOrigin, "cors-origin", env("DDE_CORS_ORIGIN", "*"), "value of Access-Control-Allow-Origin, empty to disable CORS")
+	fs.StringVar(&cfg.corsOrigin, "cors-origin", env("DDE_CORS_ORIGIN", "http://localhost:5173,http://127.0.0.1:5173"), "browser origins allowed to call the API, comma separated (\"*\" allows any)")
 	fs.StringVar(&cfg.webDir, "web-dir", env("DDE_WEB_DIR", ""), "serve a built web app from this directory")
 	fs.BoolVar(&cfg.followStdin, "exit-with-stdin", false, "serve: stop when standard input closes, so the API never outlives the app that started it")
 	fs.StringVar(&cfg.version, "version", "", "sync: release tag to import instead of the latest")
@@ -105,7 +105,15 @@ func run(command string, cfg *config, log *slog.Logger) error {
 			langs = append(langs, l)
 		}
 	}
-	server := httpapi.New(st, log, cfg.corsOrigin, cfg.webDir)
+	var origins []string
+	for _, o := range strings.Split(cfg.corsOrigin, ",") {
+		if o = strings.TrimSpace(o); o != "" {
+			origins = append(origins, o)
+		}
+	}
+	// Bound to this computer only, the API also rejects requests addressed to another name.
+	access := httpapi.Access{AllowedOrigins: origins, LocalOnly: httpapi.IsLoopbackHost(cfg.addr)}
+	server := httpapi.New(st, log, access, cfg.webDir)
 	client := release.NewClient(cfg.repo, os.Getenv("GITHUB_TOKEN"))
 	up := updater.New(st, client, updater.Options{
 		DataDir: cfg.dataDir, Langs: langs, ImageSize: cfg.imageSize,
@@ -121,7 +129,7 @@ func run(command string, cfg *config, log *slog.Logger) error {
 		if cfg.source != "" {
 			version := cfg.version
 			if version == "" {
-				version = "local-" + time.Now().UTC().Format("20060102-150405")
+				version = updater.LocalVersionPrefix + time.Now().UTC().Format("20060102-150405")
 			}
 			return up.ImportLocal(ctx, cfg.source, version)
 		}

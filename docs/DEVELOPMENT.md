@@ -25,9 +25,11 @@ To run the desktop app instead:
 pnpm dev:desktop
 ```
 
+Development runs keep their stuffs, settings and game data in their own folder, `Dofus Gear Explorer Dev` (next to the installed app's `Dofus Gear Explorer`), so they never share storage with an installed copy. Set `DDE_DATA_DIR` to reuse game data you already imported, for example `DDE_DATA_DIR=$PWD/apps/api/data pnpm dev:desktop`. Only one copy of the app runs at a time: opening it again brings back the window already open.
+
 ### Packaging the desktop app
 
-Releases are built by the `Release` workflow when a `vX.Y.Z` tag is pushed (see CONTRIBUTING.md). To build locally:
+Releases are built and published by the `Release` workflow, run by hand on `main` after `pnpm release X.Y.Z` (see CONTRIBUTING.md). To build locally:
 
 ```bash
 pnpm build:desktop:mac
@@ -124,15 +126,22 @@ cd apps/api && go run ./cmd/dde-api sync --source /path/to/doduda/output
 | --- | --- | --- | --- |
 | `--addr` | `DDE_ADDR` | `127.0.0.1:8787` | Listen address. Port `0` picks a free port. |
 | `--data-dir` | `DDE_DATA_DIR` | `data` | SQLite database and icons. |
-| `--langs` | `DDE_LANGS` | `fr,en` | Languages to import. |
+| `--langs` | `DDE_LANGS` | `fr,en,es,pt` | Languages to import. A language missing from the installed data is imported again from the same release at the next start. |
 | `--repo` | `DDE_RELEASE_REPO` | `dofusdude/dofus3-main` | Repository publishing the releases. |
 | `--check-interval` | | `6h` | Delay between release checks. |
 | `--auto-update` | `DDE_AUTO_UPDATE` | off | Import new releases automatically. |
 | `--image-size` | | `128` | Icon size to import, `64` or `128`. Changing it downloads the icons again at the next start. |
-| `--cors-origin` | `DDE_CORS_ORIGIN` | `*` | Allowed origin for browsers. |
+| `--cors-origin` | `DDE_CORS_ORIGIN` | `http://localhost:5173,http://127.0.0.1:5173` | Browser origins allowed to call the API, comma separated. `*` allows any. |
 | `--web-dir` | `DDE_WEB_DIR` | | Serve a built web app from the API. |
 
 Set `GITHUB_TOKEN` if you hit GitHub's anonymous rate limit.
+
+The API runs on the player's computer, where any web page open in their browser could send it requests. It answers only:
+
+- requests without an `Origin` header (the desktop app's `file://` pages send none, nor do tools like `curl`);
+- requests from its own pages (`--web-dir`) or from an origin listed in `--cors-origin`; every other page gets `403 forbidden_origin`.
+
+When it listens on a loopback address (the default), it also rejects requests addressed to any other host name (`403 forbidden_host`), so a page cannot rebind its own domain to `127.0.0.1` to pass as same-origin. If you serve the web app from another address, add its origin to `--cors-origin`.
 
 ## HTTP API
 

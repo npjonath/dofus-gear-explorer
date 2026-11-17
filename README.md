@@ -17,7 +17,7 @@ Browse every piece of equipment in the game, assemble a stuff with its real char
 - **Damage**: what the weapon and every spell of the stuff's class hit for, normal and critical, checked against dofusbook on the same stuffs.
 - **Stuff search**: set conditions (11 AP, 300 Wisdom, a spell that hits for 1,000…), order what to maximize, require or forbid items, and get the best stuffs with their forgemagic.
 - **Sharing**: copy a stuff's code and send it to a friend, who pastes it in "Import". Nothing goes through a server.
-- French and English, dark and light theme.
+- French, English, Spanish and Portuguese, for the interface and the game data. Dark and light theme.
 
 ## Your data stays yours
 

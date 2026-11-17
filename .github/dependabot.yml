@@ -2,6 +2,7 @@ version: 2
 updates:
   - package-ecosystem: github-actions
     directory: /
+    target-branch: develop
     schedule:
       interval: weekly
       day: monday
@@ -15,6 +16,7 @@ updates:
 
   - package-ecosystem: gomod
     directory: /apps/api
+    target-branch: develop
     schedule:
       interval: weekly
       day: monday
@@ -30,6 +32,7 @@ updates:
   # Majors come one by one so each gets its own review; the rest is grouped.
   - package-ecosystem: npm
     directory: /
+    target-branch: develop
     schedule:
       interval: weekly
       day: monday

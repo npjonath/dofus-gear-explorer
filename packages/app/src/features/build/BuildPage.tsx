@@ -195,7 +195,7 @@ function CharacterPanel({ meta, build, evaluation }: { meta: Meta; build: Build;
           <h3 className="section-title">{t("build.points")}</h3>
           {points && (
             <span className={left < 0 ? "font-semibold text-bad" : "text-ink-2"}>
-              {left < 0 ? t("build.pointsOver", { over: -left }) : t("build.pointsLeft", { left, total: points.total })}
+              {left < 0 ? t("build.pointsOver", { count: -left }) : t("build.pointsLeft", { count: left, total: points.total })}
             </span>
           )}
         </div>
@@ -338,7 +338,7 @@ function WornItems({
 }
 
 function Problems({ evaluation }: { evaluation: Evaluation }) {
-  const { t } = useI18n()
+  const { t, colon } = useI18n()
   const failed = evaluation.conditions.filter((c) => !c.ok)
   if (failed.length === 0 && evaluation.issues.length === 0) return null
   return (
@@ -350,7 +350,7 @@ function Problems({ evaluation }: { evaluation: Evaluation }) {
       ))}
       {failed.map((condition) => (
         <li key={`${condition.position}-${condition.itemId}`}>
-          <strong>{evaluation.items[condition.position]?.name}</strong> : {condition.text}
+          <strong>{evaluation.items[condition.position]?.name}</strong>{colon}{condition.text}
         </li>
       ))}
     </ul>

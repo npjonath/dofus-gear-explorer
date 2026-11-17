@@ -7,19 +7,34 @@ import { startUpdates } from "./updates"
 
 const appName = "Dofus Gear Explorer"
 app.setName(appName)
-const userData = join(app.getPath("appData"), appName)
+// Two apps sharing one folder cannot both open its storage: the second one would
+// silently forget the stuffs and settings it saves. Development runs get their own.
+const userData = join(app.getPath("appData"), app.isPackaged ? appName : `${appName} Dev`)
 
 // The app was called Dofus Database Explorer before 0.1.0: keep its stuffs and game data.
 const legacyData = join(app.getPath("appData"), "Dofus Database Explorer")
-if (existsSync(legacyData) && !existsSync(userData)) {
+if (app.isPackaged && existsSync(legacyData) && !existsSync(userData)) {
   try {
     renameSync(legacyData, userData)
   } catch {
     // A fresh folder works too: the data downloads again and the stuffs start empty.
   }
 }
-// Development and packaged runs share one folder, whatever package.json says.
 app.setPath("userData", userData)
+
+// For the same reason, opening the app again brings back the window already open.
+const primary = app.requestSingleInstanceLock()
+if (!primary) app.exit(0)
+app.on("second-instance", () => {
+  const window = BrowserWindow.getAllWindows()[0]
+  if (!window) return
+  if (window.isMinimized()) window.restore()
+  window.focus()
+})
+
+// Ctrl-C in a terminal and the development watcher end the app with a signal; quitting
+// properly lets Chromium write the storage to disk first.
+for (const signal of ["SIGINT", "SIGTERM"] as const) process.on(signal, () => app.quit())
 
 app.setAboutPanelOptions({
   applicationName: appName,
@@ -31,6 +46,8 @@ app.setAboutPanelOptions({
 const binaryName = process.platform === "win32" ? "dde-api.exe" : "dde-api"
 let api: ChildProcess | null = null
 let apiBaseUrl = ""
+// Development runs load the interface from electron-vite's server instead of the bundled files.
+const devUrl = app.isPackaged ? undefined : process.env.ELECTRON_RENDERER_URL
 
 function apiBinary(): string {
   if (app.isPackaged) return join(process.resourcesPath, "bin", binaryName)
@@ -51,7 +68,16 @@ function startApi(): Promise<string> {
   return new Promise((resolveUrl, reject) => {
     const child = spawn(
       binary,
-      ["serve", "--addr", "127.0.0.1:0", "--data-dir", dataDir, "--exit-with-stdin"],
+      [
+        "serve",
+        "--addr",
+        "127.0.0.1:0",
+        "--data-dir",
+        dataDir,
+        "--exit-with-stdin",
+        // The bundled file:// pages send no Origin; only the dev server's pages need allowing.
+        ...(devUrl ? ["--cors-origin", new URL(devUrl).origin] : []),
+      ],
       // The API watches its stdin and stops when this process goes away, however it ends.
       { stdio: ["pipe", "pipe", "inherit"], windowsHide: true }
     )
@@ -95,14 +121,14 @@ function createWindow() {
     return { action: "deny" }
   })
 
-  const devUrl = process.env.ELECTRON_RENDERER_URL
-  if (!app.isPackaged && devUrl) void window.loadURL(devUrl)
+  if (devUrl) void window.loadURL(devUrl)
   else void window.loadFile(join(__dirname, "../renderer/index.html"))
 }
 
 ipcMain.handle("dde:config", () => ({ apiBaseUrl, version: app.getVersion() }))
 
 app.whenReady().then(async () => {
+  if (!primary) return
   try {
     apiBaseUrl = await startApi()
   } catch (error) {
