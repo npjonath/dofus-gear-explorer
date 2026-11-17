@@ -53,11 +53,15 @@ The version shown in the app comes from `apps/desktop/package.json` (desktop) an
 
 The desktop app checks this repository's GitHub releases at startup and every six hours with `electron-updater` (`apps/desktop/src/main/updates.ts`). Development runs skip it.
 
-- **Windows and Linux**: the new version downloads in the background; a notice offers to restart, and it installs on the next quit anyway.
-- **macOS**: the native updater only installs updates signed with the same Apple Developer ID, and the app is signed ad hoc, so the app only shows a notice with a link to the release page. Signing with a Developer ID would turn on automatic installs.
+On every system the new version downloads in the background; a notice offers to restart, and it installs on the next quit anyway.
+
+- **Windows and Linux**: `electron-updater` downloads and installs it (the NSIS installer, the AppImage). On Linux only the AppImage updates itself.
+- **macOS**: the native updater (Squirrel.Mac) only installs updates signed with the same Apple Developer ID, and the app is signed ad hoc. So `electron-updater` only finds the release, and `apps/desktop/src/main/macUpdate.ts` installs it. It downloads the release's `-mac-<arch>.zip`, checks it against the sha512 in `latest-mac.yml`, and unpacks it with `ditto`. Then it checks the bundle id, the version and the code signature (`codesign --verify --deep --strict`). Once the app quits, a small script swaps the `.app` bundle and puts the old one back if the move fails. When the bundle can't be replaced (the app runs from the disk image, from a read-only folder, or from the copy Gatekeeper makes of an app never moved to Applications), the notice links to the release page instead.
 - No release yet, offline, or a private repository: the check fails silently.
 
 The update feed is the repository the release workflow ran in, written into the app at build time (`app-update.yml`). The `latest*.yml` files and the macOS `.zip` files in a release are what the updater reads; keep them in every release.
+
+The **Update test** workflow checks a real update on Windows, Linux and macOS whenever `apps/desktop` changes. `apps/desktop/scripts/update-test.mjs` packages the app as 1.0.0 and 1.0.1, both pointing at a feed served on the machine. It installs 1.0.0 (the NSIS installer silently, the AppImage, the macOS zip), starts it with remote debugging, and waits for the update to be ready. Then it presses restart through the same bridge as the notice and checks that 1.0.1 is installed. To run it locally, build the API for your system (`pnpm --filter @dde/api build:targets mac-arm64`) and the interface (`pnpm --filter @dde/desktop exec electron-vite build`), quit the installed app, then run `node scripts/update-test.mjs` from `apps/desktop`.
 
 ## Layout
 

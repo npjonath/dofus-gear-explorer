@@ -1,0 +1,75 @@
+name: Update test
+
+# Installs a 1.0.0 build of the desktop app, lets it download a 1.0.1 build
+# from a feed served on the runner, and checks that 1.0.1 is installed after
+# the restart, on Windows, Linux and macOS (apps/desktop/scripts/update-test.mjs).
+on:
+  pull_request:
+    paths:
+      - apps/desktop/**
+      - packages/app/src/platform.tsx
+      - packages/app/src/shell/useAppUpdates.ts
+      - pnpm-lock.yaml
+      - .github/workflows/update-test.yml
+  push:
+    branches: [develop]
+    paths:
+      - apps/desktop/**
+      - pnpm-lock.yaml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: update-test-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  update:
+    name: Update on ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            api: win-x64
+          - os: ubuntu-latest
+            api: linux-x64
+          - os: macos-latest
+            api: mac-arm64
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 40
+    env:
+      # electron-builder skips signing on pull requests; the macOS app is signed ad hoc
+      # (no secret), and the updater refuses a bundle without a valid signature.
+      CSC_FOR_PULL_REQUEST: "true"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+          cache: pnpm
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: apps/api/go.mod
+          cache-dependency-path: apps/api/go.sum
+      - run: pnpm install --frozen-lockfile
+      - name: Build the API and the interface
+        run: |
+          pnpm --filter @dde/api build:targets ${{ matrix.api }}
+          pnpm --filter @dde/desktop exec electron-vite build
+      - name: Linux needs FUSE for the AppImage and a display
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y libfuse2t64 xvfb
+      - name: Update test
+        if: runner.os != 'Linux'
+        working-directory: apps/desktop
+        run: node scripts/update-test.mjs
+      - name: Update test
+        if: runner.os == 'Linux'
+        working-directory: apps/desktop
+        run: xvfb-run --auto-servernum node scripts/update-test.mjs

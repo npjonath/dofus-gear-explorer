@@ -81,7 +81,7 @@ The installers are not signed with a paid certificate, so your system warns you 
 - **Windows**: if SmartScreen stops the installer, press "More info", then "Run anyway".
 - **Linux**: make the AppImage executable (`chmod +x`) and run it.
 
-On first launch the app downloads the game data (a few minutes). New versions install themselves on Windows and Linux; on macOS the app tells you when one is out.
+On first launch the app downloads the game data (a few minutes). New versions download and install themselves on every system (on macOS, keep the app in your Applications folder).
 
 ## A community project
 
