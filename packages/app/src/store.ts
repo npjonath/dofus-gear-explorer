@@ -9,6 +9,7 @@ import type {
   PrimaryKey,
   StatFilter,
 } from "./api/types"
+import { locales, pickLang } from "./locales"
 
 export type ThemeChoice = "system" | "light" | "dark"
 
@@ -196,13 +197,14 @@ interface State {
 }
 
 function browserLang(): Lang {
-  return typeof navigator !== "undefined" && navigator.language.toLowerCase().startsWith("fr") ? "fr" : "en"
+  if (typeof navigator === "undefined") return "en"
+  return pickLang(navigator.languages?.length ? navigator.languages : [navigator.language])
 }
 
 export const useStore = create<State>()(
   persist(
     (set, get) => {
-      const first = newBuild(browserLang() === "fr" ? "Mon stuff" : "My build")
+      const first = newBuild(locales[browserLang()].messages["build.first"])
       const patchBuild = (state: State, id: string, change: (build: Build) => Build) => ({
         builds: state.builds.map((b) => (b.id === id ? { ...change(b), updatedAt: Date.now() } : b)),
       })

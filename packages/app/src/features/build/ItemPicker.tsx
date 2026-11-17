@@ -18,7 +18,7 @@ interface Props {
 }
 
 export function ItemPicker({ meta, build, position, current, onEquip }: Props) {
-  const { t, slotName } = useI18n()
+  const { t, slotName, colon } = useI18n()
   const [search, setSearch] = React.useState("")
   const [sortStat, setSortStat] = React.useState<number | null>(null)
   const stats = statIndex(meta)
@@ -119,7 +119,7 @@ export function ItemPicker({ meta, build, position, current, onEquip }: Props) {
                       {item.condition && <span className="mt-1 block text-ink-2">{item.condition}</span>}
                       {item.passive && (
                         <span className="mt-1 block text-ink-2">
-                          <strong className="text-ink">{item.passive.name}</strong> : {item.passive.description}
+                          <strong className="text-ink">{item.passive.name}</strong>{colon}{item.passive.description}
                         </span>
                       )}
                     </span>

@@ -31,7 +31,7 @@ function LineLabel({ line }: { line: AttackLine }) {
       <span className="truncate">
         {t(line.steal ? "damage.steal" : "damage.hit", { element: t(`element.${element}`) })}
         {line.best ? ` · ${t("damage.best")}` : ""}
-        {line.delay > 0 ? ` · ${t("damage.delay", { turns: line.delay })}` : ""}
+        {line.delay > 0 ? ` · ${t("damage.delay", { count: line.delay })}` : ""}
       </span>
     </span>
   )

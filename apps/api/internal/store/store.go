@@ -263,6 +263,24 @@ func (s *Store) Meta(key string) (string, error) {
 	return value, err
 }
 
+// Languages returns the language codes of the imported game data.
+func (s *Store) Languages(ctx context.Context) ([]string, error) {
+	rows, err := s.db.QueryContext(ctx, "SELECT code FROM languages ORDER BY code")
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var codes []string
+	for rows.Next() {
+		var code string
+		if err := rows.Scan(&code); err != nil {
+			return nil, err
+		}
+		codes = append(codes, code)
+	}
+	return codes, rows.Err()
+}
+
 func (s *Store) SetMeta(key, value string) error {
 	_, err := s.db.Exec(
 		"INSERT INTO meta(key, value) VALUES(?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",

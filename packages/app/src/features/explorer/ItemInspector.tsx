@@ -10,7 +10,7 @@ import { ItemCell } from "../../ui/ItemCell"
 import { ItemHover } from "../../ui/ItemHover"
 
 export function ItemInspector({ meta, item, onClose }: { meta: Meta; item: Item; onClose(): void }) {
-  const { t } = useI18n()
+  const { t, colon } = useI18n()
   const detail = useItem(item.id)
   const addToBuild = useAddToBuild(meta)
   const stats = statIndex(meta)
@@ -41,7 +41,7 @@ export function ItemInspector({ meta, item, onClose }: { meta: Meta; item: Item;
         {full.passive && (
           <section className="grid gap-1">
             <h3 className="section-title">
-              {t("item.passive")} : {full.passive.name}
+              {t("item.passive")}{colon}{full.passive.name}
             </h3>
             <p className="m-0 max-w-[65ch]">{full.passive.description}</p>
           </section>
@@ -71,7 +71,7 @@ export function ItemInspector({ meta, item, onClose }: { meta: Meta; item: Item;
         {full.set && (
           <section className="grid gap-2">
             <h3 className="section-title">
-              {t("item.set")} : {full.set.name}
+              {t("item.set")}{colon}{full.set.name}
             </h3>
             {set ? (
               <>

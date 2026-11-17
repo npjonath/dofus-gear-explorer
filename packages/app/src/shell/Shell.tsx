@@ -9,6 +9,7 @@ import { ExplorerPage } from "../features/explorer/ExplorerPage"
 import { useI18n } from "../i18n"
 import { hrefFor, navigate, useLocation, type Route } from "../lib/router"
 import { decodeBuild } from "../lib/share"
+import { isLang, languages, locales } from "../locales"
 import { useStore } from "../store"
 import { BuildPickerHost } from "../ui/BuildPicker"
 import { ItemHoverCard } from "../ui/ItemHover"
@@ -128,17 +129,20 @@ export function Shell() {
           aria-label={t("lang.label")}
           value={lang}
           onValueChange={(next) => {
-            if (next === "fr" || next === "en") setLang(next)
+            if (isLang(next)) setLang(next)
           }}
         >
           <SegmentedControlIndicator />
-          <SegmentedControlItem value="fr">FR</SegmentedControlItem>
-          <SegmentedControlItem value="en">EN</SegmentedControlItem>
+          {languages.map((code) => (
+            <SegmentedControlItem key={code} value={code} lang={code} aria-label={locales[code].name}>
+              {code.toUpperCase()}
+            </SegmentedControlItem>
+          ))}
         </SegmentedControl>
         <button
           type="button"
           className="icon-btn"
-          aria-label={`${t("theme.label")} : ${theme === "dark" ? t("theme.light") : t("theme.dark")}`}
+          aria-label={t("theme.toggle", { mode: theme === "dark" ? t("theme.light") : t("theme.dark") })}
           onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
         >
           {theme === "dark" ? <SunIcon aria-hidden="true" /> : <MoonIcon aria-hidden="true" />}

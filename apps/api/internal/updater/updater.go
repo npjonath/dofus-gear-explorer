@@ -10,7 +10,9 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -65,6 +67,10 @@ type Status struct {
 	Progress          *Progress `json:"progress"`
 	Error             string    `json:"error"`
 }
+
+// LocalVersionPrefix starts the version of data imported from a local
+// directory rather than from a release.
+const LocalVersionPrefix = "local-"
 
 var ErrBusy = errors.New("an update is already running")
 
@@ -320,6 +326,43 @@ func (u *Updater) iconsOutdated() bool {
 	return size != strconv.Itoa(u.opts.ImageSize)
 }
 
+// langsMissing reports whether a language asked for has no imported texts.
+// Data imported from a local directory is left alone: there is no release
+// to download the translations from.
+func (u *Updater) langsMissing(ctx context.Context, version string) bool {
+	if strings.HasPrefix(version, LocalVersionPrefix) {
+		return false
+	}
+	have, err := u.store.Languages(ctx)
+	if err != nil {
+		u.log.Warn("cannot read the imported languages", "error", err)
+		return false
+	}
+	for _, lang := range u.opts.Langs {
+		if !slices.Contains(have, lang) {
+			return true
+		}
+	}
+	return false
+}
+
+// StartLanguageImport imports a release again, in the background, to add
+// the languages it lacks. The installed data keeps working meanwhile, so a
+// failed import (no network, say) is logged and tried again at the next
+// check, not reported as a failed update.
+func (u *Updater) StartLanguageImport(version string) error {
+	if err := u.begin(StateUpdating); err != nil {
+		return err
+	}
+	go func() {
+		if err := u.update(context.Background(), version); err != nil {
+			u.log.Warn("language import failed", "error", err)
+		}
+		u.end(nil)
+	}()
+	return nil
+}
+
 // StartIconRefresh downloads the icons of the installed release again, in
 // the background, without touching the game data.
 func (u *Updater) StartIconRefresh() error {
@@ -397,6 +440,14 @@ func (u *Updater) Run(ctx context.Context) {
 		if !st.Ready {
 			if err := u.StartUpdate(""); err != nil && !errors.Is(err, ErrBusy) {
 				u.log.Error("cannot start the initial import", "error", err)
+			}
+			return
+		}
+		// Languages asked for since the last import (a new default, say) are
+		// imported from the release already installed, without upgrading it.
+		if u.langsMissing(ctx, st.InstalledVersion) {
+			if err := u.StartLanguageImport(st.InstalledVersion); err != nil && !errors.Is(err, ErrBusy) {
+				u.log.Error("cannot start the language import", "error", err)
 			}
 			return
 		}

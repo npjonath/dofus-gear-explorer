@@ -40,7 +40,10 @@ func Fold(s string) string {
 var (
 	conditionalRe = regexp.MustCompile(`\{\{~((?:\d~?)+)([^}]*)\}\}`)
 	inflectionRe  = regexp.MustCompile(`\{\{~([a-z])([^}]*)\}\}`)
-	valuePrefixRe = regexp.MustCompile(`^-?#1\{\{~1~2[^}]*\}\}#2(%?)\s*`)
+	valuePrefixRe = regexp.MustCompile(`^-?#1\{\{~1~2[^}]*\}\}#2\s*(%?)\s*`)
+	// The Spanish and Portuguese templates put a preposition between the
+	// value and the name ("#2 de daño", "#2 al retiro de PA").
+	leadingWordRe = regexp.MustCompile(`^(?:de|del|al|a la|a las|a los|a)\s+`)
 	leftoverRe    = regexp.MustCompile(`\{\{[^}]*\}\}|#\d`)
 	spacesRe      = regexp.MustCompile(`\s+`)
 )
@@ -65,6 +68,9 @@ func RenderTemplate(template string, params ...*int) string {
 	})
 
 	// The quantity that drives plural forms is the largest value shown.
+	// {{~p}} is shown for a plural, {{~s}} for a singular and {{~z}} for zero,
+	// where a template has one (zero is otherwise singular).
+	hasZero := strings.Contains(out, "{{~z")
 	quantity := 0
 	for _, p := range params {
 		if p != nil && abs(*p) > quantity {
@@ -80,6 +86,10 @@ func RenderTemplate(template string, params ...*int) string {
 			}
 		case "z":
 			if quantity == 0 {
+				return sub[2]
+			}
+		case "s":
+			if quantity == 1 || (quantity == 0 && !hasZero) {
 				return sub[2]
 			}
 		}
@@ -116,7 +126,7 @@ func StatLabel(template string) (label, unit string) {
 	}
 	rest := template[len(m[0]):]
 	plural := 2
-	label = RenderTemplate(rest, &plural)
+	label = leadingWordRe.ReplaceAllString(RenderTemplate(rest, &plural), "")
 	return label, m[1]
 }
 

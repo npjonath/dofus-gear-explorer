@@ -90,7 +90,7 @@ interface Props {
 }
 
 export function ForgePanel({ meta, item, position, mods, evaluation, onChange }: Props) {
-  const { t } = useI18n()
+  const { t, colon } = useI18n()
   const stats = React.useMemo(() => new Map(meta.stats.map((s) => [s.id, s])), [meta])
   const lines = React.useMemo(() => naturalLines(item, stats), [item, stats])
   const natural = React.useMemo(() => new Set(lines.map((l) => l.stat.id)), [lines])
@@ -222,7 +222,7 @@ export function ForgePanel({ meta, item, position, mods, evaluation, onChange }:
                   <button
                     type="button"
                     className="icon-btn"
-                    aria-label={`${t("common.remove")} : ${statLabel(stat)}`}
+                    aria-label={`${t("common.remove")}${colon}${statLabel(stat)}`}
                     onClick={() => patch({ exos: exos.filter((_, i) => i !== index) })}
                   >
                     <XIcon aria-hidden="true" />
@@ -277,7 +277,7 @@ export function ForgePanel({ meta, item, position, mods, evaluation, onChange }:
             <button
               type="button"
               className="icon-btn"
-              aria-label={`${t("common.remove")} : ${t("forge.transcendence")}`}
+              aria-label={`${t("common.remove")}${colon}${t("forge.transcendence")}`}
               onClick={() => patch({ transcendence: undefined })}
             >
               <XIcon aria-hidden="true" />
