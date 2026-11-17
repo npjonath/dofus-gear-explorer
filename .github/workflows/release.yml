@@ -1,19 +1,24 @@
 name: Release
 
-# A tag vX.Y.Z that matches every package.json builds the installers and
-# attaches them to a draft GitHub release; publishing that draft makes
-# installed apps update. Run it by hand to build the installers as workflow
-# artifacts without releasing anything.
+# Run it from main ("Run workflow") to release the version every package.json
+# carries; `pnpm release X.Y.Z` prepares main for it. It checks the version,
+# runs the checks, builds the installers for macOS, Windows and Linux and
+# publishes them in a GitHub release tagged vX.Y.Z, which installed apps then
+# update to. With "dry run" it only builds the installers, as workflow
+# artifacts, from any branch.
 on:
-  push:
-    tags: ["v*.*.*"]
   workflow_dispatch:
+    inputs:
+      dry_run:
+        description: Dry run (build the installers, publish nothing)
+        type: boolean
+        default: false
 
 permissions:
   contents: read
 
 concurrency:
-  group: release-${{ github.ref }}
+  group: release
   cancel-in-progress: false
 
 jobs:
@@ -23,12 +28,45 @@ jobs:
     timeout-minutes: 20
     permissions:
       contents: write
+    outputs:
+      tag: ${{ steps.version.outputs.tag }}
     env:
       ELECTRON_SKIP_BINARY_DOWNLOAD: "1"
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
+      - name: Released from main by the maintainer
+        if: ${{ !inputs.dry_run }}
+        run: |
+          if [ "$GITHUB_REF" != "refs/heads/main" ]; then
+            echo "::error::Run the release from main. 'pnpm release X.Y.Z' prepares it."
+            exit 1
+          fi
+          if [ "$GITHUB_ACTOR" != "$GITHUB_REPOSITORY_OWNER" ]; then
+            echo "::error::Only $GITHUB_REPOSITORY_OWNER publishes releases."
+            exit 1
+          fi
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+      - name: Read the version
+        id: version
+        run: |
+          version=$(node -p 'require("./package.json").version')
+          node scripts/check-version.mjs "$version"
+          echo "tag=v$version" >> "$GITHUB_OUTPUT"
+      # A draft left by a failed run has no tag yet and is replaced; a tag means the version is out.
+      - name: The version is not released yet
+        if: ${{ !inputs.dry_run }}
+        env:
+          TAG: ${{ steps.version.outputs.tag }}
+        run: |
+          if gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$TAG" > /dev/null 2>&1; then
+            echo "::error::$TAG is already released. Set a new version with 'pnpm release X.Y.Z'."
+            exit 1
+          fi
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
+            gh release delete "$TAG" --repo "$GITHUB_REPOSITORY" --yes
+          fi
       - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
@@ -38,24 +76,22 @@ jobs:
         with:
           go-version-file: apps/api/go.mod
           cache-dependency-path: apps/api/go.sum
-      - name: Tag matches every package.json
-        if: github.ref_type == 'tag'
-        run: node scripts/check-version.mjs "${GITHUB_REF_NAME#v}"
       - run: pnpm install --frozen-lockfile
       - run: pnpm lint
       - run: pnpm typecheck
       - run: pnpm test
-      # One draft for the three packaging jobs, so they don't each create their own.
+      # One draft for the three packaging jobs to upload to; its tag is created when it is published.
       - name: Create the draft release
-        if: github.ref_type == 'tag'
+        if: ${{ !inputs.dry_run }}
+        env:
+          TAG: ${{ steps.version.outputs.tag }}
         run: >
-          gh release create "$GITHUB_REF_NAME" --draft --verify-tag
+          gh release create "$TAG" --draft
+          --target "$GITHUB_SHA"
           --repo "$GITHUB_REPOSITORY"
-          --title "Dofus Gear Explorer ${GITHUB_REF_NAME#v}"
+          --title "Dofus Gear Explorer ${TAG#v}"
           --notes-file .github/release-notes.md
           --generate-notes
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   package:
     name: Package ${{ matrix.target }}
@@ -78,7 +114,7 @@ jobs:
     permissions:
       contents: write
     env:
-      PUBLISH: ${{ github.ref_type == 'tag' && 'always' || 'never' }}
+      PUBLISH: ${{ inputs.dry_run && 'never' || 'always' }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -97,13 +133,13 @@ jobs:
         run: pnpm --filter @dde/api build:targets ${{ matrix.api }}
       - name: Build the interface
         run: pnpm --filter @dde/desktop exec electron-vite build
-      - name: Package (and upload to the draft release on a tag)
+      - name: Package (and upload to the draft release)
         shell: bash
         run: pnpm --filter @dde/desktop exec electron-builder --${{ matrix.target }} --publish "$PUBLISH"
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      - name: Keep the installers of a manual run
-        if: github.ref_type != 'tag'
+      - name: Keep the installers of a dry run
+        if: ${{ inputs.dry_run }}
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: installers-${{ matrix.target }}
@@ -112,3 +148,33 @@ jobs:
             apps/desktop/release/*/latest*.yml
           retention-days: 7
           if-no-files-found: error
+
+  # Only once every installer is uploaded: installed apps update as soon as the release is public.
+  # If a packaging job failed, "Re-run failed jobs" finishes the release.
+  publish:
+    name: Publish the release
+    needs: [verify, package]
+    if: ${{ !inputs.dry_run }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      TAG: ${{ needs.verify.outputs.tag }}
+    steps:
+      - name: Every installer is attached
+        run: |
+          assets=$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json assets --jq '[.assets[].name] | join("\n")')
+          missing=0
+          for pattern in 'mac-arm64\.dmg$' 'mac-x64\.dmg$' 'mac-arm64\.zip$' 'mac-x64\.zip$' 'win-x64-setup\.exe$' 'linux-x86_64\.AppImage$' '^latest\.yml$' '^latest-mac\.yml$' '^latest-linux\.yml$'; do
+            if ! grep -Eq "$pattern" <<< "$assets"; then
+              echo "::error::No file matching $pattern in the release."
+              missing=1
+            fi
+          done
+          exit "$missing"
+      - name: Publish
+        run: gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --draft=false --latest
+      - name: Summary
+        run: echo "Released [$TAG](https://github.com/$GITHUB_REPOSITORY/releases/tag/$TAG)." >> "$GITHUB_STEP_SUMMARY"
