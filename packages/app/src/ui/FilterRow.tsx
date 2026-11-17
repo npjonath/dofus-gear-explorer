@@ -12,9 +12,11 @@ interface Props {
   exclude: number[]
   onChange(filter: StatFilter): void
   onRemove(): void
+  /** The lowest value: item filters accept a malus, stuff conditions start at 0. */
+  min?: number
 }
 
-export function FilterRow({ meta, filter, exclude, onChange, onRemove }: Props) {
+export function FilterRow({ meta, filter, exclude, onChange, onRemove, min = -9999 }: Props) {
   const { t } = useI18n()
   const stat = meta.stats.find((s) => s.id === filter.statId)
   return (
@@ -47,7 +49,7 @@ export function FilterRow({ meta, filter, exclude, onChange, onRemove }: Props) 
       <NumberField
         label={t("filter.value")}
         value={filter.value}
-        min={-9999}
+        min={min}
         max={99999}
         onChange={(value) => onChange({ ...filter, value })}
       />
