@@ -441,6 +441,18 @@ The last control of the top strip is an icon button (info icon) named "À propos
 - **About:** the product name, one sentence on what it does, a two-column list of facts (app version, game data version, licence) with values in bold tabular figures, the doduda credit and the unofficial line in `ink-2`, then links in `accent`, weight 600: the source code, led by the GitHub mark, and the third-party licences, followed by a small external-link icon.
 - **Legal notice:** titled sections (unofficial tool, trademarks and game content, your data, calculations, contact and removal, licence), each a bold title over `ink-2` text; the body scrolls while the title and the Close button stay.
 
+### Compare dialog
+
+"Comparer avec…" is a default button led by a two-arrow icon, in a stuff's toolbar and on each search result. Its dialog is up to 62rem wide and 50rem high and keeps that size whatever it shows: the title and a close icon button, then the two stuffs as searchable fields (Stuff de départ, Stuff d'arrivée) with a swap icon button between them. Under each field one line in `ink-3` gives the class, the level and the item count, with the red status mark when the stuff is invalid. Below 40rem the fields stack and the swap button stands beside them.
+
+The rest scrolls. Four tiles in the vital-tile shape come first (HP, AP, MP, range): the stat's pip and label, the change in the numeral style, and "before → after" in `ink-2`. Then three tabs underlined in accent like the slot panel's, each with its count of changes in `ink-3`:
+
+- **Caractéristiques:** gains and losses in two columns (one below 40rem), each row a pip, the label, the two values and the change; the stats that do not move wait under a disclosure.
+- **Objets:** one row per place that changes: the slot's glyph and name, then the item of each side in a 2.5rem cell with an arrow between them, and "Emplacement vide" in `ink-3` where a side wears nothing. The same item forged differently shows once, with the lines that differ and their origin tag. Sets whose count changes and the character's own differences (level, points, scrolls) follow as small tables.
+- **Dommages:** one table for the weapon, the class's spells and the common ones, with a segmented control for the hit that is read (average, normal, critical) and the change in percent in `ink-3`.
+
+A change is written with its sign and takes `ok` when the value goes up and `bad` when it goes down, on the number only; an unchanged value is "=" in `ink-3`. This is the one place where green and red mean more and less rather than valid and failing, so the sign and the Gains and Pertes headings, each with an arrow, say it without the colour.
+
 ### Update notice
 
 When a new version of the desktop app is ready, a toast stays until dismissed: title with the version, one sentence, one action ("Redémarrer" when it installs on restart, "Télécharger" when it can only point to the download page). It uses the regular toast styling.

@@ -25,6 +25,7 @@ import { useBreakpoint } from "../../lib/useBreakpoint"
 import { AP_STAT, HP_STAT, MP_STAT, RANGE_STAT, statLabel, toneOf } from "../../lib/stats"
 import { newBuild, useActiveBuild, useStore } from "../../store"
 import { nextBuildName } from "../build/BuildTabs"
+import { CompareDialog, savedOption, type CompareOption } from "../compare/CompareDialog"
 import { defaultThreshold, FilterRow } from "../../ui/FilterRow"
 import { ItemCell } from "../../ui/ItemCell"
 import { ItemHover } from "../../ui/ItemHover"
@@ -198,6 +199,7 @@ function ResultRow({
   request,
   onApply,
   onOpen,
+  onCompare,
   onAdd,
   onExclude,
 }: {
@@ -207,6 +209,7 @@ function ResultRow({
   request: SolverRequest
   onApply(): void
   onOpen(): void
+  onCompare(): void
   onAdd(item: Item, from: { position: string; mods?: ItemMods }): void
   onExclude(item: Item): void
 }) {
@@ -316,6 +319,7 @@ function ResultRow({
         <div className="flex flex-wrap gap-1.5">
           <Button onClick={onApply}>{t("solver.apply")}</Button>
           <Button onClick={onOpen}>{t("solver.openTab")}</Button>
+          <Button onClick={onCompare}>{t("compare.open")}</Button>
         </div>
       </div>
 
@@ -384,6 +388,8 @@ export function SolverPage({ meta }: { meta: Meta }) {
   // The pages of stuffs read after the first one, which comes with the search.
   const [morePages, setMorePages] = React.useState<Solution[]>([])
   const [loadingMore, setLoadingMore] = React.useState(false)
+  // The result being compared, by its place in the list.
+  const [comparing, setComparing] = React.useState<number | null>(null)
   const api = useApi()
   const resultsRef = React.useRef<HTMLElement>(null)
 
@@ -533,6 +539,27 @@ export function SolverPage({ meta }: { meta: Meta }) {
 
   const response = solver.data
   const list = [...(response?.solutions ?? []), ...morePages]
+
+  // A result is compared with the stuff the search targets, then with any
+  // saved stuff or any other result the player picks.
+  const compareOptions: CompareOption[] = [
+    ...builds.map((b) => savedOption(b, t("build.unnamed"))),
+    ...list.map(
+      (solution, index): CompareOption => ({
+        key: `result-${index}`,
+        label: t("compare.result", { n: index + 1 }),
+        group: "results",
+        breedId: lastRequest?.breedId || null,
+        input: {
+          level: solution.character.level,
+          base: solution.character.base,
+          scrolls: solution.character.scrolls,
+          items: solution.items,
+          mods: solution.mods ?? {},
+        },
+      })
+    ),
+  ]
 
   async function loadMore() {
     if (!response || loadingMore) return
@@ -1003,6 +1030,7 @@ export function SolverPage({ meta }: { meta: Meta }) {
                   request={lastRequest}
                   onApply={() => void apply(solution)}
                   onOpen={() => open(solution)}
+                  onCompare={() => setComparing(index)}
                   onAdd={(item, from) => void addToBuild(item, from)}
                   onExclude={(item) => {
                     exclude(item)
@@ -1036,17 +1064,31 @@ export function SolverPage({ meta }: { meta: Meta }) {
       </section>
   )
 
+  const compare = (
+    <CompareDialog
+      meta={meta}
+      open={comparing !== null}
+      onOpenChange={(next) => !next && setComparing(null)}
+      options={compareOptions}
+      initial={{ from: build.id, to: comparing === null ? undefined : `result-${comparing}` }}
+    />
+  )
+
   if (breakpoint === "sm") {
     return (
       <div className="h-full overflow-y-auto">
         {form}
         {results}
+        {compare}
       </div>
     )
   }
   return (
-    <SidePanels id="search" left={form} leftSize={26}>
-      {results}
-    </SidePanels>
+    <>
+      <SidePanels id="search" left={form} leftSize={26}>
+        {results}
+      </SidePanels>
+      {compare}
+    </>
   )
 }

@@ -1,9 +1,11 @@
 import { confirm } from "@ui-sdk/react/alert-dialog"
+import { Button } from "@ui-sdk/react/button"
 import { Menu, MenuContent, MenuContextTrigger, MenuItem } from "@ui-sdk/react/menu"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@ui-sdk/react/select"
 import { SegmentedControl, SegmentedControlIndicator, SegmentedControlItem } from "@ui-sdk/react/segmented-control"
 import { Tabs, TabsList, TabsPanel, TabsTab } from "@ui-sdk/react/tabs"
 import {
+  ArrowRightLeftIcon,
   CheckIcon,
   CopyIcon,
   LinkIcon,
@@ -23,6 +25,7 @@ import { useBreakpoint } from "../../lib/useBreakpoint"
 import { usePlatform } from "../../platform"
 import { isEmptyMods, newBuild, toBuildInput, useActiveBuild, useStore, type Build } from "../../store"
 import { ItemCell, ItemImage } from "../../ui/ItemCell"
+import { CompareDialog, savedOption } from "../compare/CompareDialog"
 import { SolverPage } from "../solver/SolverPage"
 import { ItemHover } from "../../ui/ItemHover"
 import { ItemSummary } from "../../ui/ItemSummary"
@@ -364,6 +367,8 @@ export function BuildPage({ meta }: { meta: Meta }) {
   const shareByLink = platform.kind === "web" && window.location.protocol.startsWith("http")
   const stuffTab = useStore((s) => s.stuffTab)
   const [creating, setCreating] = React.useState(false)
+  const [comparing, setComparing] = React.useState(false)
+  const builds = useStore((s) => s.builds)
   // The search keeps its form and results while other tabs show.
   const [searchSeen, setSearchSeen] = React.useState(stuffTab === "search")
   if (stuffTab === "search" && !searchSeen) setSearchSeen(true)
@@ -510,6 +515,10 @@ export function BuildPage({ meta }: { meta: Meta }) {
           <SegmentedControlItem value="gear">{t("build.view.gear")}</SegmentedControlItem>
           <SegmentedControlItem value="damage">{t("build.view.damage")}</SegmentedControlItem>
         </SegmentedControl>
+        <Button onClick={() => setComparing(true)}>
+          <ArrowRightLeftIcon aria-hidden="true" className="size-4" />
+          {t("compare.open")}
+        </Button>
         <button
           type="button"
           className="icon-btn"
@@ -688,6 +697,17 @@ export function BuildPage({ meta }: { meta: Meta }) {
         </div>
       )}
       <NewBuildDialog meta={meta} open={creating} onOpenChange={setCreating} />
+      {/* The stuff on screen is where the comparison starts; the other side opens on the stuff changed last. */}
+      <CompareDialog
+        meta={meta}
+        open={comparing}
+        onOpenChange={setComparing}
+        options={builds.map((b) => savedOption(b, t("build.unnamed")))}
+        initial={{
+          from: build.id,
+          to: builds.filter((b) => b.id !== build.id).sort((a, b) => b.updatedAt - a.updatedAt)[0]?.id,
+        }}
+      />
     </div>
   )
 }

@@ -89,27 +89,33 @@ export function useItem(id: number | null) {
   })
 }
 
-export function useEvaluation(build: BuildInput) {
+export function useEvaluation(build: BuildInput, enabled = true) {
   const api = useApi()
   const lang = useStore((s) => s.lang)
   const version = useDataKey()
   return useQuery({
     queryKey: ["evaluate", lang, version, build],
     queryFn: ({ signal }) => api.evaluate(lang, build, signal),
-    enabled: version !== undefined,
+    enabled: enabled && version !== undefined,
     placeholderData: keepPreviousData,
     staleTime: 5 * 60_000,
   })
 }
 
-export function useDamage(build: BuildInput, breedId: number | null, range: AttackRange, mastery: boolean) {
+export function useDamage(
+  build: BuildInput,
+  breedId: number | null,
+  range: AttackRange,
+  mastery: boolean,
+  enabled = true
+) {
   const api = useApi()
   const lang = useStore((s) => s.lang)
   const version = useDataKey()
   return useQuery({
     queryKey: ["damage", lang, version, build, breedId, range, mastery],
     queryFn: ({ signal }) => api.damage(lang, build, breedId, range, mastery, signal),
-    enabled: version !== undefined,
+    enabled: enabled && version !== undefined,
     placeholderData: keepPreviousData,
     staleTime: 5 * 60_000,
   })
