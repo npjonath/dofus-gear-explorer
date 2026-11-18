@@ -129,6 +129,7 @@ const (
 	ForgeIssueLine          = "forge_line"
 	ForgeIssueExo           = "forge_exo"
 	ForgeIssueExoLimit      = "forge_exo_limit"
+	ForgeIssueWeight        = "forge_weight"
 	ForgeIssueTranscendence = "forge_transcendence"
 	ForgeIssueDraco         = "forge_draco"
 	ForgeIssueElement       = "forge_element"
@@ -158,6 +159,39 @@ type Forged struct {
 	Vector []game.StatValue
 	// Runes lists the transcendence runes the item can take as it stands.
 	Runes []int
+	// Weight is the forgemagic weight the overs and exos of the item use, out
+	// of game.ForgeLineWeight.
+	Weight float64
+}
+
+// overLine is a natural line forged above its best roll.
+type overLine struct {
+	// natural is the weight of the line at its best roll, over the weight
+	// added above it.
+	natural, over float64
+}
+
+// forgeWeight checks the weight rule of the game on the overs and exos of an
+// item and returns the weight they use.
+//
+// When a rune would leave a line in over or exo, the game adds the whole
+// weight of that line to the weight of the overs (the part above the best
+// roll) and exos already on the other lines, and refuses the rune above 101.
+// The result does not say in which order the runes went, so it is allowed
+// when some order passes: exos last, which asks for a total within 101, and
+// the overs from the heaviest natural line to the lightest.
+func forgeWeight(overs []overLine, exos float64) (weight float64, ok bool) {
+	const limit = game.ForgeLineWeight + 1e-9
+	sort.Slice(overs, func(i, j int) bool { return overs[i].natural > overs[j].natural })
+	ok = true
+	for _, line := range overs {
+		weight += line.over
+		if line.natural+weight > limit {
+			ok = false
+		}
+	}
+	weight += exos
+	return weight, ok && weight <= limit
 }
 
 type naturalRange struct{ min, max int }
@@ -285,7 +319,25 @@ func (e *Engine) Forge(it *game.Item, mods *ItemMods) Forged {
 			}
 		}
 
+		// What the overs weigh. Raising a malus towards -1 is an over too,
+		// and a rune weighs half on a negative line.
+		var overs []overLine
+		for _, id := range order {
+			r := natural[id]
+			st := cat.StatByID[id]
+			if st == nil || st.Weight <= 0 || values[id] <= r.max {
+				continue
+			}
+			raised := float64(values[id]-r.max) * st.Weight
+			if r.max < 0 {
+				overs = append(overs, overLine{over: raised / 2})
+			} else {
+				overs = append(overs, overLine{natural: st.LineWeight(r.max), over: raised})
+			}
+		}
+
 		limited := 0
+		exoWeight := 0.0
 		seen := map[int]bool{}
 		for _, exo := range mods.Exos {
 			st := cat.StatByID[exo.StatID]
@@ -303,7 +355,14 @@ func (e *Engine) Forge(it *game.Item, mods *ItemMods) Forged {
 			}
 			seen[exo.StatID] = true
 			addLine(exo.StatID, exo.Value, OriginExo)
+			exoWeight += st.LineWeight(exo.Value)
 			forged = true
+		}
+
+		weight, fits := forgeWeight(overs, exoWeight)
+		out.Weight = weight
+		if !fits {
+			issue(ForgeIssueWeight)
 		}
 
 		if mods.Draco != nil {

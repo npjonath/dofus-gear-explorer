@@ -3,6 +3,7 @@
 package engine
 
 import (
+	"math"
 	"sort"
 	"strconv"
 	"strings"
@@ -302,6 +303,9 @@ type Result struct {
 	// Runes holds, per position, the transcendence runes the item can take
 	// with its other forgemagic.
 	Runes map[string][]int `json:"runes"`
+	// ForgeWeight holds, per position, the weight the item's overs and exos
+	// use out of the 101 they share.
+	ForgeWeight map[string]float64 `json:"forgeWeight"`
 	// Capped lists the stats that went over the game's cap.
 	Capped     []CappedStat      `json:"capped"`
 	Sets       []SetStatus       `json:"sets"`
@@ -317,14 +321,15 @@ func (e *Engine) Evaluate(b Build, lang string) Result {
 	b.Normalize()
 	cat := e.Catalog
 	res := Result{
-		Level:      b.Level,
-		Stats:      make(map[int]int, e.n),
-		Forge:      map[string][]ForgedLine{},
-		Runes:      map[string][]int{},
-		Capped:     []CappedStat{},
-		Sets:       []SetStatus{},
-		Conditions: []ConditionStatus{},
-		Issues:     []Issue{},
+		Level:       b.Level,
+		Stats:       make(map[int]int, e.n),
+		Forge:       map[string][]ForgedLine{},
+		Runes:       map[string][]int{},
+		ForgeWeight: map[string]float64{},
+		Capped:      []CappedStat{},
+		Sets:        []SetStatus{},
+		Conditions:  []ConditionStatus{},
+		Issues:      []Issue{},
 	}
 
 	base := e.BaseVector(b.Character)
@@ -380,6 +385,7 @@ func (e *Engine) Evaluate(b Build, lang string) Result {
 			if ForgeableSlots[it.Slot] {
 				res.Forge[pos.Key] = forged.Lines
 				res.Runes[pos.Key] = append([]int{}, forged.Runes...)
+				res.ForgeWeight[pos.Key] = math.Round(forged.Weight*10) / 10
 			}
 			if mods != nil {
 				for _, exo := range mods.Exos {

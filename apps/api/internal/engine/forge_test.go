@@ -119,14 +119,15 @@ func TestForgeOverAndExo(t *testing.T) {
 	}
 
 	forged := eng.Forge(cloak, &ItemMods{
-		Lines: map[int]int{game.StatVitality: 400, game.StatStrength: 60},
+		Lines: map[int]int{game.StatVitality: 305, game.StatStrength: 60},
 		Exos:  []Exo{{StatID: game.StatAP, Value: 1}},
 	})
-	if len(forged.Issues) != 0 {
-		t.Fatalf("issues = %v", forged.Issues)
+	// 5 Vitality over the best roll weigh 1 and the AP exo 100: 101 in all.
+	if len(forged.Issues) != 0 || forged.Weight != 101 {
+		t.Fatalf("issues = %v, weight = %v", forged.Issues, forged.Weight)
 	}
 	values := forgedValues(forged)
-	if values[game.StatVitality] != 400 || values[game.StatStrength] != 60 || values[game.StatAP] != 1 {
+	if values[game.StatVitality] != 305 || values[game.StatStrength] != 60 || values[game.StatAP] != 1 {
 		t.Errorf("values = %v", values)
 	}
 	origins := map[int]string{}
@@ -152,6 +153,12 @@ func TestForgeRejectsWhatTheGameForbids(t *testing.T) {
 		{"exo of a natural stat", ItemMods{Exos: []Exo{{StatID: game.StatStrength, Value: 5}}}, ForgeIssueExo},
 		{"exo above its cap", ItemMods{Exos: []Exo{{StatID: game.StatAP, Value: 2}}}, ForgeIssueExo},
 		{"two limited exos", ItemMods{Exos: []Exo{{StatID: game.StatAP, Value: 1}, {StatID: game.StatMP, Value: 1}}}, ForgeIssueExo},
+		// 50 Vitality over the best roll weigh 10, the AP exo 100.
+		{"over and exo above 101 together", ItemMods{Lines: map[int]int{game.StatVitality: 350}, Exos: []Exo{{StatID: game.StatAP, Value: 1}}}, ForgeIssueWeight},
+		{"two exos above 101 together", ItemMods{Exos: []Exo{{StatID: game.StatMP, Value: 1}, {StatID: game.StatWisdom, Value: 4}}}, ForgeIssueWeight},
+		// The overs weigh 50, but whichever goes last, its whole line (90)
+		// plus the other over passes 101.
+		{"two overs on heavy lines", ItemMods{Lines: map[int]int{game.StatStrength: 90, game.StatVitality: 450}}, ForgeIssueWeight},
 		{"exo of an unforgeable stat", ItemMods{Exos: []Exo{{StatID: game.StatHP, Value: 1}}}, ForgeIssueExo},
 		{"transcendence with an exo", ItemMods{Exos: []Exo{{StatID: game.StatAP, Value: 1}}, Transcendence: runeTaAirID}, ForgeIssueTranscendence},
 		{"transcendence with an over", ItemMods{Lines: map[int]int{game.StatStrength: 71}, Transcendence: runeTaAirID}, ForgeIssueTranscendence},
@@ -245,11 +252,11 @@ func TestDracorunes(t *testing.T) {
 
 	// A dracorune works on an item that is already over and exo.
 	both := eng.Forge(cloak, &ItemMods{
-		Lines: map[int]int{game.StatStrength: 90},
+		Lines: map[int]int{game.StatStrength: 80},
 		Exos:  []Exo{{StatID: game.StatMP, Value: 1}},
 		Draco: &Draco{Rune: DracoEmerald, From: "earth"},
 	})
-	if len(both.Issues) != 0 || forgedValues(both)[statAgility] != 90 || forgedValues(both)[game.StatMP] != 1 {
+	if len(both.Issues) != 0 || forgedValues(both)[statAgility] != 80 || forgedValues(both)[game.StatMP] != 1 {
 		t.Errorf("over + exo + dracorune: %+v", both)
 	}
 
@@ -304,14 +311,14 @@ func TestEvaluateAppliesForgemagic(t *testing.T) {
 		Character: Character{Level: 200},
 		Items:     map[string]int{"cloak": cloakID, "ring1": 12},
 		Mods: map[string]*ItemMods{
-			"cloak": {Lines: map[int]int{game.StatVitality: 350}, Exos: []Exo{{StatID: game.StatAP, Value: 1}}},
+			"cloak": {Lines: map[int]int{game.StatVitality: 305}, Exos: []Exo{{StatID: game.StatAP, Value: 1}}},
 		},
 	}, "fr")
-	if !res.Valid || res.Stats[game.StatAP] != 8 || res.Stats[game.StatVitality] != 350 {
+	if !res.Valid || res.Stats[game.StatAP] != 8 || res.Stats[game.StatVitality] != 305 || res.ForgeWeight["cloak"] != 101 {
 		t.Errorf("valid %v, AP %d, Vitality %d, issues %+v", res.Valid, res.Stats[game.StatAP], res.Stats[game.StatVitality], res.Issues)
 	}
 	lines := res.Forge["cloak"]
-	if len(lines) != 7 || lines[0].Text != "350 Vitalité" || lines[6].Text != "1 PA" || lines[6].Origin != OriginExo {
+	if len(lines) != 7 || lines[0].Text != "305 Vitalité" || lines[6].Text != "1 PA" || lines[6].Origin != OriginExo {
 		t.Errorf("forged lines = %+v", lines)
 	}
 	if _, ok := res.Forge["ring1"]; !ok {
@@ -364,6 +371,17 @@ func TestForgeNegativeLines(t *testing.T) {
 	gone := eng.Forge(boots, &ItemMods{Lines: map[int]int{game.StatCritical: 0}})
 	if !reflect.DeepEqual(gone.Issues, []string{ForgeIssueLine}) || value(gone, game.StatCritical) != -1 {
 		t.Errorf("-5 raised to 0: %+v", gone)
+	}
+	// Raising a malus is an over that weighs half: 4 Critical weigh 20, so
+	// the MP exo (90) no longer fits; 2 Critical weigh 10 and leave it room.
+	exo := []Exo{{StatID: game.StatMP, Value: 1}}
+	tooHeavy := eng.Forge(boots, &ItemMods{Lines: map[int]int{game.StatCritical: -1}, Exos: exo})
+	if !reflect.DeepEqual(tooHeavy.Issues, []string{ForgeIssueWeight}) || tooHeavy.Weight != 110 {
+		t.Errorf("-5 raised to -1 with an MP exo: issues %v, weight %v", tooHeavy.Issues, tooHeavy.Weight)
+	}
+	light := eng.Forge(boots, &ItemMods{Lines: map[int]int{game.StatCritical: -3}, Exos: exo})
+	if len(light.Issues) != 0 || light.Weight != 100 {
+		t.Errorf("-5 raised to -3 with an MP exo: issues %v, weight %v", light.Issues, light.Weight)
 	}
 	// A negative line weighs nothing, so the heaviest rune lands on it.
 	runed := eng.Forge(boots, &ItemMods{Transcendence: runeDoCri})

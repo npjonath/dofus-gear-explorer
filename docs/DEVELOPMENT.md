@@ -176,6 +176,9 @@ The app does not simulate forging: there are no success odds and no leftover wei
 | Roll | Any value between the item's worst and best roll. Best roll by default. |
 | Over | A natural line above its best roll, up to 101 of weight (505 Vitalité, 101 Force, 33 Sagesse…), or the item's own best roll when that is higher. |
 | Exo | A line the item does not have, up to 101 of weight, so 1 PA, 1 PM or 1 PO. One PA/PM/PO exo per item, and one of each per character. |
+| Shared weight | The overs and exos of an item share 101 of weight (`forge_weight` when they pass it). An over counts for what it adds above the best roll, an exo for its whole line: an MP exo (90) leaves room for 11 Force or 55 Vitalité of over, an AP exo (100) for 1 of weight. |
+| Heavy lines | When a rune leaves a line in over, the game counts that whole line plus the overs and exos already on the others, within 101. The engine does not know the order of the runes, so it accepts a result when one order passes: overs from the heaviest natural line to the lightest, then exos. Two overs on lines that are already near 101 fail in any order. |
+| Malus | A negative line can be forged up to -1. That is an over, and a rune weighs half on a negative line: raising -5 Critique to -1 weighs 20 (4 × 10 / 2), which leaves no room for an MP exo. |
 | Transcendence rune | One per item, on an item with no over and no exo. The weight of the line it lands on plus the rune's density must stay within 101: 20 Dommages Eau weigh 100, so no Do Eau rune fits. Judged on the lines as they stand, dracorune included. |
 | Dracorune (update 3.8) | One per item, also on an over, exo or transcended item. |
 

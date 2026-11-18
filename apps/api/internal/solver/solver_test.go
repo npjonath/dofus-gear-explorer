@@ -495,6 +495,20 @@ func TestSolveChoosesForgemagicForTheStuff(t *testing.T) {
 	if !res.Valid {
 		t.Errorf("issues %+v", res.Issues)
 	}
+	// The raised malus weighs 20 of the 101 an item's overs and exos share,
+	// so the MP exo (90) goes on another item.
+	withExo := solve(3, ForgeOptions{Transcendence: true, RaiseCritical: true, Exos: []int{game.StatMP}})
+	exos := 0
+	for position, mods := range withExo.Mods {
+		exos += len(mods.Exos)
+		if len(mods.Exos) > 0 && len(mods.Lines) > 0 {
+			t.Errorf("%s carries the exo and the raised malus: %+v", position, mods)
+		}
+	}
+	res = eng.Evaluate(engine.Build{Character: withExo.Character, Items: withExo.Items, Mods: withExo.Mods}, "")
+	if !withExo.Feasible || exos != 1 || !res.Valid {
+		t.Errorf("raised malus and MP exo: feasible %v, %d exos, issues %+v", withExo.Feasible, exos, res.Issues)
+	}
 }
 
 func TestSolveMaximizesTheAverageHit(t *testing.T) {
