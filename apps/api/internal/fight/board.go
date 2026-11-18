@@ -4,7 +4,11 @@
 // fight as it stands and returns what it became.
 package fight
 
-import "dofusdb/api/internal/game"
+import (
+	"sort"
+
+	"dofusdb/api/internal/game"
+)
 
 // Board is the arena: a grid of cells numbered row by row, some of them
 // walls that block movement and sight.
@@ -13,6 +17,9 @@ type Board struct {
 	Height int   `json:"height"`
 	Walls  []int `json:"walls"`
 }
+
+// MaxSide is the longest side a board can have.
+const MaxSide = 20
 
 // DefaultBoard is the arena a fight starts on: a square with four pillars
 // to aim around.
@@ -133,20 +140,28 @@ func (b Board) zone(z game.Zone, caster, target int) []int {
 		}
 		cells = append(cells, c)
 	}
-	// around adds every cell at a distance from the centre the test accepts.
+	// around adds every cell of the board within reach of the centre along
+	// each axis that the test accepts. It walks the board, never the reach:
+	// a zone as wide as the map costs no more than the map.
 	around := func(reach int, keep func(dx, dy int) bool) {
-		for d := 0; d <= reach*2; d++ {
-			for dy := -reach; dy <= reach; dy++ {
-				for dx := -reach; dx <= reach; dx++ {
-					if abs(dx)+abs(dy) == d && keep(dx, dy) {
-						add(tx+dx, ty+dy)
-					}
+		type near struct{ cell, distance int }
+		var found []near
+		for y := 0; y < b.Height; y++ {
+			for x := 0; x < b.Width; x++ {
+				dx, dy := x-tx, y-ty
+				if abs(dx) <= reach && abs(dy) <= reach && keep(dx, dy) {
+					found = append(found, near{b.cell(x, y), abs(dx) + abs(dy)})
 				}
 			}
 		}
+		sort.SliceStable(found, func(i, j int) bool { return found[i].distance < found[j].distance })
+		for _, f := range found {
+			cells = append(cells, f.cell)
+		}
 	}
 	hx, hy := b.heading(caster, target)
-	size, least := z.Size, z.Min
+	// No shape reaches further than the board is wide.
+	size, least := min(z.Size, b.Width+b.Height), z.Min
 	switch z.Shape {
 	case "C":
 		around(size, func(dx, dy int) bool { d := abs(dx) + abs(dy); return d <= size && d >= least })

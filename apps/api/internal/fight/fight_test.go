@@ -162,6 +162,16 @@ func TestZones(t *testing.T) {
 	if corner := b.zone(game.Zone{Shape: "C", Size: 1}, caster, b.cell(0, 0)); len(corner) != 3 {
 		t.Errorf("circle in a corner covers %d cells", len(corner))
 	}
+	// A zone as wide as the map covers the board and no more, nearest first,
+	// however long and thin the board is.
+	thin := Board{Width: MaxSide, Height: 1}
+	all := thin.zone(game.Zone{Shape: "a", Size: 1 << 30}, 0, thin.cell(5, 0))
+	if len(all) != MaxSide || all[0] != thin.cell(5, 0) {
+		t.Errorf("whole-map zone on a thin board covers %d cells from %d", len(all), all[0])
+	}
+	if line := thin.zone(game.Zone{Shape: "L", Size: 1 << 30}, 0, thin.cell(5, 0)); len(line) != MaxSide-5 {
+		t.Errorf("endless line covers %d cells", len(line))
+	}
 }
 
 func TestCastCostsLimitsAndCooldowns(t *testing.T) {

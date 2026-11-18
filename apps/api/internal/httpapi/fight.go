@@ -73,15 +73,37 @@ func fightSim(eng *engine.Engine, req *fightRequest, lang string) *fight.Sim {
 	return sim
 }
 
+// Bounds on a fight sent by the interface: far above what a fight holds, low
+// enough that no request costs more than a few boards' worth of work.
+const (
+	maxFightEntities = 16
+	maxFightBuffs    = 256
+	maxFightUses     = 4096
+)
+
 // validState reports whether a fight sent by the interface can be played on:
-// a board of a sane size with every entity on it.
+// a board of a sane size, each side bounded on its own, with every entity
+// on it and nothing piled up beyond what a fight can hold.
 func validState(st *fight.State) bool {
-	if st == nil || st.Board.Width < 1 || st.Board.Height < 1 || st.Board.Width*st.Board.Height > 1024 || st.Player() == nil || len(st.Entities) > 16 {
+	if st == nil {
+		return false
+	}
+	w, h := st.Board.Width, st.Board.Height
+	if w < 1 || h < 1 || w > fight.MaxSide || h > fight.MaxSide {
+		return false
+	}
+	cells := w * h
+	if len(st.Board.Walls) > cells || len(st.Entities) > maxFightEntities || len(st.Uses) > maxFightUses || st.Player() == nil {
 		return false
 	}
 	for _, e := range st.Entities {
-		if e.Cell < 0 || e.Cell >= st.Board.Width*st.Board.Height {
+		if e.Cell < 0 || e.Cell >= cells || len(e.Buffs) > maxFightBuffs {
 			return false
+		}
+	}
+	for id, use := range st.Uses {
+		if use == nil || len(use.Targets) > maxFightEntities {
+			delete(st.Uses, id)
 		}
 	}
 	if st.Uses == nil {
