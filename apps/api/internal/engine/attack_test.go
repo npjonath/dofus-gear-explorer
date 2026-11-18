@@ -129,3 +129,92 @@ func TestCritRateAndMean(t *testing.T) {
 		t.Errorf("no critical line: rate %d, mean %d", plain.CritRate(stat), plain.Mean(stat))
 	}
 }
+
+// The values below are those dofusbook shows for an Enutrof with 1110
+// Intelligence, 260 Strength, 110 Power, 3895 health points and 6 MP.
+func TestHealsPushbacksAndStepsMatchDofusbook(t *testing.T) {
+	stat := statsOf(map[int]int{
+		game.StatHP: 3895, game.StatIntel: 1110, game.StatStrength: 260, game.StatChance: 300, game.StatAgility: 450,
+		game.StatPower: 110, game.StatHeal: 14, game.StatPushDamage: 65, game.StatMP: 6,
+		game.StatDamageEarth: 56, game.StatDamageFire: 114, game.StatCritDamage: 167,
+	})
+	spec := AttackSpec{Level: 200}
+	for _, tc := range []struct {
+		name string
+		line game.AttackLine
+		want Hit
+	}{
+		// A heal takes the characteristic and Heals, not Power nor Fire damage.
+		{"Gisement's heal", game.AttackLine{Kind: game.LineHeal, Element: game.ElementFire, Min: 29, Max: 32, CritMin: 35, CritMax: 38}, Hit{364, 401, 437, 473}},
+		{"Boîte de Pandore", game.AttackLine{Kind: game.LineHealPercent, Min: 10, Max: 10, CritMin: 12, CritMax: 12}, Hit{389, 389, 467, 467}},
+		{"Corruption", game.AttackLine{Kind: game.LineHealPercent, Min: 40, Max: 40}, Hit{1558, 1558, 0, 0}},
+		{"a pushback of two cells", game.AttackLine{Kind: game.LinePush, Min: 2, Max: 2}, Hit{98, 98, 0, 0}},
+		{"Libération", game.AttackLine{Kind: game.LinePush, Min: 4, Max: 4}, Hit{197, 197, 0, 0}},
+		// Flamèche hits in the lowest characteristic: Strength here.
+		{"Flamèche", game.AttackLine{Element: game.ElementWorst, Min: 8, Max: 10, CritMin: 11, CritMax: 13}, Hit{93, 103, 274, 284}},
+	} {
+		if hit, _ := spec.Line(tc.line, stat); hit != tc.want {
+			t.Errorf("%s = %+v, want %+v", tc.name, hit, tc.want)
+		}
+	}
+	if _, element := spec.Line(game.AttackLine{Element: game.ElementWorst, Min: 8, Max: 10}, stat); element != game.ElementEarth {
+		t.Errorf("lowest element = %d, want Earth", element)
+	}
+
+	// Tourbière gains 5 of base for each MP used, up to the character's 6.
+	bog := game.AttackLine{Element: game.ElementEarth, Min: 31, Max: 35, CritMin: 37, CritMax: 42, PerMP: 5}
+	steps := spec.Steps(bog, stat)
+	if hit, _ := spec.Line(bog, stat); hit != (Hit{201, 220, 396, 420}) || len(steps) != 6 ||
+		steps[0] != (Hit{225, 244, 420, 443}) || steps[5] != (Hit{342, 361, 537, 561}) {
+		t.Errorf("Tourbière: steps %+v", steps)
+	}
+	if spec.Steps(game.AttackLine{Element: game.ElementEarth, Min: 31, Max: 35}, stat) != nil {
+		t.Error("a line that does not grow with MP has no steps")
+	}
+}
+
+// An attack's total is what an enemy takes as it is made.
+func TestTotalCountsWhatHitsAnEnemy(t *testing.T) {
+	stat := statsOf(map[int]int{game.StatIntel: 1110, game.StatPower: 110, game.StatDamageFire: 114, game.StatCritDamage: 167, game.StatHP: 3895})
+	fire := func(lo, hi int, mask string) game.AttackLine {
+		return game.AttackLine{Element: game.ElementFire, Min: lo, Max: hi, Targets: mask}
+	}
+	conditional := fire(12, 14, "A")
+	conditional.Conditional = true
+	spell := &game.Spell{ID: 1, Levels: []game.SpellLevel{{Grade: 1, MinLevel: 1, RangeMax: 5, Lines: []game.AttackLine{
+		fire(41, 44, "a,A"),
+		// Kept for summons, for allies, dealt on a condition or later, or a
+		// heal: shown, not added.
+		fire(41, 44, "J,j"),
+		fire(41, 44, "a"),
+		conditional,
+		{Element: game.ElementFire, Min: 41, Max: 44, Targets: "A", Delay: 1},
+		{Kind: game.LineHealPercent, Min: 10, Max: 10, Targets: "a"},
+		{Element: game.ElementFire, Steal: true, Min: 10, Max: 10, Targets: "A"},
+	}}}}
+	a := SpellAttack(spell, 200, RangeAuto, stat)
+	// Péremption on dofusbook: 655 to 694. The steal adds 246.
+	if a.Total.Min != 655+246 || a.Total.Max != 694+246 {
+		t.Errorf("total = %+v", a.Total)
+	}
+	counted := []bool{}
+	for _, line := range a.Lines {
+		counted = append(counted, line.Counted)
+	}
+	if want := []bool{true, false, false, false, false, false, true}; len(counted) != len(want) {
+		t.Fatalf("lines = %d", len(counted))
+	} else {
+		for i := range want {
+			if counted[i] != want[i] {
+				t.Errorf("line %d counted = %v, want %v", i+1, counted[i], want[i])
+			}
+		}
+	}
+	if first := a.Lines[0]; len(first.Targets) != 2 || first.Targets[0] != "ally" || first.Targets[1] != "enemy" {
+		t.Errorf("targets = %v", first.Targets)
+	}
+	// A steal gives half of what it deals back; the other lines give nothing.
+	if steal := a.Lines[6]; steal.Regen == nil || steal.Regen.Min != 123 || a.Lines[0].Regen != nil {
+		t.Errorf("regen = %+v", steal.Regen)
+	}
+}
