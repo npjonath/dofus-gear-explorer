@@ -2,6 +2,7 @@ package rawdata
 
 import (
 	"sort"
+	"strings"
 
 	"dofusdb/api/internal/game"
 )
@@ -9,9 +10,33 @@ import (
 // commonSpellType is the spell type of the spells every class can learn.
 const commonSpellType = 463
 
-// effectVisibleInTooltip is the flag of the effects the game lists in a
-// spell's description; helper effects that only trigger others lack it.
-const effectVisibleInTooltip = 1
+// Flags of a spell effect. The game lists in a spell's description the
+// effects visible in its tooltip; helper effects that only trigger others
+// lack the flag. An effect described only is not applied by the spell itself
+// but by something the spell sets up, such as a state on its target.
+const (
+	effectVisibleInTooltip = 1
+	effectDescribedOnly    = 16
+)
+
+// Actions of the spell effects the damage panel computes besides damage.
+const (
+	actionPush          = 5
+	actionHealPercent   = 1109
+	actionBoostBaseHits = 293
+)
+
+// healActions maps the heals that scale with a characteristic to their element.
+var healActions = map[int]int{
+	108: game.ElementFire, 2998: game.ElementWater, 2999: game.ElementAir, 3000: game.ElementEarth,
+}
+
+// triggers maps the game's trigger of an effect to when it applies; "I" is
+// as the spell is cast.
+var triggers = map[string]string{"I": "", "TB": game.TriggerTurnStart, "TE": game.TriggerTurnEnd}
+
+// triggerOnMPUse marks an effect that applies each time the caster uses MP.
+const triggerOnMPUse = "MPARR"
 
 type rawBreed struct {
 	ID          int        `json:"id"`
@@ -26,13 +51,15 @@ type rawVariant struct {
 }
 
 type rawSpellEffect struct {
-	ActionID int    `json:"actionId"`
-	DiceNum  int    `json:"diceNum"`
-	DiceSide int    `json:"diceSide"`
-	Triggers string `json:"triggers"`
-	Duration int    `json:"duration"`
-	Delay    int    `json:"delay"`
-	Flags    int    `json:"m_flags"`
+	ActionID   int    `json:"actionId"`
+	DiceNum    int    `json:"diceNum"`
+	DiceSide   int    `json:"diceSide"`
+	Value      int    `json:"value"`
+	Triggers   string `json:"triggers"`
+	Duration   int    `json:"duration"`
+	Delay      int    `json:"delay"`
+	Flags      int    `json:"m_flags"`
+	TargetMask string `json:"targetMask"`
 }
 
 type rawSpellLevel struct {
@@ -48,22 +75,22 @@ type rawSpellLevel struct {
 	Critical   array[rawSpellEffect] `json:"criticalEffect"`
 }
 
-// attackLines keeps the direct damage of a spell grade: instant damage and
-// steal lines the game shows in the description. Poisons, triggered damage
-// and heals are left out. A line's critical values are those of the line at
+// attackLines keeps what the damage panel computes of a spell grade, among
+// the effects the game shows in the description: damage and steals dealt as
+// the spell is cast, heals, and pushbacks. Poisons and other damage dealt
+// over time are left out. A line's critical values are those of the line at
 // the same rank in the critical list.
 func attackLines(level rawSpellLevel) []game.AttackLine {
-	type hit struct {
-		element int
-		steal   bool
-		lo, hi  int
-		delay   int
-	}
-	direct := func(effects []rawSpellEffect) []hit {
-		var out []hit
+	read := func(effects []rawSpellEffect) []game.AttackLine {
+		var out []game.AttackLine
+		real := false
+		perMP := 0
 		for _, e := range effects {
-			element, steal, ok := game.AttackAction(e.ActionID)
-			if !ok || e.Triggers != "I" || e.Duration != 0 || e.Flags&effectVisibleInTooltip == 0 {
+			if e.ActionID == actionBoostBaseHits && e.DiceNum == level.SpellID && strings.Contains(e.Triggers, triggerOnMPUse) {
+				perMP = e.Value
+			}
+			trigger, timed := triggers[e.Triggers]
+			if !timed || e.Flags&effectVisibleInTooltip == 0 {
 				continue
 			}
 			lo, hi := e.DiceNum, e.DiceSide
@@ -73,18 +100,48 @@ func attackLines(level rawSpellLevel) []game.AttackLine {
 			if lo > hi {
 				lo, hi = hi, lo
 			}
-			out = append(out, hit{element, steal, lo, hi, e.Delay})
+			line := game.AttackLine{
+				Min: lo, Max: hi, Delay: e.Delay, Targets: e.TargetMask, Trigger: trigger,
+				Conditional: e.Flags&effectDescribedOnly != 0,
+			}
+			if element, steal, ok := game.AttackAction(e.ActionID); ok {
+				// Damage over several turns is a poison: not computed.
+				if trigger != "" || e.Duration != 0 {
+					continue
+				}
+				line.Element, line.Steal = element, steal
+				real = real || !line.Conditional
+			} else if element, ok := healActions[e.ActionID]; ok {
+				line.Kind, line.Element = game.LineHeal, element
+			} else if e.ActionID == actionHealPercent {
+				line.Kind = game.LineHealPercent
+			} else if e.ActionID == actionPush && trigger == "" {
+				line.Kind = game.LinePush
+			} else {
+				continue
+			}
+			out = append(out, line)
+		}
+		for i := range out {
+			if out[i].Kind != "" {
+				continue
+			}
+			// When every damage line is described only, the spell deals its
+			// damage through another one: those lines are its hit.
+			out[i].Conditional = out[i].Conditional && real
+			out[i].PerMP = perMP
 		}
 		return out
 	}
-	normal, critical := direct(level.Effects.Array), direct(level.Critical.Array)
-	lines := make([]game.AttackLine, 0, len(normal))
-	for i, h := range normal {
-		line := game.AttackLine{Element: h.element, Steal: h.steal, Min: h.lo, Max: h.hi, Delay: h.delay}
-		if level.CritChance > 0 && i < len(critical) && critical[i].element == h.element && critical[i].steal == h.steal {
-			line.CritMin, line.CritMax = critical[i].lo, critical[i].hi
+	lines, critical := read(level.Effects.Array), read(level.Critical.Array)
+	for i := range lines {
+		line := &lines[i]
+		if level.CritChance <= 0 || i >= len(critical) {
+			continue
 		}
-		lines = append(lines, line)
+		if c := critical[i]; c.Kind == line.Kind && c.Element == line.Element && c.Steal == line.Steal && c.Targets == line.Targets {
+			line.CritMin, line.CritMax = c.Min, c.Max
+		}
 	}
 	return lines
 }
@@ -138,6 +195,25 @@ func parseSpells(dir string, spells []rawSpellHead, want func(game.Texts, flexIn
 		}
 		if _, known := owner[ids[1]]; !known {
 			owner[ids[1]] = place{breed: v.BreedID, order: base.order + 1, variantOf: ids[0]}
+		}
+	}
+	// The common spells come in pairs too, filed under a class id no class
+	// has: the spell every character knows, then the one that replaces it.
+	isBreed := map[int]bool{}
+	for _, b := range rawBreeds {
+		isBreed[b.ID] = true
+	}
+	for rank, v := range rawVariants {
+		ids := v.SpellIDs.Array
+		if len(ids) != 2 || isBreed[v.BreedID] {
+			continue
+		}
+		if _, known := owner[ids[0]]; known {
+			continue
+		}
+		owner[ids[0]] = place{order: rank * 2}
+		if _, known := owner[ids[1]]; !known {
+			owner[ids[1]] = place{order: rank*2 + 1, variantOf: ids[0]}
 		}
 	}
 	for _, sp := range spells {

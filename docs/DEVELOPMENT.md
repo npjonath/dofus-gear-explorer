@@ -159,7 +159,7 @@ When it listens on a loopback address (the default), it also rejects requests ad
 | `GET /api/items/{id}` | One item with its set |
 | `GET /api/sets/{id}` | One set with its bonuses |
 | `POST /api/builds/evaluate` | Characteristics, set bonuses and validity of a stuff, with the forgemagic in `mods` |
-| `POST /api/builds/damage` | What the stuff's weapon and the spells of `breedId` hit for; `range` forces `melee` or `ranged` |
+| `POST /api/builds/damage` | What the stuff's weapon and the spells of `breedId` do: each line with its targets, whether it counts in the total, and heals and pushbacks; `range` forces `melee` or `ranged` |
 | `POST /api/solver/search` | Stuffs that meet constraints; `forge` says which exos, runes and dracorunes are allowed, `required` lists items every stuff must wear, `excluded` those none may wear, `damage` lists attacks that must hit for a value, and an entry of `maximize` can be an attack too, over several elements if need be. Answers the first `limit` stuffs (5 by default, 20 at most) with `total` and an `id` |
 | `GET /api/solver/results/{id}` | The next stuffs of a search: `offset`, `limit`. The API keeps the last 8 searches in memory and answers 404 `results_expired` past that |
 
@@ -196,7 +196,22 @@ Not modelled: the 3.8 set bonus that grants a primordial Dofus's effect. Whether
 
 A line of a weapon or a spell hits for `floor(base × (100 + characteristic + Power) / 100)` plus Damage and the element's damage (and Critical damage on a critical hit), then the final bonuses: % weapon or spell damage, and % melee or ranged damage. Neutral scales with Strength. A "best element" line follows the highest elemental characteristic. A weapon's critical hit adds its bonus to each line; a spell has its own critical values. An attack counts as melee when it only reaches the next cell, unless the request says otherwise.
 
-Only direct damage is computed: damage and steal lines the game lists in the description, cast as they are. Poisons, triggered effects, heals, conditional bonuses and the target's resistances are left out. When a spell has several lines, each is listed and the lines that hit at once are summed; a spell whose lines hit different targets is overstated by that sum.
+Each line of a spell says who it applies to, from the game's target mask (`a,A` allies and enemies, `A` enemies, `j,J` summons, `g,A` everyone but the caster, and so on): the same spell can hit summons harder, or heal allies and hurt enemies. A line can also be *conditional*: the spell only describes it, and it applies later, when the state the spell leaves on its target is triggered (Éboulement's second hit, when the target loses Range). The game flags those lines as described only; when every damage line of a spell is flagged, they are the spell's hit, dealt through another spell.
+
+The total and the average of an attack count what an enemy that is not a summon takes as the attack is made (`AttackLine.Hits`): not the lines kept for summons or allies, the conditional or delayed ones, nor what is not damage. The search reads the same lines.
+
+Besides damage, the panel computes:
+
+- a heal that scales with a characteristic: `floor(base × (100 + characteristic) / 100) + Soins`, without Puissance;
+- a heal in percent of the caster's health points;
+- pushback damage: `floor((level / 2 + 32 + Dommages Poussée) × cells / 4)`;
+- what a steal gives back: half the damage;
+- a line whose base grows with each MP the caster has used this turn (Tourbière), for one MP up to the character's own;
+- a line in the caster's lowest characteristic (Flamèche), as there is one in the highest.
+
+Poisons, glyphs, traps and what a summon casts are not computed. All of the above was checked against dofusbook on an Enutrof stuff: the 30 stats, and 42 of the 43 spells it lists (the last one heals through a summon).
+
+The target has no resistance. Only the lines the game lists in a spell's description are read, cast as they are.
 
 A weapon is counted with its mastery (+300 Power) unless the request says `mastery: false`, and with its elemental forgemagic when it has one (`mods.weapon.element`: its Neutral lines hit in that element). An attack also has a critical rate, its own chance plus the character's Critical, capped at 100, and an average hit: normal and critical hits weighed by that rate.
 

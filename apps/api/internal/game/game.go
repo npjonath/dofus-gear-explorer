@@ -114,6 +114,7 @@ const (
 	StatInitiative  = 44
 	StatProspecting = 48
 	StatHeal        = 49
+	StatPushDamage  = 84
 	StatEscape      = 78
 	StatTackle      = 79
 	StatAPReduction = 82
