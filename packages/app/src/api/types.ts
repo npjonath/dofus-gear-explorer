@@ -522,3 +522,166 @@ export interface DataStatus {
   progress: { step: "download" | "parse" | "import" | "images"; percent: number; target: string } | null
   error: string
 }
+
+/** The fight simulator: a fight is held here and sent back with each action. */
+export interface FightBoard {
+  width: number
+  height: number
+  /** Cells that block movement and sight. */
+  walls: number[]
+}
+
+export type FightBuffKind = "stat" | "state" | "base" | "range" | "suffered" | "healed"
+
+export interface FightBuff {
+  kind: FightBuffKind
+  spell: number
+  /** The spell the player cast that led to it. */
+  from: number
+  /** A characteristic, a state or a spell, depending on the kind. */
+  ref: number
+  value: number
+  /** Turns it still lasts, the current one included; -1 never ends. */
+  turns: number
+}
+
+export interface FightEntity {
+  id: number
+  kind: "player" | "dummy"
+  cell: number
+  hp: number
+  maxHp: number
+  stats?: Record<string, number>
+  buffs: FightBuff[]
+}
+
+export interface FightState {
+  board: FightBoard
+  phase: "placement" | "fight"
+  turn: number
+  entities: FightEntity[]
+  apUsed: number
+  mpUsed: number
+  uses: Record<string, unknown>
+  turnDamage: number
+  totalDamage: number
+}
+
+export interface FightEvent {
+  type: "turn" | "cast" | "move" | "damage" | "heal" | "buff" | "ap" | "defeat" | "skipped"
+  entity?: number
+  spell?: number
+  value?: number
+  element?: number
+  critical?: boolean
+  push?: boolean
+  stat?: number
+  turns?: number
+  cell?: number
+  path?: number[]
+  action?: number
+}
+
+/** Why a spell cannot be cast, or an action was refused. */
+export type FightBlocked =
+  | "phase"
+  | "ap"
+  | "cooldown"
+  | "perTurn"
+  | "perTarget"
+  | "range"
+  | "line"
+  | "sight"
+  | "cell"
+  | "mp"
+  | "unknown"
+
+export interface FightCastRules {
+  line?: boolean
+  diagonal?: boolean
+  sight?: boolean
+  freeCell?: boolean
+  takenCell?: boolean
+  boostRange?: boolean
+  perTurn?: number
+  perTarget?: number
+  interval?: number
+  initialCooldown?: number
+  maxStack?: number
+}
+
+export interface FightSlot {
+  /** The spell, or 0 for the weapon. */
+  id: number
+  name: string
+  iconId: number
+  weapon: boolean
+  breedId: number
+  variantOf: number
+  apCost: number
+  rangeMin: number
+  rangeMax: number
+  critRate: number
+  blocked?: FightBlocked
+  /** Turns before it can be cast again, and casts left this turn (-1: no cap). */
+  cooldown: number
+  left: number
+  rules: FightCastRules
+  /** What it hits for on a target with no resistance. */
+  attack: Omit<Attack, "name" | "breedId" | "variantOf"> | null
+}
+
+export interface FightStep {
+  cell: number
+  cost: number
+  from: number
+}
+
+export interface FightView {
+  state: FightState
+  events: FightEvent[]
+  refused?: FightBlocked
+  ap: number
+  mp: number
+  maxAp: number
+  maxMp: number
+  steps: FightStep[]
+  spells: FightSlot[]
+  names: Record<string, string>
+}
+
+export interface FightDummies {
+  count: number
+  hp: number
+  /** Resistances by characteristic id. */
+  stats: Record<string, number>
+}
+
+export type FightAction =
+  | { type: "place"; entity: number; cell: number }
+  | { type: "begin" }
+  | { type: "move"; cell: number }
+  | { type: "cast"; spell: number; cell: number }
+  | { type: "end" }
+
+export interface FightLoss {
+  entity: number
+  min: number
+  max: number
+  critMin: number
+  critMax: number
+}
+
+export interface FightTarget {
+  cell: number
+  zone: number[]
+  losses: FightLoss[]
+  shifts: { entity: number; cell: number }[]
+}
+
+export interface FightAim {
+  spell: number
+  range: number[]
+  targets: FightTarget[]
+  canCrit: boolean
+}

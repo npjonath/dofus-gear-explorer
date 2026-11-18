@@ -82,7 +82,7 @@ A stuff travels as a code: base64url JSON of positional arrays (version, name, l
 
 ## Game data
 
-Data comes from the JSON files that [doduda](https://github.com/dofusdude/doduda) publishes in the [dofusdude/dofus3-main releases](https://github.com/dofusdude/dofus3-main/releases). The API reads `items.json`, `item_sets.json`, `item_types.json`, `item_super_types.json`, `effects.json`, `characteristics.json`, `chars_categories.json`, `spells.json` and one translation file per language, then writes them to `apps/api/data/dofus.db`. Item icons are extracted to `apps/api/data/images`.
+Data comes from the JSON files that [doduda](https://github.com/dofusdude/doduda) publishes in the [dofusdude/dofus3-main releases](https://github.com/dofusdude/dofus3-main/releases). The API reads `items.json`, `item_sets.json`, `item_types.json`, `item_super_types.json`, `effects.json`, `characteristics.json`, `chars_categories.json`, `spells.json` and one translation file per language, then writes them to `apps/api/data/dofus.db`. Item icons are extracted to `apps/api/data/images/items`, and the fight simulator's spell icons and class portraits (`spell_images_96.tar.gz`, `class_head_images_64.tar.gz`) to `images/spells` and `images/breeds`; a release without them leaves the app with initials.
 
 Only equipment is imported: amulets, rings, belts, boots, hats, cloaks, weapons, shields, pets and mounts, Dofus, trophies and prysmaradites. Items no player can equip (game master items, disabled items) and items without any effect are left out.
 
@@ -91,7 +91,7 @@ Three more things come from the same files:
 - **Forgemagic weights**: each characteristic's rune weight (`effectPowerRate`), which sets how high a line can be forged.
 - **Transcendence runes**: the 81 runes, the bonus each gives and its density (effect 2826: 40, 60 or 80).
 - **Passive effects**: Dofus, prysmaradites and legendary items point at a spell whose description is their passive.
-- **Classes and spells**: the 19 classes, their spells and variants and the 12 common spells (`breeds.json`, `spell_variants.json`, `spell_levels.json`), with the direct damage lines of each grade.
+- **Classes and spells**: the 19 classes, their spells and variants and the 12 common spells (`breeds.json`, `spell_variants.json`, `spell_levels.json`), with the direct damage lines of each grade. For the fight simulator, each grade also keeps how it is cast and every effect as the game lists it, and the spells a castable spell casts in turn are imported with it (filed under no class, never listed).
 
 ### Updating
 
@@ -160,6 +160,8 @@ When it listens on a loopback address (the default), it also rejects requests ad
 | `GET /api/sets/{id}` | One set with its bonuses |
 | `POST /api/builds/evaluate` | Characteristics, set bonuses and validity of a stuff, with the forgemagic in `mods` |
 | `POST /api/builds/damage` | What the stuff's weapon and the spells of `breedId` do: each line with its targets, whether it counts in the total, and heals and pushbacks; `range` forces `melee` or `ranged` |
+| `POST /api/fight` | The fight simulator: without `state`, a new fight against `dummies` for the stuff; with `state` and an `action` (`place`, `begin`, `move`, `cast`, `end`), the fight after that action, with what happened, the points left, the cells in reach and each spell's availability |
+| `POST /api/fight/aim` | Where `spell` can be aimed in the fight `state`, and for each cell its zone, what each entity would lose (lowest and highest roll, normal and critical) and where it would end up |
 | `POST /api/solver/search` | Stuffs that meet constraints; `forge` says which exos, runes and dracorunes are allowed, `required` lists items every stuff must wear, `excluded` those none may wear, `damage` lists attacks that must hit for a value, and an entry of `maximize` can be an attack too, over several elements if need be. Answers the first `limit` stuffs (5 by default, 20 at most) with `total` and an `id` |
 | `GET /api/solver/results/{id}` | The next stuffs of a search: `offset`, `limit`. The API keeps the last 8 searches in memory and answers 404 `results_expired` past that |
 
@@ -218,6 +220,18 @@ A weapon is counted with its mastery (+300 Power) unless the request says `maste
 These numbers were checked against dofusbook on a full stuff: stats, spell lines and the weapon's lines, total, critical rate and average are identical.
 
 The search reads one of three measures on that sum, `normal`, `crit` or `mean` (the average hit). Besides a weapon or a spell, a goal can be of kind `element`: the average of the measure over the spells of the class (`breedId`) that hit in that element, with no spell named. Left without an element, it gets a rough search in each of the four, then the full search in the one that came out on top. An entry of `damage` asks that it reaches a value; an entry of `maximize` with a `damage` field pushes it up, at its rank among the stats to maximize. Either way, a weapon is worn by the stuff.
+
+## Fight simulator
+
+The Fight view of a stuff plays turns against training dummies (`apps/api/internal/fight`). The server keeps nothing: the interface holds the fight and sends it back with each action, so a fight is plain data and every step is a pure function of it.
+
+- **Board**: a 13 × 13 grid with four pillars. Range counts cells along rows and columns. A cell is in sight when the straight line to it crosses no wall and no entity; a line through the exact corner of four cells crosses none.
+- **Casting**: a spell grade's flags in `spell_levels.json` (`m_flags`: 1 in line, 2 diagonal, 4 needs sight, 8 a free cell, 16 a taken cell, 64 range follows the caster's Range) and its `maxCastPerTurn`, `maxCastPerTarget`, `minCastInterval`, `initialCooldown` and `maxStack`. The weapon is cast in sight, at one cell, within its range.
+- **Effects**: applied in the order of the data, each to the entities of its zone its target mask accepts (`E`/`e` and `*E`/`*e` read the states of the target and of the caster; `C` reaches the caster wherever it stands). Damage and steals go through the formula of the Damage section, with melee decided by the distance at the time; then the hit loses 10% per cell away from the centre of a zone (the zone's own figures), then the target's fixed resistance comes off, then its percentage. Heals, pushes and pulls with pushback damage (half of it to whoever blocks the way), the caster's own moves, teleports and swaps, characteristics raised or lowered for a number of turns, states, refunded AP, a spell's base damage or range raised, effects removed, and spells cast in turn (actions 1160 and 792) are applied. Effects drawn at random are drawn on a cast and left out of the preview.
+- **Not simulated**: summons, traps, glyphs, poisons, shields, effects with a delay or a trigger (start or end of turn, on hit), masks with a condition the simulator cannot read, tackle, and the zones of weapons. A skipped effect the game lists in the spell's description is reported in the log, once per cast.
+- **Dummies** do nothing on their turn and stand back up at full health when defeated. Their resistances are characteristics like any other (33 to 37 in percent, 54 to 58 fixed, 87 critical).
+
+Checked on the Enutrof of the Damage section: the preview of each spell on a dummy without resistance gives dofusbook's figures (Roulage de Pelle 364 to 417, 597 to 663 critical; Coup de Grisou 510 to 562 at the centre and 80% of it two cells away), and pushback damage matches the figures another simulator shows for the same level and Pushback damage (55 for one cell left, 111 for two).
 
 ## How the solver works
 

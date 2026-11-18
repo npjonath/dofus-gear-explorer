@@ -132,6 +132,93 @@ func TargetsEnemy(mask string) bool {
 	return len(names) == 0
 }
 
+// BreedTriggered files the spells no character casts directly: those another
+// spell casts in turn. They belong to no class and are never listed.
+const BreedTriggered = -1
+
+// Actions through which a spell casts another one: the spell cast is the
+// effect's Min and its grade the effect's Max.
+const (
+	// ActionCastSpell has the caster cast the spell on the target's cell.
+	ActionCastSpell = 1160
+	// ActionTriggerSpell has the target cast the spell on its own cell.
+	ActionTriggerSpell = 792
+)
+
+// CastsSpell reports whether an action casts another spell.
+func CastsSpell(action int) bool {
+	return action == ActionCastSpell || action == ActionTriggerSpell
+}
+
+// Zone is the cells an effect covers around the cell a spell is aimed at.
+type Zone struct {
+	// Shape is the game's letter for the shape: "P" a single cell, "C" a
+	// circle, "X" a cross, "L" a line, and so on.
+	Shape string `json:"shape,omitempty"`
+	// Size is how far the shape reaches and Min the distance it starts at.
+	Size int `json:"size,omitempty"`
+	Min  int `json:"min,omitempty"`
+	// Decrease is the percentage of damage lost per cell away from the
+	// centre of the zone, at most Steps times.
+	Decrease int `json:"decrease,omitempty"`
+	Steps    int `json:"steps,omitempty"`
+}
+
+// SpellEffect is one effect of a spell grade as the game data gives it,
+// which the fight simulator applies.
+type SpellEffect struct {
+	// Action is the game's effect number; Min, Max and Value are its
+	// parameters: a roll, a number of cells, a state, another spell.
+	Action int `json:"action"`
+	// Stat and Sign are set on an effect that raises (1) or lowers (-1) a
+	// characteristic.
+	Stat  int `json:"stat,omitempty"`
+	Sign  int `json:"sign,omitempty"`
+	Min   int `json:"min,omitempty"`
+	Max   int `json:"max,omitempty"`
+	Value int `json:"value,omitempty"`
+	// Targets is the game's mask of who the effect applies to.
+	Targets string `json:"targets,omitempty"`
+	// Duration is the number of turns the effect lasts, zero for an effect
+	// applied once, -1 for one that never ends.
+	Duration int `json:"duration,omitempty"`
+	Delay    int `json:"delay,omitempty"`
+	// Trigger is empty for an effect applied as the spell is cast, or the
+	// game's trigger otherwise.
+	Trigger string `json:"trigger,omitempty"`
+	Zone    Zone   `json:"zone"`
+	// Random is the weight of an effect drawn among those of its Group.
+	Random float64 `json:"random,omitempty"`
+	Group  int     `json:"group,omitempty"`
+	// Shown says the game lists the effect in the spell's description, and
+	// Described that the spell only describes it: something it sets up
+	// applies it later.
+	Shown     bool `json:"shown,omitempty"`
+	Described bool `json:"described,omitempty"`
+}
+
+// CastRules is how a spell grade is aimed and how often it can be cast.
+type CastRules struct {
+	// Line and Diagonal restrict the cells it can be aimed at; with both,
+	// either is allowed.
+	Line     bool `json:"line,omitempty"`
+	Diagonal bool `json:"diagonal,omitempty"`
+	// Sight says the caster must see the cell.
+	Sight     bool `json:"sight,omitempty"`
+	FreeCell  bool `json:"freeCell,omitempty"`
+	TakenCell bool `json:"takenCell,omitempty"`
+	// BoostRange says the caster's Range adds to the spell's.
+	BoostRange bool `json:"boostRange,omitempty"`
+	// PerTurn and PerTarget cap the casts in a turn; zero is no cap.
+	PerTurn   int `json:"perTurn,omitempty"`
+	PerTarget int `json:"perTarget,omitempty"`
+	// Interval is the number of turns between two casts.
+	Interval        int `json:"interval,omitempty"`
+	InitialCooldown int `json:"initialCooldown,omitempty"`
+	// MaxStack caps how many times the spell's effects pile up on a target.
+	MaxStack int `json:"maxStack,omitempty"`
+}
+
 // SpellLevel is a spell at one of its grades.
 type SpellLevel struct {
 	Grade      int          `json:"grade"`
@@ -141,6 +228,10 @@ type SpellLevel struct {
 	RangeMax   int          `json:"rangeMax"`
 	CritChance int          `json:"critChance"`
 	Lines      []AttackLine `json:"lines"`
+	// Cast, Effects and CritEffects are what the fight simulator reads.
+	Cast        CastRules     `json:"cast"`
+	Effects     []SpellEffect `json:"effects,omitempty"`
+	CritEffects []SpellEffect `json:"critEffects,omitempty"`
 }
 
 // Spell is a class spell or a common spell. Only the lines the damage panel

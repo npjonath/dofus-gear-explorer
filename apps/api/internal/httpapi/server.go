@@ -62,7 +62,11 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/builds/damage", s.withData(s.handleDamage))
 	mux.HandleFunc("POST /api/solver/search", s.withData(s.handleSolve))
 	mux.HandleFunc("GET /api/solver/results/{id}", s.handleResults)
+	mux.HandleFunc("POST /api/fight", s.withData(s.handleFight))
+	mux.HandleFunc("POST /api/fight/aim", s.withData(s.handleFightAim))
 	mux.HandleFunc("GET /images/items/{file}", s.handleIcon)
+	mux.HandleFunc("GET /images/spells/{file}", s.handleIcon)
+	mux.HandleFunc("GET /images/breeds/{file}", s.handleIcon)
 	if s.webDir != "" {
 		mux.Handle("/", spaHandler(s.webDir))
 	}
@@ -162,7 +166,15 @@ func (s *Server) handleIcon(w http.ResponseWriter, r *http.Request) {
 	// Icons change when a release or another icon size is imported: the
 	// browser keeps them but asks each time whether they are still current.
 	w.Header().Set("Cache-Control", "no-cache")
-	http.ServeFile(w, r, filepath.Join(s.updater.ImagesDir(), strconv.Itoa(id)+".png"))
+	dir := s.updater.ImagesDir()
+	switch {
+	case strings.HasPrefix(r.URL.Path, "/images/spells/"):
+		dir = s.updater.SpellImagesDir()
+	case strings.HasPrefix(r.URL.Path, "/images/breeds/"):
+		// A class is drawn by its first portrait.
+		dir, id = s.updater.BreedImagesDir(), id*10
+	}
+	http.ServeFile(w, r, filepath.Join(dir, strconv.Itoa(id)+".png"))
 }
 
 type statDTO struct {

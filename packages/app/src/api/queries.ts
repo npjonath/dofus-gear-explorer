@@ -1,7 +1,16 @@
 import { keepPreviousData, useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { useApi } from "../platform"
 import { useStore } from "../store"
-import type { AttackRange, BuildInput, DataStatus, ItemQuery, SolverRequest } from "./types"
+import type {
+  AttackRange,
+  BuildInput,
+  DataStatus,
+  FightAction,
+  FightDummies,
+  FightState,
+  ItemQuery,
+  SolverRequest,
+} from "./types"
 
 const PAGE_SIZE = 60
 
@@ -118,6 +127,43 @@ export function useDamage(
     enabled: enabled && version !== undefined,
     placeholderData: keepPreviousData,
     staleTime: 5 * 60_000,
+  })
+}
+
+/** A new fight for a stuff; `round` asks for another one with the same settings. */
+export function useFightStart(build: BuildInput, breedId: number | null, dummies: FightDummies, round: number) {
+  const api = useApi()
+  const lang = useStore((s) => s.lang)
+  const version = useDataKey()
+  return useQuery({
+    queryKey: ["fight", "start", lang, version, build, breedId, dummies, round],
+    queryFn: ({ signal }) => api.fight(lang, build, breedId, { dummies }, signal),
+    enabled: version !== undefined,
+    staleTime: Infinity,
+  })
+}
+
+/** Plays one action of a fight and returns the fight as it then stands. */
+export function useFightAction(build: BuildInput, breedId: number | null) {
+  const api = useApi()
+  const lang = useStore((s) => s.lang)
+  return useMutation({
+    mutationFn: ({ state, action }: { state: FightState; action: FightAction }) =>
+      api.fight(lang, build, breedId, { state, action }),
+  })
+}
+
+/** Where the spell in hand can be aimed, and what each cast would do. */
+export function useFightAim(build: BuildInput, breedId: number | null, state: FightState | undefined, spell: number | null) {
+  const api = useApi()
+  const lang = useStore((s) => s.lang)
+  const version = useDataKey()
+  return useQuery({
+    queryKey: ["fight", "aim", lang, version, build, breedId, state, spell],
+    queryFn: ({ signal }) => api.fightAim(lang, build, breedId, state!, spell!, signal),
+    enabled: version !== undefined && state !== undefined && spell !== null && state.phase === "fight",
+    staleTime: Infinity,
+    gcTime: 30_000,
   })
 }
 

@@ -463,6 +463,12 @@ The toast can be dismissed, so the top strip keeps the offer: an icon button app
 
 The desktop icon is the brand mark at scale: the four cells (accent blue, ok green, bad red, neutral) with rounded corners, on a dark slate rounded tile with a faint top-to-bottom gradient and a hairline edge. Source in `apps/desktop/build/icon.svg`, rendered to a 1024px PNG. No Ankama artwork, ever.
 
+### Fight board
+
+The Fight view of a stuff is the one place where the board is played on. The arena sits on plain `ground`; its cells are squares seen at an angle, filled alternately with `tile` and `ground` and edged with `line`, so the arena is its own checker. The three zone colours keep their meaning and nothing else on the arena has hue: `ok-soft` where the player can walk (the way to the pointed cell edged in `ok`, with its cost in MP), `accent-soft` edged in `accent` where the spell in hand can be aimed (a dashed edge on a cell in range but out of sight), `bad-soft` edged in `bad` where it lands. Entities are square cells on `cell-bg`: the class portrait for the player, an authored target glyph for a dummy, a health bar in the Vitality tone above. What a cast would cost a target is written above it, the critical figure in the Critical tone; numbers that rise after a cast take the tone of their element. Pillars are flat `line-strong` blocks: nothing on the arena casts a shadow.
+
+Under the arena, the vitals are vital tiles, the spells are item cells that press like slot chips (blue ring and wash when in hand, dimmed when they cannot be cast, the AP cost in a corner tag in the AP tone, the turns to wait written over the icon), and "End turn" is the panel's one solid button. The right column reads top to bottom: the spell in hand or under the pointer, the lasting effects of the pointed entity, the log.
+
 ### Banner, stage and popups
 
 - **Banner:** a full-width strip under the top bar. `accent-soft` when new game data is available or importing (with a progress bar and the step name; the bar's fill is `accent` and moves to its value without a width animation), `bad-soft` when an update failed. Message on the left, one button on the right.

@@ -580,7 +580,7 @@ func Parse(dir, version string, langs []string) (*game.Dataset, error) {
 	sort.Slice(ds.Items, func(a, b int) bool { return ds.Items[a].ID < ds.Items[b].ID })
 	sort.Slice(ds.Runes, func(a, b int) bool { return ds.Runes[a].ID < ds.Runes[b].ID })
 
-	ds.Breeds, ds.Spells, err = parseSpells(dir, rawSpells, want)
+	ds.Breeds, ds.Spells, err = parseSpells(dir, rawSpells, effectByID, want)
 	if err != nil {
 		return nil, err
 	}

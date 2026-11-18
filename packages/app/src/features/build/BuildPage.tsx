@@ -35,6 +35,7 @@ import { SlotGlyph } from "../../ui/SlotGlyph"
 import { toaster } from "../../ui/toaster"
 import { BuildList } from "./BuildList"
 import { BuildTabs } from "./BuildTabs"
+import { FightPanel } from "../fight/FightPanel"
 import { DamagePanel } from "./DamagePanel"
 import { ForgePanel } from "./ForgePanel"
 import { ItemPicker } from "./ItemPicker"
@@ -377,7 +378,7 @@ export function BuildPage({ meta }: { meta: Meta }) {
   const [selectedKey, setSelectedKey] = React.useState<string | null>(null)
   const [selectedIn, setSelectedIn] = React.useState(build.id)
   const [tab, setTab] = React.useState<SlotTab>("items")
-  const [view, setView] = React.useState<"gear" | "damage">("gear")
+  const [view, setView] = React.useState<"gear" | "damage" | "fight">("gear")
   // A slot chosen in one stuff says nothing about the next one.
   if (selectedIn !== build.id) {
     setSelectedIn(build.id)
@@ -509,11 +510,12 @@ export function BuildPage({ meta }: { meta: Meta }) {
         <SegmentedControl
           aria-label={t("build.view")}
           value={view}
-          onValueChange={(next) => setView(next === "damage" ? "damage" : "gear")}
+          onValueChange={(next) => setView(next === "damage" || next === "fight" ? next : "gear")}
         >
           <SegmentedControlIndicator />
           <SegmentedControlItem value="gear">{t("build.view.gear")}</SegmentedControlItem>
           <SegmentedControlItem value="damage">{t("build.view.damage")}</SegmentedControlItem>
+          <SegmentedControlItem value="fight">{t("build.view.fight")}</SegmentedControlItem>
         </SegmentedControl>
         <Button onClick={() => setComparing(true)}>
           <ArrowRightLeftIcon aria-hidden="true" className="size-4" />
@@ -552,7 +554,9 @@ export function BuildPage({ meta }: { meta: Meta }) {
         </button>
       </div>
 
-      {view === "damage" ? (
+      {view === "fight" ? (
+        <FightPanel meta={meta} build={build} input={input} />
+      ) : view === "damage" ? (
         <DamagePanel meta={meta} build={build} input={input} />
       ) : (
         <div className="board grid flex-1 grid-cols-[minmax(0,1fr)] content-start justify-items-center gap-4 p-4 sm:p-6">

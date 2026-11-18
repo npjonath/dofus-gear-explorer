@@ -17,7 +17,7 @@ import (
 
 // schemaVersion changes whenever the tables below change shape. A database
 // written by another schema version is rebuilt and its data re-imported.
-const schemaVersion = "5"
+const schemaVersion = "6"
 
 // Meta keys.
 const (

@@ -105,6 +105,54 @@ func New(st *store.Store, client *release.Client, opts Options, log *slog.Logger
 // ImagesDir is where item icons are extracted.
 func (u *Updater) ImagesDir() string { return filepath.Join(u.opts.DataDir, "images", "items") }
 
+// SpellImagesDir and BreedImagesDir hold the spell icons and the class
+// portraits the fight simulator shows.
+func (u *Updater) SpellImagesDir() string { return filepath.Join(u.opts.DataDir, "images", "spells") }
+func (u *Updater) BreedImagesDir() string { return filepath.Join(u.opts.DataDir, "images", "breeds") }
+
+// The archives of a release the fight simulator's images come from.
+const (
+	spellImagesArchive = "spell_images_96.tar.gz"
+	breedImagesArchive = "class_head_images_64.tar.gz"
+)
+
+// extractFightImages unpacks the spell icons and class portraits found in a
+// directory. Missing archives are not an error: the app shows initials.
+func (u *Updater) extractFightImages(dir string) error {
+	ds, err := u.store.Load(context.Background())
+	if err != nil || ds == nil {
+		return err
+	}
+	spells, breeds := map[int]bool{}, map[int]bool{}
+	for _, sp := range ds.Spells {
+		if sp.BreedID != game.BreedTriggered {
+			spells[sp.IconID] = true
+		}
+	}
+	for _, b := range ds.Breeds {
+		// Portraits are numbered by class then sex; the first is kept.
+		breeds[b.ID*10] = true
+	}
+	for _, job := range []struct {
+		archive, dest, prefix string
+		wanted                map[int]bool
+	}{
+		{spellImagesArchive, u.SpellImagesDir(), "sort_", spells},
+		{breedImagesArchive, u.BreedImagesDir(), "Head_", breeds},
+	} {
+		archive := filepath.Join(dir, job.archive)
+		if _, statErr := os.Stat(archive); statErr != nil {
+			continue
+		}
+		count, err := release.ExtractImages(archive, job.dest, job.prefix, job.wanted)
+		if err != nil {
+			return fmt.Errorf("extract %s: %w", job.archive, err)
+		}
+		u.log.Info("images extracted", "archive", job.archive, "count", count)
+	}
+	return nil
+}
+
 func (u *Updater) Status() Status {
 	u.mu.Lock()
 	st := Status{
@@ -283,6 +331,9 @@ func (u *Updater) ImportLocal(ctx context.Context, dir, version string) error {
 			}
 		}
 	}
+	if err == nil {
+		err = u.extractFightImages(dir)
+	}
 	u.end(err)
 	return err
 }
@@ -429,7 +480,22 @@ func (u *Updater) downloadIcons(ctx context.Context, rel *release.Release, cache
 	if err != nil {
 		return fmt.Errorf("download icons: %w", err)
 	}
-	return u.extractIcons(archive, rel.Tag, u.opts.ImageSize)
+	if err := u.extractIcons(archive, rel.Tag, u.opts.ImageSize); err != nil {
+		return err
+	}
+	// The simulator's images are small next to the item icons: a failed
+	// download leaves the app with initials instead, not a failed import.
+	for _, name := range []string{spellImagesArchive, breedImagesArchive} {
+		asset, ok := rel.Asset(name)
+		if !ok {
+			u.log.Warn("release has no such archive", "asset", name)
+			continue
+		}
+		if err := u.client.Download(ctx, asset, filepath.Join(cacheDir, name), func(int64) {}); err != nil {
+			u.log.Warn("download failed", "asset", name, "error", err)
+		}
+	}
+	return u.extractFightImages(cacheDir)
 }
 
 // Reload reads the dataset from SQLite and hands it to the server.
