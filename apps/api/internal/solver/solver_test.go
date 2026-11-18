@@ -139,6 +139,88 @@ func TestSolveHandsOutAllowedExos(t *testing.T) {
 	}
 }
 
+// An exo goes to an item that lacks the stat. An item that already gives MP
+// is no home for the MP exo, even without a rune: counting it as one made the
+// search keep a rune that the exo then took away.
+func TestSolveKeepsAnItemForEachExo(t *testing.T) {
+	const belt, boots, cloakWithMP, cloak, rataFo = 70, 71, 72, 73, 900
+	ds := gametest.Dataset()
+	ds.Types = append(ds.Types,
+		game.ItemType{ID: 10, SuperTypeID: 4, Slot: game.SlotBelt, Name: game.Texts{"fr": "Ceinture"}},
+		game.ItemType{ID: 11, SuperTypeID: 5, Slot: game.SlotBoots, Name: game.Texts{"fr": "Bottes"}},
+		game.ItemType{ID: 17, SuperTypeID: 11, Slot: game.SlotCloak, Name: game.Texts{"fr": "Cape"}},
+	)
+	gear := func(id, typeID int, slot game.Slot, name string, effects ...game.ItemEffect) game.Item {
+		return game.Item{
+			ID: id, TypeID: typeID, Slot: slot, Level: 200, IconID: id,
+			Name: game.Texts{"fr": name}, Description: game.Texts{}, Effects: effects,
+		}
+	}
+	line := func(effectID, statID, value int) game.ItemEffect {
+		return game.ItemEffect{EffectID: effectID, Kind: game.EffectStat, StatID: statID, Min: value, Max: value}
+	}
+	ds.Items = append(ds.Items,
+		gear(belt, 10, game.SlotBelt, "Ceinture d'Essai", line(gametest.EffectVitality, game.StatVitality, 100)),
+		gear(boots, 11, game.SlotBoots, "Bottes d'Essai", line(gametest.EffectVitality, game.StatVitality, 100)),
+		// Neither cloak has room for the rune; only the second can take the exo.
+		gear(cloakWithMP, 17, game.SlotCloak, "Cape Rapide", line(gametest.EffectStrength, game.StatStrength, 25), line(128, game.StatMP, 1)),
+		gear(cloak, 17, game.SlotCloak, "Cape d'Essai", line(gametest.EffectStrength, game.StatStrength, 24)),
+	)
+	ds.Runes = append(ds.Runes,
+		game.Rune{ID: rataFo, EffectID: gametest.EffectStrength, StatID: game.StatStrength, Value: 20, Density: 80, Name: game.Texts{"fr": "Rune Rata Fo"}},
+	)
+	eng := engine.New(game.NewCatalog(ds))
+	out, err := Solve(context.Background(), eng, Request{
+		Character: engine.Character{Level: 200},
+		Maximize:  []Weight{{StatID: game.StatStrength, Weight: 1}},
+		// Only the items above can be forged.
+		Excluded: []int{10, 11, 12, 30, 40},
+		Forge:    ForgeOptions{Exos: []int{game.StatMP}, Transcendence: true},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	best := out.Solutions[0]
+	if best.Items["cloak"] != cloak {
+		t.Fatalf("cloak = %d, want %d: the other one cannot take the MP exo", best.Items["cloak"], cloak)
+	}
+	for _, position := range []string{"belt", "boots"} {
+		if mods := best.Mods[position]; mods == nil || mods.Transcendence != rataFo || len(mods.Exos) != 0 {
+			t.Errorf("%s holds %+v, want the rune and no exo", position, mods)
+		}
+	}
+	if mods := best.Mods["cloak"]; mods == nil || len(mods.Exos) != 1 || mods.Exos[0].StatID != game.StatMP {
+		t.Errorf("cloak holds %+v, want the MP exo", mods)
+	}
+	res := eng.Evaluate(engine.Build{Character: best.Character, Items: best.Items, Mods: best.Mods}, "fr")
+	if !res.Valid || !best.Feasible {
+		t.Errorf("valid %v, feasible %v, issues %+v", res.Valid, best.Feasible, res.Issues)
+	}
+}
+
+// Exos take different items: two that only the same item can hold leave one
+// without a home.
+func TestUnhostedExos(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		exos  int
+		hosts [1 << maxExos]int
+		want  int
+	}{
+		{"no exo", 0, [8]int{0: 9}, 0},
+		{"an item for each", 2, [8]int{0b01: 1, 0b10: 1}, 0},
+		{"one item for both", 2, [8]int{0b11: 1}, 1},
+		{"two items, both for the first only", 2, [8]int{0b01: 2}, 1},
+		{"no item at all", 3, [8]int{0: 5}, 3},
+		{"three exos, the third has no home", 3, [8]int{0b011: 4}, 1},
+		{"three exos sharing three items", 3, [8]int{0b111: 1, 0b011: 1, 0b100: 1}, 0},
+	} {
+		if got := unhosted(tc.exos, &tc.hosts); got != tc.want {
+			t.Errorf("%s: unhosted = %d, want %d", tc.name, got, tc.want)
+		}
+	}
+}
+
 func TestSolveWearsAtMostOnePrysmaradite(t *testing.T) {
 	ds := gametest.Dataset()
 	ds.Types = append(ds.Types, game.ItemType{
