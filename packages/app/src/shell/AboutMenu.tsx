@@ -1,12 +1,14 @@
 import { Dialog, DialogBackdrop, DialogClose, DialogContent, DialogDescription, DialogTitle } from "@ui-sdk/react/dialog"
 import { Menu, MenuContent, MenuGroup, MenuGroupLabel, MenuItem, MenuItemIcon, MenuTrigger } from "@ui-sdk/react/menu"
-import { ExternalLinkIcon, InfoIcon, ScaleIcon } from "lucide-react"
+import { ExternalLinkIcon, InfoIcon, RefreshCwIcon, ScaleIcon } from "lucide-react"
 import * as React from "react"
 import { useDataStatus } from "../api/queries"
 import { useI18n, type MessageKey } from "../i18n"
 import { noticesUrl, repositoryUrl } from "../lib/project"
 import { usePlatform } from "../platform"
 import { GitHubIcon } from "../ui/GitHubIcon"
+import { toaster } from "../ui/toaster"
+import { announceUpdate } from "./useAppUpdates"
 
 type Panel = "about" | "legal"
 
@@ -21,13 +23,29 @@ const legalSections: [MessageKey, MessageKey][] = [
 
 export function AboutMenu() {
   const { t } = useI18n()
-  const { version } = usePlatform()
+  const { version, updates } = usePlatform()
   const status = useDataStatus()
   const [panel, setPanel] = React.useState<Panel | null>(null)
 
+  // The item stays pending while the shell looks, then the answer arrives as a toast.
+  async function checkForUpdate(bridge: NonNullable<typeof updates>) {
+    try {
+      const update = await bridge.check()
+      if (update) announceUpdate(t, bridge, update)
+      else toaster(t("update.current"), { id: "app-update-progress", description: t("about.version", { version }) })
+    } catch {
+      toaster.error(t("update.checkFailed"), { id: "app-update-progress", description: t("update.checkFailedHint") })
+    }
+  }
+
   return (
     <>
-      <Menu onAction={(value) => setPanel(value as Panel)}>
+      <Menu
+        onAction={(value) => {
+          if (value !== "check") setPanel(value as Panel)
+          else if (updates) return checkForUpdate(updates)
+        }}
+      >
         <MenuTrigger className="icon-btn" aria-label={t("about.menu")}>
           <InfoIcon aria-hidden="true" />
         </MenuTrigger>
@@ -49,6 +67,14 @@ export function AboutMenu() {
               </MenuItemIcon>
               {t("legal.title")}
             </MenuItem>
+            {updates && (
+              <MenuItem value="check">
+                <MenuItemIcon>
+                  <RefreshCwIcon />
+                </MenuItemIcon>
+                {t("update.check")}
+              </MenuItem>
+            )}
           </MenuGroup>
         </MenuContent>
       </Menu>
