@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
 import type { ElementEntry } from "../api/types"
-import { addElement, elementsOf, maximizedAttack } from "./maximize"
+import { addElement, elementsOf, maximizedAttack, spellHitsIn } from "./maximize"
 
 describe("what the search receives for an entry to maximize", () => {
   it("keeps a weapon or a spell as it is", () => {
@@ -34,8 +34,26 @@ describe("what the search receives for an entry to maximize", () => {
         { element: "fire", share: 70 },
       ],
     })
+    const targeted: ElementEntry = {
+      ...entry,
+      target: { kind: "spell", id: 12 },
+      others: [{ element: "fire", share: 70, target: { kind: "weapon", id: 34 } }],
+    }
+    expect(maximizedAttack(targeted).parts).toEqual([
+      { element: "water", share: 100, kind: "spell", id: 12 },
+      { element: "fire", share: 70, kind: "weapon", id: 34 },
+    ])
     const summed: ElementEntry = { ...entry, mix: "sum", share: 60 }
     expect(maximizedAttack(summed).parts?.[0]).toEqual({ element: "water", share: 60 })
+  })
+})
+
+describe("the spells offered for an element", () => {
+  it("keeps those with a line in it or in the best element", () => {
+    const spell = { id: 1, name: "", breedId: 9, variantOf: 0, damage: true }
+    expect(spellHitsIn({ ...spell, elements: ["earth"] }, "earth")).toBe(true)
+    expect(spellHitsIn({ ...spell, elements: ["earth"] }, "water")).toBe(false)
+    expect(spellHitsIn({ ...spell, elements: ["best"] }, "water")).toBe(true)
   })
 })
 

@@ -28,6 +28,7 @@ import { newBuild, useActiveBuild, useStore } from "../../store"
 import { nextBuildName } from "../build/BuildTabs"
 import { CompareDialog, savedOption, type CompareOption } from "../compare/CompareDialog"
 import { ElementGoalOptions } from "./ElementGoal"
+import { GoalName, ItemName } from "./GoalName"
 import { defaultThreshold, FilterRow } from "../../ui/FilterRow"
 import { ItemCell } from "../../ui/ItemCell"
 import { ItemHover } from "../../ui/ItemHover"
@@ -84,16 +85,6 @@ function RequiredItem({ id, unplaced, onRemove }: { id: number; unplaced: boolea
       </button>
     </li>
   )
-}
-
-function ItemName({ id }: { id: number }) {
-  return <>{useItem(id).data?.name ?? "…"}</>
-}
-
-// The weapon or spell a damage goal is about.
-function GoalName({ meta, goal }: { meta: Meta; goal: { kind: "weapon" | "spell"; id: number } }) {
-  if (goal.kind === "weapon") return <ItemName id={goal.id} />
-  return <>{meta.spells.find((spell) => spell.id === goal.id)?.name ?? "…"}</>
 }
 
 // How an attack is read: which hit, and for a weapon its elemental forgemagic.
@@ -291,10 +282,15 @@ function ResultRow({
               return (goal.parts ?? []).map((part, at) => {
                 const share = at > 0 && parts[0] ? Math.round(((parts[at] ?? 0) * 100) / parts[0]) : null
                 return (
-                  <span key={`${index}-${part.element}`} className="goal">
+                  <span key={`${index}-${part.element}-${part.kind ?? "all"}-${part.id ?? 0}`} className="goal">
                     <span className="pip" data-tone={part.element} />
                     <span className="text-ink-2">
-                      {t("solver.elementDamage", { element: t(`element.${part.element}`) })} · {measure}
+                      {part.kind && part.id ? (
+                        <GoalName meta={meta} goal={{ kind: part.kind, id: part.id }} />
+                      ) : (
+                        t("solver.elementDamage", { element: t(`element.${part.element}`) })
+                      )}{" "}
+                      · {measure}
                     </span>
                     <strong>{number(parts[at] ?? 0)}</strong>
                     {share !== null && (
@@ -740,7 +736,9 @@ export function SolverPage({ meta }: { meta: Meta }) {
                         <AttackOptions attack={entry} onChange={(patch) => replace({ ...entry, ...patch })} />
                       </div>
                     )}
-                    {entry.kind === "element" && <ElementGoalOptions entry={entry} onChange={replace} />}
+                    {entry.kind === "element" && (
+                      <ElementGoalOptions meta={meta} breedId={build.breedId ?? 0} entry={entry} onChange={replace} />
+                    )}
                   </li>
                 )
               })}
@@ -947,7 +945,7 @@ export function SolverPage({ meta }: { meta: Meta }) {
       <section ref={resultsRef} className="min-w-0 bg-panel lg:h-full lg:overflow-y-auto" aria-live="polite">
         {solver.isError ? (
           <p className="m-0 p-6 text-bad" role="alert">
-            {t("solver.error")}
+            {solver.error instanceof ApiError && solver.error.code === "bad_damage_goal" ? t("solver.badGoal") : t("solver.error")}
           </p>
         ) : solver.isPending ? (
           <div className="grid gap-3 p-5">
