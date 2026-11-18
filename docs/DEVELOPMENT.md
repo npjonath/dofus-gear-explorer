@@ -175,7 +175,10 @@ The app does not simulate forging: there are no success odds and no leftover wei
 | --- | --- |
 | Roll | Any value between the item's worst and best roll. Best roll by default. |
 | Over | A natural line above its best roll, up to 101 of weight (505 Vitalité, 101 Force, 33 Sagesse…), or the item's own best roll when that is higher. |
-| Exo | A line the item does not have, up to 101 of weight, so 1 PA, 1 PM or 1 PO. One PA/PM/PO exo per item, and one of each per character. |
+| Exo | A line the item does not have, up to 101 of weight, so 1 PA, 1 PM or 1 PO. One PA/PM/PO exo per item. A character counts one exo of each: a second one leaves the stuff valid, as the game lets both items be worn, but adds nothing (`ignoredExos` in the evaluation). |
+| Shared weight | The overs and exos of an item share 101 of weight (`forge_weight` when they pass it). An over counts for what it adds above the best roll, an exo for its whole line: an MP exo (90) leaves room for 11 Force or 55 Vitalité of over, an AP exo (100) for 1 of weight. |
+| Heavy lines | When a rune leaves a line in over, the game counts that whole line plus the overs and exos already on the others, within 101. The engine does not know the order of the runes, so it accepts a result when one order passes: overs from the heaviest natural line to the lightest, then exos. Two overs on lines that are already near 101 fail in any order. |
+| Malus | A negative line can be forged away, up to 0 and no further. That is an over. A rune weighs half on a negative line, and its full weight for the last point, from -1 to 0: raising -5 Critique to -1 weighs 20 (4 × 10 / 2) and to 0 weighs 30, which leaves no room for an MP exo. Taking a malus off a PA, PM or PO line counts as that exo for the character. |
 | Transcendence rune | One per item, on an item with no over and no exo. The weight of the line it lands on plus the rune's density must stay within 101: 20 Dommages Eau weigh 100, so no Do Eau rune fits. Judged on the lines as they stand, dracorune included. |
 | Dracorune (update 3.8) | One per item, also on an over, exo or transcended item. |
 
@@ -216,7 +219,7 @@ What the search maximizes, characteristics and attacks alike, is ranked: each en
 When forgemagic is allowed in a search:
 
 - an allowed PA, PM or PO exo counts as one more point, then goes to an item of the result that lacks the stat;
-- each forgeable item comes with every forgemagic the request allows (each dracorune, the strongest rune that fits per useful characteristic, a negative Critical line forged up to -1), and the search switches between them on the stuff's real score: a rune that fills a missed condition beats one that adds to what is maximized;
+- each forgeable item comes with every forgemagic the request allows (each dracorune, the strongest rune that fits per useful characteristic, a negative Critical line forged away), and the search switches between them on the stuff's real score: a rune that fills a missed condition beats one that adds to what is maximized;
 - an exo needs an item with no transcendence rune, so the search keeps one free per exo.
 
 Required items take the first free place that fits them, before the items kept from the current stuff; one that finds no place is reported in `unplaced`.
