@@ -1,7 +1,7 @@
 {
   "name": "@dde/app",
   "private": true,
-  "version": "0.4.0",
+  "version": "0.4.1",
   "description": "The Dofus Gear Explorer interface, shared by the web and desktop shells.",
   "license": "MIT",
   "type": "module",
