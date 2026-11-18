@@ -30,6 +30,7 @@ var DataFiles = []string{
 	"spells.json",
 	"spell_levels.json",
 	"spell_variants.json",
+	"spell_types.json",
 	"breeds.json",
 }
 
@@ -123,6 +124,7 @@ type rawSpell struct {
 	DescriptionID flexInt `json:"descriptionId"`
 	IconID        int     `json:"iconId"`
 	TypeID        int     `json:"typeId"`
+	AdminName     string  `json:"adminName"`
 }
 
 // rawSpellHead is what the spell importer needs of a spell.
@@ -525,7 +527,7 @@ func Parse(dir, version string, langs []string) (*game.Dataset, error) {
 			}
 			if inst.ActionID == effectPassive {
 				if sp, ok := spellByID[inst.DiceNum]; ok && item.Passive == nil {
-					item.Passive = &game.Passive{Name: game.Texts{}, Description: game.Texts{}}
+					item.Passive = &game.Passive{Name: game.Texts{}, Description: game.Texts{}, SpellID: sp.ID}
 					passiveSpells[item.Passive] = sp
 				}
 				continue
@@ -580,7 +582,15 @@ func Parse(dir, version string, langs []string) (*game.Dataset, error) {
 	sort.Slice(ds.Items, func(a, b int) bool { return ds.Items[a].ID < ds.Items[b].ID })
 	sort.Slice(ds.Runes, func(a, b int) bool { return ds.Runes[a].ID < ds.Runes[b].ID })
 
-	ds.Breeds, ds.Spells, err = parseSpells(dir, rawSpells, effectByID, want)
+	var startTypes map[int]game.Texts
+	// The passive of an item is a spell its wearer's fights start with.
+	var passives []int
+	for _, it := range ds.Items {
+		if it.Passive != nil {
+			passives = append(passives, it.Passive.SpellID)
+		}
+	}
+	ds.Breeds, ds.Spells, startTypes, err = parseSpells(dir, rawSpells, effectByID, passives, want)
 	if err != nil {
 		return nil, err
 	}
@@ -761,5 +771,6 @@ func Parse(dir, version string, langs []string) (*game.Dataset, error) {
 			}
 		}
 	}
+	assignStartSpells(ds, startTypes)
 	return ds, nil
 }

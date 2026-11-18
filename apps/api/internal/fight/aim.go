@@ -24,7 +24,7 @@ type Slot struct {
 // Slot describes a spell of the bar, or nil when the character cannot cast
 // it.
 func (s *Sim) Slot(st *State, id int) *Slot {
-	a := s.attack(id, 0)
+	a := s.spell(st, id)
 	if a == nil {
 		return nil
 	}
@@ -83,7 +83,7 @@ type Aim struct {
 // Aim lists where a spell can be aimed and previews each cast. The effects
 // drawn at random are left out of the preview.
 func (s *Sim) Aim(st *State, spellID int) *Aim {
-	a := s.attack(spellID, 0)
+	a := s.spell(st, spellID)
 	if a == nil || st.Phase != PhaseFight {
 		return nil
 	}
@@ -108,17 +108,34 @@ func (s *Sim) Aim(st *State, spellID int) *Aim {
 
 func (s *Sim) preview(st *State, a *attack, spellID, cell int, canCrit bool) Target {
 	target := Target{Cell: cell, Zone: s.shown(st, a, cell), Losses: []Loss{}, Shifts: []Shift{}}
-	losses := map[int]*Loss{}
-	var order []int
-	run := func(crit, high bool, set func(*Loss, int)) *State {
+	// run plays the cast on a copy of the fight, with the lowest or the
+	// highest rolls and one outcome of what the spell draws at random, and
+	// returns what each entity lost and where the cast left everyone.
+	run := func(crit, high bool, outcome int) (map[int]int, *State) {
 		trial := st.clone()
-		c := &casting{root: spellID, crit: crit, roll: func(lo, hi int) int {
-			if high {
-				return hi
-			}
-			return lo
-		}}
-		s.resolve(trial, c, trial.Player().ID, a, cell, 0)
+		top := true
+		c := &casting{root: spellID, crit: crit,
+			roll: func(lo, hi int) int {
+				if high {
+					return hi
+				}
+				return lo
+			},
+			// The spell's own draw is the outcome asked for; those of the
+			// spells it casts in turn are left out.
+			pick: func([]float64) int {
+				if top {
+					top = false
+					return outcome
+				}
+				return -1
+			},
+		}
+		id := trial.Player().ID
+		s.resolve(trial, c, id, id, a, cell, 0)
+		if crit {
+			s.fire(trial, c, id, id, 0, "CC")
+		}
 		sums := map[int]int{}
 		for _, ev := range c.events {
 			switch ev.Type {
@@ -128,24 +145,43 @@ func (s *Sim) preview(st *State, a *attack, spellID, cell int, canCrit bool) Tar
 				sums[ev.Entity] -= ev.Value
 			}
 		}
-		for id, sum := range sums {
-			if losses[id] == nil {
-				losses[id] = &Loss{Entity: id}
-				order = append(order, id)
-			}
-			set(losses[id], sum)
-		}
-		return trial
+		return sums, trial
 	}
-	after := run(false, false, func(l *Loss, v int) { l.Min = v })
-	run(false, true, func(l *Loss, v int) { l.Max = v })
+	// span gives, per entity, the least and the most it loses over every
+	// outcome the spell can draw.
+	span := func(crit bool) (lows, highs map[int]int, after *State) {
+		effects := a.effects
+		if crit && len(a.critEffects) > 0 {
+			effects = a.critEffects
+		}
+		groups, _ := outcomes(effects)
+		lows, highs = map[int]int{}, map[int]int{}
+		for outcome := 0; outcome < max(1, len(groups)); outcome++ {
+			low, trial := run(crit, false, outcome)
+			high, _ := run(crit, true, outcome)
+			if after == nil {
+				after = trial
+			}
+			for _, e := range st.Entities {
+				if outcome == 0 || low[e.ID] < lows[e.ID] {
+					lows[e.ID] = low[e.ID]
+				}
+				if outcome == 0 || high[e.ID] > highs[e.ID] {
+					highs[e.ID] = high[e.ID]
+				}
+			}
+		}
+		return lows, highs, after
+	}
+	lows, highs, after := span(false)
+	critLows, critHighs := map[int]int{}, map[int]int{}
 	if canCrit {
-		run(true, false, func(l *Loss, v int) { l.CritMin = v })
-		run(true, true, func(l *Loss, v int) { l.CritMax = v })
+		critLows, critHighs, _ = span(true)
 	}
 	for _, e := range st.Entities {
-		if l := losses[e.ID]; l != nil && (l.Min != 0 || l.Max != 0 || l.CritMin != 0 || l.CritMax != 0) {
-			target.Losses = append(target.Losses, *l)
+		l := Loss{Entity: e.ID, Min: lows[e.ID], Max: highs[e.ID], CritMin: critLows[e.ID], CritMax: critHighs[e.ID]}
+		if l.Min != 0 || l.Max != 0 || l.CritMin != 0 || l.CritMax != 0 {
+			target.Losses = append(target.Losses, l)
 		}
 		if moved := after.entity(e.ID); moved != nil && moved.Cell != e.Cell {
 			target.Shifts = append(target.Shifts, Shift{Entity: e.ID, Cell: moved.Cell})
@@ -165,6 +201,12 @@ func (s *Sim) shown(st *State, a *attack, cell int) []int {
 			continue
 		}
 		if m := readMask(e.Targets); m.caster && !m.ally && !m.enemy && !m.allyOther && !m.anyone {
+			continue
+		}
+		// An effect kept for a monster no fight has is there for the
+		// spell's description: the one that applies comes from a spell
+		// cast in turn, which may cover other cells.
+		if game.CastsSpell(e.Action) {
 			continue
 		}
 		for _, c := range st.Board.zone(e.Zone, player.Cell, cell) {

@@ -68,6 +68,7 @@ type rawSpellEffect struct {
 	Delay      int     `json:"delay"`
 	Flags      int     `json:"m_flags"`
 	TargetMask string  `json:"targetMask"`
+	Lasts      int     `json:"effectTriggerDuration"`
 	Random     float64 `json:"random"`
 	Group      int     `json:"group"`
 	Zone       rawZone `json:"zoneDescr"`
@@ -113,6 +114,20 @@ func castRules(level rawSpellLevel) game.CastRules {
 	}
 }
 
+// unsignedBoosts gives the sign of the boosts the game data does not sign:
+// final damage and resistance in percent, and the Power kept for spells or
+// for weapons.
+var unsignedBoosts = map[int]int{1171: 1, 1172: -1, 1076: 1, 1077: -1, 1054: 1, 1144: 1}
+
+// startSpellAdmin is how the game data labels the spells a fight starts
+// with: those that set a class's states and passive effects.
+const startSpellAdmin = "Sort initial"
+
+type rawSpellType struct {
+	ID         int     `json:"id"`
+	LongNameID flexInt `json:"longNameId"`
+}
+
 // fightEffects keeps every effect of a grade as the game data gives it, for
 // the fight simulator, which applies them one by one.
 func fightEffects(effects []rawSpellEffect, defs map[int]rawEffect) []game.SpellEffect {
@@ -128,16 +143,21 @@ func fightEffects(effects []rawSpellEffect, defs map[int]rawEffect) []game.Spell
 		}
 		// An effect that raises or lowers a characteristic says which one.
 		stat, sign := 0, 0
-		if def, ok := defs[e.ActionID]; ok && def.BonusType != 0 && def.Characteristic != 0 {
-			stat, sign = def.Characteristic, def.BonusType
+		if def, ok := defs[e.ActionID]; ok && def.Characteristic != 0 {
+			if def.BonusType != 0 {
+				stat, sign = def.Characteristic, def.BonusType
+			} else if known := unsignedBoosts[e.ActionID]; known != 0 {
+				stat, sign = def.Characteristic, known
+			}
 		}
 		out = append(out, game.SpellEffect{
 			Stat: stat, Sign: sign,
 			Action: e.ActionID, Min: e.DiceNum, Max: e.DiceSide, Value: e.Value, Targets: e.TargetMask,
 			Duration: e.Duration, Delay: e.Delay, Trigger: trigger, Random: e.Random, Group: e.Group,
-			Zone:      game.Zone{Shape: shape, Size: e.Zone.Param1, Min: e.Zone.Param2, Decrease: e.Zone.Decrease, Steps: e.Zone.Steps},
-			Shown:     e.Flags&effectVisibleInTooltip != 0,
-			Described: e.Flags&effectDescribedOnly != 0,
+			TriggerTurns: e.Lasts,
+			Zone:         game.Zone{Shape: shape, Size: e.Zone.Param1, Min: e.Zone.Param2, Decrease: e.Zone.Decrease, Steps: e.Zone.Steps},
+			Shown:        e.Flags&effectVisibleInTooltip != 0,
+			Described:    e.Flags&effectDescribedOnly != 0,
 		})
 	}
 	return out
@@ -217,22 +237,22 @@ func attackLines(level rawSpellLevel) []game.AttackLine {
 // parseSpells reads the classes and the spells a character can cast: each
 // class's spells and their variants, and the common spells. Spell names are
 // requested through want.
-func parseSpells(dir string, spells []rawSpellHead, defs map[int]rawEffect, want func(game.Texts, flexInt)) ([]game.Breed, []game.Spell, error) {
+func parseSpells(dir string, spells []rawSpellHead, defs map[int]rawEffect, passives []int, want func(game.Texts, flexInt)) ([]game.Breed, []game.Spell, map[int]game.Texts, error) {
 	breedRefs, err := readRefs(dir, "breeds.json")
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 	rawBreeds, err := decodeClass[rawBreed](breedRefs, "BreedData")
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 	variantRefs, err := readRefs(dir, "spell_variants.json")
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 	rawVariants, err := decodeClass[rawVariant](variantRefs, "SpellVariantData")
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 
 	headByID := make(map[int]rawSpellHead, len(spells))
@@ -292,16 +312,51 @@ func parseSpells(dir string, spells []rawSpellHead, defs map[int]rawEffect, want
 
 	levelRefs, err := readRefs(dir, "spell_levels.json")
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 	rawLevels := map[int][]rawSpellLevel{}
 	for _, ref := range levelRefs {
 		level, err := decodeOne[rawSpellLevel](ref)
 		if err != nil {
-			return nil, nil, err
+			return nil, nil, nil, err
 		}
 		rawLevels[level.SpellID] = append(rawLevels[level.SpellID], level)
 	}
+	// The spells a fight starts with are filed by type, one type per class:
+	// they are kept with their type's name, which says the class once the
+	// texts are read.
+	typeRefs, err := readRefs(dir, "spell_types.json")
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	rawTypes, err := decodeClass[rawSpellType](typeRefs, "SpellTypeData")
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	typeNameID := map[int]flexInt{}
+	for _, t := range rawTypes {
+		typeNameID[t.ID] = t.LongNameID
+	}
+	startTypes := map[int]game.Texts{}
+	typeNames := map[int]game.Texts{}
+	for _, sp := range spells {
+		if _, known := owner[sp.ID]; known || !strings.HasPrefix(sp.AdminName, startSpellAdmin) || len(rawLevels[sp.ID]) == 0 {
+			continue
+		}
+		if typeNames[sp.TypeID] == nil {
+			typeNames[sp.TypeID] = game.Texts{}
+			want(typeNames[sp.TypeID], typeNameID[sp.TypeID])
+		}
+		owner[sp.ID] = place{breed: game.BreedTriggered}
+		startTypes[sp.ID] = typeNames[sp.TypeID]
+	}
+
+	for _, id := range passives {
+		if _, known := owner[id]; !known && len(rawLevels[id]) > 0 {
+			owner[id] = place{breed: game.BreedTriggered}
+		}
+	}
+
 	// A spell often works through others it casts in turn, which no
 	// character can cast directly: the simulator needs those too.
 	queue := make([]int, 0, len(owner))
@@ -354,5 +409,38 @@ func parseSpells(dir string, spells []rawSpellHead, defs map[int]rawEffect, want
 	}
 	sort.Slice(out, func(a, b int) bool { return out[a].ID < out[b].ID })
 	sort.Slice(breeds, func(a, b int) bool { return breeds[a].Order < breeds[b].Order })
-	return breeds, out, nil
+	return breeds, out, startTypes, nil
+}
+
+// startKeywords is what is left of a starting type's name once the class is
+// taken out of it, in the languages the game names its types in.
+var startKeywords = []string{"sorts initiaux", "sort initial", "starting spells", "starting spell"}
+
+// assignStartSpells says, once the texts are read, which class each starting
+// spell belongs to: the one its type is named after.
+func assignStartSpells(ds *game.Dataset, startTypes map[int]game.Texts) {
+	for i := range ds.Spells {
+		sp := &ds.Spells[i]
+		names, ok := startTypes[sp.ID]
+		if !ok {
+			continue
+		}
+		for _, breed := range ds.Breeds {
+			for lang, typeName := range names {
+				class := strings.ToLower(breed.Name[lang])
+				rest, found := strings.CutSuffix(strings.ToLower(typeName), class)
+				if !found {
+					rest, found = strings.CutPrefix(strings.ToLower(typeName), class)
+				}
+				if class == "" || !found {
+					continue
+				}
+				for _, keyword := range startKeywords {
+					if strings.TrimSpace(rest) == keyword {
+						sp.StartsFor = breed.ID
+					}
+				}
+			}
+		}
+	}
 }

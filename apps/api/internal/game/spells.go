@@ -137,17 +137,36 @@ func TargetsEnemy(mask string) bool {
 const BreedTriggered = -1
 
 // Actions through which a spell casts another one: the spell cast is the
-// effect's Min and its grade the effect's Max.
+// effect's Min and its grade the effect's Max. They differ in who casts and
+// where: the target is who the effect applies to, the source who set the
+// effect off (the caster, or for an effect that waits, whoever triggered it).
 const (
+	// ActionTargetCasts has the target cast the spell on its own cell.
+	ActionTargetCasts = 792
+	// ActionTargetExecutes and ActionTargetExecutesShown do the same.
+	ActionTargetExecutes      = 1017
+	ActionTargetExecutesShown = 1018
+	// ActionTargetCastsOnSource has the target cast it on the source.
+	ActionTargetCastsOnSource = 1019
 	// ActionCastSpell has the caster cast the spell on the target's cell.
 	ActionCastSpell = 1160
-	// ActionTriggerSpell has the target cast the spell on its own cell.
-	ActionTriggerSpell = 792
+	// ActionSourceCasts has the source cast it on the target's cell, and
+	// ActionSourceCastsOnSelf on its own cell.
+	ActionSourceCasts       = 2160
+	ActionSourceCastsOnSelf = 2794
+	// ActionCastsOnCell has the caster cast it on the aimed cell, whether
+	// anyone stands there or not.
+	ActionCastsOnCell = 2960
 )
 
 // CastsSpell reports whether an action casts another spell.
 func CastsSpell(action int) bool {
-	return action == ActionCastSpell || action == ActionTriggerSpell
+	switch action {
+	case ActionTargetCasts, ActionTargetExecutes, ActionTargetExecutesShown, ActionTargetCastsOnSource,
+		ActionCastSpell, ActionSourceCasts, ActionSourceCastsOnSelf, ActionCastsOnCell:
+		return true
+	}
+	return false
 }
 
 // Zone is the cells an effect covers around the cell a spell is aimed at.
@@ -184,9 +203,12 @@ type SpellEffect struct {
 	Duration int `json:"duration,omitempty"`
 	Delay    int `json:"delay,omitempty"`
 	// Trigger is empty for an effect applied as the spell is cast, or the
-	// game's trigger otherwise.
-	Trigger string `json:"trigger,omitempty"`
-	Zone    Zone   `json:"zone"`
+	// game's triggers otherwise: the effect waits on its target and applies
+	// each time one of them happens, for TriggerTurns turns (63 and more is
+	// for the whole fight).
+	Trigger      string `json:"trigger,omitempty"`
+	TriggerTurns int    `json:"triggerTurns,omitempty"`
+	Zone         Zone   `json:"zone"`
 	// Random is the weight of an effect drawn among those of its Group.
 	Random float64 `json:"random,omitempty"`
 	Group  int     `json:"group,omitempty"`
@@ -246,6 +268,9 @@ type Spell struct {
 	Order int
 	// VariantOf is the spell this one replaces, or zero.
 	VariantOf int
+	// StartsFor is the class whose fights start with this spell cast on the
+	// character: what sets its states and passive effects. Zero for others.
+	StartsFor int
 	Name      Texts
 	Levels    []SpellLevel
 }

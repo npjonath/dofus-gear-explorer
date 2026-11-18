@@ -18,6 +18,17 @@ const (
 	spellChain
 	spellSpark
 	spellSharpen
+	spellVenom
+	spellDice
+	spellOpening
+	spellFocus
+	spellRelic
+	spellRelicEcho
+)
+
+const (
+	stateFocused = 78
+	stateReady   = 79
 )
 
 const stateMarked = 77
@@ -54,6 +65,7 @@ func newSim(stats map[int]int) *Sim {
 		spell(spellMark, game.SpellLevel{APCost: 1, RangeMax: 6,
 			Effects: []game.SpellEffect{{Action: actionState, Value: stateMarked, Duration: 2, Targets: "A", Zone: point()}}}),
 		// 50 Fire damage, or 200 on a marked enemy, whose mark it removes.
+		// The mark is read as the spell is cast, for every effect.
 		spell(spellFinisher, game.SpellLevel{APCost: 2, RangeMax: 6, Effects: []game.SpellEffect{
 			{Action: 99, Min: 50, Max: 50, Targets: "A,e77", Zone: point(), Shown: true},
 			{Action: 99, Min: 200, Max: 200, Targets: "A,E77", Zone: point(), Shown: true},
@@ -71,7 +83,44 @@ func newSim(stats map[int]int) *Sim {
 			{Action: actionSpellBase, Min: spellBolt, Value: 20, Duration: 1, Targets: "C", Zone: point()},
 		}}),
 	}
-	spells[spellSpark-1].BreedID = game.BreedTriggered
+	spells = append(spells,
+		// 40 Fire damage at the start of each of the target's two next turns.
+		spell(spellVenom, game.SpellLevel{APCost: 2, RangeMax: 6, Effects: []game.SpellEffect{
+			{Action: 99, Min: 40, Max: 40, Targets: "A", Duration: 2, Trigger: "TB", Zone: point(), Shown: true},
+		}}),
+		// One of three hits, drawn at random: 10, 20 or 30.
+		spell(spellDice, game.SpellLevel{APCost: 2, RangeMax: 6, Effects: []game.SpellEffect{
+			{Action: 99, Min: 10, Max: 10, Targets: "A", Zone: point(), Random: 33.3, Group: 1, Shown: true},
+			{Action: 99, Min: 20, Max: 20, Targets: "A", Zone: point(), Random: 33.3, Group: 2, Shown: true},
+			{Action: 99, Min: 30, Max: 30, Targets: "A", Zone: point(), Random: 33.4, Group: 3, Shown: true},
+		}}),
+		// A class's opening: the caster is ready for the whole fight, each
+		// time it focuses it gains 2 AP for the turn, and the bolt costs it
+		// 1 AP less.
+		spell(spellOpening, game.SpellLevel{Effects: []game.SpellEffect{
+			{Action: actionState, Value: stateReady, Duration: -1, Targets: "C", Zone: point()},
+			{Action: 111, Min: 2, Stat: game.StatAP, Sign: 1, Duration: 1, Targets: "C", Trigger: "EON78", TriggerTurns: 63, Zone: point()},
+			{Action: modCostLess, Min: spellBolt, Value: 1, Duration: -1, Targets: "C", Zone: point()},
+		}}),
+		// Focuses the caster for the turn; only a ready caster can.
+		spell(spellFocus, game.SpellLevel{APCost: 1, Effects: []game.SpellEffect{
+			{Action: actionState, Value: stateFocused, Duration: 1, Targets: "C,*E79", Zone: point()},
+		}}),
+		// An item's passive: 10 % final damage on the first turn, 3 % on the
+		// second, and from the second turn on its echo at each turn's start.
+		spell(spellRelic, game.SpellLevel{Effects: []game.SpellEffect{
+			{Action: 1171, Min: 10, Stat: statFinalDamage, Sign: 1, Duration: 1, Targets: "C", Zone: point()},
+			{Action: 1171, Min: 3, Stat: statFinalDamage, Sign: 1, Duration: 1, Delay: 1, Targets: "C", Zone: point()},
+			{Action: game.ActionTargetCasts, Min: spellRelicEcho, Max: 1, Targets: "C", Trigger: "TB", TriggerTurns: 63, Delay: 1, Zone: point()},
+		}}),
+		spell(spellRelicEcho, game.SpellLevel{Effects: []game.SpellEffect{
+			{Action: 111, Min: 1, Stat: game.StatAP, Sign: 1, Duration: 1, Targets: "C", Zone: point()},
+		}}),
+	)
+	spells[spellOpening-1].StartsFor = 1
+	for _, id := range []int{spellSpark, spellOpening, spellRelic, spellRelicEcho} {
+		spells[id-1].BreedID = game.BreedTriggered
+	}
 	if stats[game.StatAP] == 0 {
 		stats[game.StatAP] = 12
 	}
@@ -158,6 +207,10 @@ func TestZones(t *testing.T) {
 	// A line runs away from the caster, and a zone is cut at the board's edge.
 	if line := b.zone(game.Zone{Shape: "L", Size: 2}, caster, centre); line[2] != b.cell(8, 6) {
 		t.Errorf("line = %v", line)
+	}
+	// Another runs from the caster to the aimed cell.
+	if reach := b.zone(game.Zone{Shape: "l", Size: 1, Min: 63}, caster, centre); len(reach) != 3 || reach[0] != b.cell(4, 6) || reach[2] != centre {
+		t.Errorf("line from the caster = %v", reach)
 	}
 	if corner := b.zone(game.Zone{Shape: "C", Size: 1}, caster, b.cell(0, 0)); len(corner) != 3 {
 		t.Errorf("circle in a corner covers %d cells", len(corner))
@@ -390,5 +443,100 @@ func TestADefeatedDummyStandsBackUp(t *testing.T) {
 	events, _ := s.Cast(st, spellBolt, st.Board.cell(5, 6))
 	if last := events[len(events)-1]; last.Type != EventDefeat || st.Entities[1].HP != 150 {
 		t.Errorf("after a lethal hit: %+v, HP %d", last, st.Entities[1].HP)
+	}
+}
+
+func TestDamageOverTurnsWaitsForItsTurn(t *testing.T) {
+	s := newSim(map[int]int{game.StatCritical: -100})
+	st := fightAt(s, Dummies{}, [2]int{5, 6})
+	events, _ := s.Cast(st, spellVenom, st.Board.cell(5, 6))
+	if lost(events, 2) != 0 {
+		t.Errorf("the venom hit at once for %d", lost(events, 2))
+	}
+	for turn, want := range []int{40, 40, 0} {
+		events, _ = s.EndTurn(st)
+		if got := lost(events, 2); got != want {
+			t.Errorf("venom after %d turn(s) = %d, want %d", turn+1, got, want)
+		}
+	}
+	if st.TotalDamage != 80 {
+		t.Errorf("total = %d, want 80", st.TotalDamage)
+	}
+}
+
+func TestOneOutcomeIsDrawnAndThePreviewSpansThemAll(t *testing.T) {
+	s := newSim(map[int]int{game.StatCritical: -100, game.StatAP: 60})
+	st := fightAt(s, Dummies{}, [2]int{5, 6})
+	target := st.Board.cell(5, 6)
+	seen := map[int]bool{}
+	for i := 0; i < 30; i++ {
+		events, _ := s.Cast(st, spellDice, target)
+		seen[lost(events, 2)] = true
+	}
+	if !seen[10] || !seen[20] || !seen[30] || len(seen) != 3 {
+		t.Errorf("draws over 30 casts = %v, want 10, 20 and 30 only", seen)
+	}
+	for _, tg := range s.Aim(st, spellDice).Targets {
+		if tg.Cell == target && (len(tg.Losses) != 1 || tg.Losses[0].Min != 10 || tg.Losses[0].Max != 30) {
+			t.Errorf("preview = %+v, want 10 to 30", tg.Losses)
+		}
+	}
+}
+
+func TestAClassOpensItsFights(t *testing.T) {
+	s := newSim(map[int]int{game.StatCritical: -100, game.StatAP: 6})
+	s.Breed = 1
+	st := fightAt(s, Dummies{}, [2]int{5, 6})
+	if !st.Player().inState(stateReady) {
+		t.Fatal("the opening spell did not put the character in its state")
+	}
+	// The opening makes the bolt cheaper.
+	if slot := s.Slot(st, spellBolt); slot.APCost != 2 {
+		t.Errorf("bolt costs %d AP, want 2", slot.APCost)
+	}
+	// Focusing costs 1 AP and sets off the 2 AP that waited for it.
+	s.Cast(st, spellFocus, st.Player().Cell)
+	if ap, _ := s.Points(st); ap != 6-1+2 {
+		t.Errorf("AP after focusing = %d, want 7", ap)
+	}
+	// Both end with the turn.
+	s.EndTurn(st)
+	if ap, _ := s.Points(st); ap != 6 || st.Player().inState(stateFocused) {
+		t.Errorf("next turn: %d AP, focused %v", ap, st.Player().inState(stateFocused))
+	}
+
+	// Without the class, nobody is ready: focusing does nothing.
+	s.Breed = 0
+	st = fightAt(s, Dummies{}, [2]int{5, 6})
+	s.Cast(st, spellFocus, st.Player().Cell)
+	if st.Player().inState(stateFocused) {
+		t.Error("focused without being ready")
+	}
+}
+
+func TestAnItemPassiveFollowsItsTurns(t *testing.T) {
+	s := newSim(map[int]int{game.StatAP: 6})
+	s.Passives = []int{spellRelic}
+	st := fightAt(s, Dummies{}, [2]int{5, 6})
+	want := []struct{ final, ap int }{{10, 6}, {3, 7}, {0, 7}}
+	for turn, w := range want {
+		stat := s.StatOf(st.Player())
+		if ap, _ := s.Points(st); stat(statFinalDamage) != w.final || ap != w.ap {
+			t.Errorf("turn %d: %d %% final damage and %d AP, want %d %% and %d", turn+1, stat(statFinalDamage), ap, w.final, w.ap)
+		}
+		s.EndTurn(st)
+	}
+}
+
+func TestConditionsOnHealth(t *testing.T) {
+	s := newSim(map[int]int{})
+	dummy := &Entity{ID: 2, Kind: KindDummy, HP: 400, MaxHP: 1000}
+	under, over := cond{letter: 'V', arg: 50}, cond{letter: 'v', arg: 50}
+	if !s.holds(under, dummy, nil) || s.holds(over, dummy, nil) {
+		t.Error("at 40 % of its health, the entity is under half")
+	}
+	// What a plain fighter can never be fails; its opposite passes.
+	if s.holds(cond{letter: 'F', arg: 12}, dummy, nil) || !s.holds(cond{letter: 'f', arg: 12}, dummy, nil) {
+		t.Error("a dummy is no given monster")
 	}
 }

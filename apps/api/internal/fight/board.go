@@ -183,11 +183,20 @@ func (b Board) zone(z game.Zone, caster, target int) []int {
 		})
 	case "G":
 		around(size, func(dx, dy int) bool { return max(abs(dx), abs(dy)) <= size })
-	case "L", "l":
+	case "L":
 		for i := least; i <= size; i++ {
 			add(tx+hx*i, ty+hy*i)
 		}
-	case "T":
+	case "l":
+		// Every cell from the caster to the aimed cell, the aimed one last.
+		if caster != target {
+			for _, c := range b.between(caster, target) {
+				x, y := b.xy(c)
+				add(x, y)
+			}
+		}
+		add(tx, ty)
+	case "T", "-":
 		// A line across the direction of the cast.
 		add(tx, ty)
 		for i := 1; i <= size; i++ {

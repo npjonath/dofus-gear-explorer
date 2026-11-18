@@ -3,6 +3,7 @@ package httpapi
 import (
 	"math/rand/v2"
 	"net/http"
+	"sort"
 
 	"dofusdb/api/internal/engine"
 	"dofusdb/api/internal/fight"
@@ -61,9 +62,15 @@ type fightDTO struct {
 func fightSim(eng *engine.Engine, req *fightRequest, lang string) *fight.Sim {
 	res := eng.Evaluate(req.Build, lang)
 	sim := &fight.Sim{
-		Cat: eng.Catalog, Stat: func(id int) int { return res.Stats[id] }, Level: res.Level,
+		Cat: eng.Catalog, Stat: func(id int) int { return res.Stats[id] }, Level: res.Level, Breed: req.BreedID,
 		Rand: rand.New(rand.NewPCG(rand.Uint64(), rand.Uint64())),
 	}
+	for _, id := range req.Items {
+		if it := eng.Catalog.ItemByID[id]; it != nil && it.Passive != nil && it.Passive.SpellID != 0 {
+			sim.Passives = append(sim.Passives, it.Passive.SpellID)
+		}
+	}
+	sort.Ints(sim.Passives)
 	if it := eng.Catalog.ItemByID[req.Items["weapon"]]; it != nil && it.Weapon != nil {
 		sim.Weapon = it
 		if mods := req.Mods["weapon"]; mods != nil {
@@ -97,7 +104,7 @@ func validState(st *fight.State) bool {
 		return false
 	}
 	for _, e := range st.Entities {
-		if e.Cell < 0 || e.Cell >= cells || len(e.Buffs) > maxFightBuffs {
+		if e.Cell < 0 || e.Cell >= cells || len(e.Buffs) > maxFightBuffs || len(e.Hooks) > maxFightBuffs {
 			return false
 		}
 	}

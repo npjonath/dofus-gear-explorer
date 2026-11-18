@@ -36,6 +36,15 @@ const (
 	// and BuffHealed the heals it receives.
 	BuffSuffered = "suffered"
 	BuffHealed   = "healed"
+	// BuffSpell changes how the spell Ref is cast: Mod is the game's action
+	// (its cost, its range, its casts per turn...) and Value the amount.
+	BuffSpell = "spell"
+)
+
+// Caps on what an entity carries, far above what a fight puts on it.
+const (
+	maxBuffs = 256
+	maxHooks = 256
 )
 
 // Buff is a lasting effect on an entity.
@@ -47,9 +56,29 @@ type Buff struct {
 	From  int `json:"from"`
 	Ref   int `json:"ref"`
 	Value int `json:"value"`
+	Mod   int `json:"mod,omitempty"`
 	// Turns is how many turns it still lasts, the current one included; -1
 	// never ends.
 	Turns int `json:"turns"`
+}
+
+// Hook is an effect waiting on an entity for one of its triggers: the start
+// or the end of a turn, a state gained or lost, a hit taken. It names the
+// effect by where it is in the game data rather than carrying it.
+type Hook struct {
+	Spell    int  `json:"spell"`
+	Grade    int  `json:"grade"`
+	Critical bool `json:"critical,omitempty"`
+	Index    int  `json:"index"`
+	// From is the spell the player cast and Caster who cast it.
+	From   int `json:"from"`
+	Caster int `json:"caster"`
+	// Turns is how many turns it still waits; -1 for the whole fight.
+	Turns int `json:"turns"`
+	// Delay is the number of turns before the effect counts at all: an
+	// effect with no trigger applies once when it reaches zero, one with a
+	// trigger starts waiting then.
+	Delay int `json:"delay,omitempty"`
 }
 
 // Entity is a fighter on the board.
@@ -63,6 +92,7 @@ type Entity struct {
 	// player's come from the stuff.
 	Stats map[int]int `json:"stats,omitempty"`
 	Buffs []Buff      `json:"buffs"`
+	Hooks []Hook      `json:"hooks,omitempty"`
 }
 
 // Use counts the casts of a spell.
@@ -105,6 +135,11 @@ type Sim struct {
 	// Stat gives the stuff's final characteristics.
 	Stat  func(statID int) int
 	Level int
+	// Breed is the character's class, whose starting spells open the fight;
+	// zero for none. Passives are the spells of the passives of the items
+	// worn, which open it too.
+	Breed    int
+	Passives []int
 	// Weapon is the weapon worn, if any, and WeaponElement its elemental
 	// forgemagic.
 	Weapon        *game.Item
@@ -168,6 +203,7 @@ func (st *State) clone() *State {
 	out.Entities = make([]Entity, len(st.Entities))
 	for i, e := range st.Entities {
 		e.Buffs = append([]Buff(nil), e.Buffs...)
+		e.Hooks = append([]Hook(nil), e.Hooks...)
 		out.Entities[i] = e
 	}
 	out.Uses = make(map[int]*Use, len(st.Uses))
@@ -233,6 +269,7 @@ func (s *Sim) Points(st *State) (ap, mp int) {
 // attack is a weapon or a spell grade, as the simulator casts it.
 type attack struct {
 	id          int
+	grade       int
 	weapon      bool
 	cost        int
 	rangeMin    int
@@ -288,9 +325,75 @@ func (s *Sim) attack(id, grade int) *attack {
 		return nil
 	}
 	return &attack{
-		id: id, cost: level.APCost, rangeMin: level.RangeMin, rangeMax: level.RangeMax, crit: level.CritChance,
+		id: id, grade: level.Grade, cost: level.APCost, rangeMin: level.RangeMin, rangeMax: level.RangeMax, crit: level.CritChance,
 		rules: level.Cast, effects: level.Effects, critEffects: level.CritEffects,
 	}
+}
+
+// tuned returns a spell as an entity casts it, with what its lasting
+// effects change of the spell: its cost, its range, its limits.
+func (s *Sim) tuned(caster *Entity, a *attack) *attack {
+	if a == nil || a.weapon {
+		return a
+	}
+	out := *a
+	for _, b := range caster.Buffs {
+		if b.Kind != BuffSpell || b.Ref != a.id {
+			continue
+		}
+		switch b.Mod {
+		case modCostLess:
+			out.cost -= b.Value
+		case modCostMore:
+			out.cost += b.Value
+		case modMinRange:
+			out.rangeMin += b.Value
+		case modMinRangeLess:
+			out.rangeMin -= b.Value
+		case modMinRangeSet:
+			out.rangeMin = b.Value
+		case modMaxRangeLess:
+			out.rangeMax -= b.Value
+		case modMaxRangeSet:
+			out.rangeMax = b.Value
+		case modCritical:
+			out.crit += b.Value
+		case modPerTurn:
+			if out.rules.PerTurn > 0 {
+				out.rules.PerTurn += b.Value
+			}
+		case modPerTarget:
+			if out.rules.PerTarget > 0 {
+				out.rules.PerTarget += b.Value
+			}
+		case modCooldownLess:
+			out.rules.Interval -= b.Value
+		case modCooldownSet:
+			out.rules.Interval = b.Value
+		case modNoSight:
+			out.rules.Sight = false
+		case modNoLine:
+			out.rules.Line = false
+		case modRangeBoosted:
+			out.rules.BoostRange = true
+		case modTakenCellOff:
+			out.rules.TakenCell = false
+		case modTakenCellOn:
+			out.rules.TakenCell = true
+		case modFreeCellOff:
+			out.rules.FreeCell = false
+		case modFreeCellOn:
+			out.rules.FreeCell = true
+		}
+	}
+	out.cost, out.rangeMin = max(0, out.cost), max(0, out.rangeMin)
+	out.rangeMax = max(out.rangeMin, out.rangeMax)
+	return &out
+}
+
+// spell is the weapon or a spell as the player casts it now.
+func (s *Sim) spell(st *State, id int) *attack {
+	return s.tuned(st.Player(), s.attack(id, 0))
 }
 
 // critRate is the chance of a critical hit, from 0 to 100.
@@ -408,13 +511,62 @@ func (s *Sim) Place(st *State, entityID, cell int) string {
 	return ""
 }
 
-// Begin starts the first turn.
+// draw picks one of the outcomes a spell draws at random, by their chance
+// in percent; none when the chances fall short of a hundred and luck says so.
+func (s *Sim) draw(weights []float64) int {
+	total := 0.0
+	for _, w := range weights {
+		total += w
+	}
+	at := s.Rand.Float64() * max(total, 100)
+	for i, w := range weights {
+		if at -= w; at < 0 {
+			return i
+		}
+	}
+	return -1
+}
+
+func (s *Sim) casting(root int, crit, quiet bool) *casting {
+	return &casting{root: root, crit: crit, quiet: quiet, pick: s.draw, roll: func(lo, hi int) int { return lo + s.Rand.IntN(hi-lo+1) }}
+}
+
+// Begin starts the first turn: the class's starting spells are cast on the
+// character, which puts it in its states and sets its passive effects
+// waiting.
 func (s *Sim) Begin(st *State) ([]Event, string) {
 	if st.Phase != PhasePlacement {
 		return nil, BlockedPhase
 	}
 	st.Phase, st.Turn = PhaseFight, 1
-	return []Event{{Type: EventTurn, Value: 1}}, ""
+	events := []Event{{Type: EventTurn, Value: 1}}
+	player := st.Player()
+	var opening []int
+	for _, sp := range s.Cat.StartSpells[s.Breed] {
+		opening = append(opening, sp.ID)
+	}
+	for i, id := range append(opening, s.Passives...) {
+		a := s.attack(id, 0)
+		if i >= len(opening) {
+			// The grades of an item's passive are its phases, not levels:
+			// the fight starts with the first.
+			a = s.attack(id, 1)
+		}
+		if a == nil {
+			continue
+		}
+		c := s.casting(id, false, true)
+		if i >= len(opening) {
+			c.events = append(c.events, Event{Type: EventCast, Entity: player.ID, Spell: id})
+		}
+		s.resolve(st, c, player.ID, player.ID, a, player.Cell, 0)
+		s.settle(st, c)
+		events = append(events, c.events...)
+	}
+	c := s.casting(0, false, false)
+	s.fire(st, c, player.ID, player.ID, 0, "TB")
+	s.settle(st, c)
+	return append(events, c.events...), ""
 }
 
 // Step is a cell the player can walk to: what it costs, and the cell the
@@ -486,37 +638,61 @@ func (s *Sim) Move(st *State, cell int) ([]Event, string) {
 	return []Event{{Type: EventMove, Entity: player.ID, Path: path, Value: step.Cost}}, ""
 }
 
-// EndTurn ends the player's turn: the dummies do nothing, so the next one
-// starts at once, points restored and lasting effects one turn shorter.
+// EndTurn ends the player's turn. The dummies do nothing on theirs, so the
+// next one starts at once: what waits for the end or the start of a turn
+// applies, points are restored and lasting effects are one turn shorter.
 func (s *Sim) EndTurn(st *State) ([]Event, string) {
 	if st.Phase != PhaseFight {
 		return nil, BlockedPhase
+	}
+	c := s.casting(0, false, false)
+	player := st.Player().ID
+	s.fire(st, c, player, player, 0, "TE")
+	for i := range st.Entities {
+		if id := st.Entities[i].ID; id != player {
+			s.fire(st, c, id, id, 0, "TB")
+			s.fire(st, c, id, id, 0, "TE")
+		}
 	}
 	st.Turn++
 	st.APUsed, st.MPUsed, st.TurnDamage = 0, 0, 0
 	for _, use := range st.Uses {
 		use.Turn, use.Targets = 0, map[int]int{}
 	}
+	at := place{caster: player, source: player}
 	for i := range st.Entities {
 		e := &st.Entities[i]
-		kept := e.Buffs[:0]
-		for _, b := range e.Buffs {
-			if b.Turns > 0 {
-				b.Turns--
-				if b.Turns == 0 {
+		for j := range e.Buffs {
+			if e.Buffs[j].Turns > 0 {
+				e.Buffs[j].Turns--
+			}
+		}
+		hooks := e.Hooks[:0]
+		for _, h := range e.Hooks {
+			if h.Delay == 0 && h.Turns > 0 {
+				if h.Turns--; h.Turns == 0 {
 					continue
 				}
 			}
-			kept = append(kept, b)
+			hooks = append(hooks, h)
 		}
-		e.Buffs = kept
+		e.Hooks = hooks
+		// An effect that ran out is dropped the way a spell would remove it,
+		// so that what waits for the end of a state hears of it.
+		s.drop(st, c, at, &st.Entities[i], func(b Buff) bool { return b.Turns == 0 })
 	}
-	return []Event{{Type: EventTurn, Value: st.Turn}}, ""
+	c.events = append(c.events, Event{Type: EventTurn, Value: st.Turn})
+	for i := range st.Entities {
+		s.due(st, c, st.Entities[i].ID)
+	}
+	s.fire(st, c, player, player, 0, "TB")
+	s.settle(st, c)
+	return c.events, ""
 }
 
 // Cast casts the weapon or a spell at a cell.
 func (s *Sim) Cast(st *State, spellID, cell int) ([]Event, string) {
-	a := s.attack(spellID, 0)
+	a := s.spell(st, spellID)
 	if a == nil {
 		return nil, BlockedUnknown
 	}
@@ -528,10 +704,14 @@ func (s *Sim) Cast(st *State, spellID, cell int) ([]Event, string) {
 		return nil, reason
 	}
 	crit := s.Rand.IntN(100) < s.critRate(a, s.StatOf(player))
-	c := &casting{root: spellID, crit: crit, random: true, roll: func(lo, hi int) int { return lo + s.Rand.IntN(hi-lo+1) }}
+	c := s.casting(spellID, crit, false)
 	c.events = append(c.events, Event{Type: EventCast, Entity: player.ID, Spell: spellID, Critical: crit, Cell: &cell})
 	s.spend(st, a, cell)
-	s.resolve(st, c, player.ID, a, cell, 0)
+	id := player.ID
+	s.resolve(st, c, id, id, a, cell, 0)
+	if crit {
+		s.fire(st, c, id, id, 0, "CC")
+	}
 	s.settle(st, c)
 	return c.events, ""
 }
