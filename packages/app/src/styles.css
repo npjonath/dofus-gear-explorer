@@ -368,6 +368,16 @@ h3 {
 .icon-btn:disabled { opacity: 0.35; cursor: default; background: none; }
 .icon-btn svg { width: 1rem; height: 1rem; }
 
+/* The app update button: the notice wash once a version waits, quiet ink while it downloads. */
+.update-btn:is([data-state="ready"], [data-state="available"]) {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.update-btn:is([data-state="ready"], [data-state="available"]):hover { border-color: var(--accent); }
+.update-btn[data-state="downloading"] { cursor: progress; }
+.update-btn[data-state="downloading"]:hover { background: transparent; color: var(--ink-2); }
+
 .chip {
   display: inline-flex;
   align-items: center;

@@ -51,9 +51,9 @@ The version shown in the app comes from `apps/desktop/package.json` (desktop) an
 
 ### App updates
 
-The desktop app checks this repository's GitHub releases at startup and every six hours with `electron-updater` (`apps/desktop/src/main/updates.ts`). Development runs skip it.
+The desktop app checks this repository's GitHub releases with `electron-updater` (`apps/desktop/src/main/updates.ts`): at startup, every hour, when its window comes back to the front or the computer wakes after an hour without a check (timers stand still while it sleeps), and when the player picks "Check for updates" in the About menu. Development runs skip it.
 
-On every system the new version downloads in the background; a notice offers to restart, and it installs on the next quit anyway.
+On every system the new version downloads in the background; a notice offers to restart, and it installs on the next quit anyway. The main process tells the interface each step through `Platform.updates` (`downloading`, then `ready`, or `available` when the app can only link to the release page). The interface shows it as a button in the top strip next to the About button (`packages/app/src/shell/UpdateButton.tsx`), which stays after the notice is dismissed.
 
 - **Windows and Linux**: `electron-updater` downloads and installs it (the NSIS installer, the AppImage). On Linux only the AppImage updates itself.
 - **macOS**: the native updater (Squirrel.Mac) only installs updates signed with the same Apple Developer ID, and the app is signed ad hoc. So `electron-updater` only finds the release, and `apps/desktop/src/main/macUpdate.ts` installs it. It downloads the release's `-mac-<arch>.zip`, checks it against the sha512 in `latest-mac.yml`, and unpacks it with `ditto`. Then it checks the bundle id, the version and the code signature (`codesign --verify --deep --strict`). Once the app quits, a small script swaps the `.app` bundle and puts the old one back if the move fails. When the bundle can't be replaced (the app runs from the disk image, from a read-only folder, or from the copy Gatekeeper makes of an app never moved to Applications), the notice links to the release page instead.

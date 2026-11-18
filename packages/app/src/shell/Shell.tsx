@@ -18,6 +18,7 @@ import { AboutMenu } from "./AboutMenu"
 import { DataBanner, DataStatusButton } from "./DataStatus"
 import { ErrorBoundary } from "./ErrorBoundary"
 import { Offline, Setup } from "./Setup"
+import { UpdateButton } from "./UpdateButton"
 import { useAppUpdates } from "./useAppUpdates"
 
 function useResolvedTheme(): "light" | "dark" {
@@ -47,7 +48,7 @@ export function Shell() {
   const setTheme = useStore((s) => s.setTheme)
   const setLang = useStore((s) => s.setLang)
   const addBuild = useStore((s) => s.addBuild)
-  useAppUpdates()
+  const appUpdate = useAppUpdates()
 
   const [visited, setVisited] = React.useState(() => new Set<Route>([location.route]))
   if (!visited.has(location.route)) setVisited(new Set(visited).add(location.route))
@@ -147,6 +148,7 @@ export function Shell() {
         >
           {theme === "dark" ? <SunIcon aria-hidden="true" /> : <MoonIcon aria-hidden="true" />}
         </button>
+        <UpdateButton update={appUpdate} />
         <AboutMenu />
       </header>
       {data?.ready && <DataBanner status={data} />}
