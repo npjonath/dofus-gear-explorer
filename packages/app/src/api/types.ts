@@ -293,21 +293,50 @@ export interface DamageGoal {
 }
 
 /**
+ * How the elements of a goal about several count together: the first one as
+ * high as possible while each other keeps up with its share of it ("floor"),
+ * or their average weighted by their shares ("sum").
+ */
+export type ElementMix = "floor" | "sum"
+
+/** An element of a goal about several, with its share from 1 to 100. */
+export interface ElementShare {
+  element: WeaponElement
+  share: number
+}
+
+/** The damage of the class's spells in an element, or in several at once. */
+export interface ElementEntry {
+  kind: "element"
+  /** The first element; the search picks it itself when it is "auto". */
+  element: WeaponElement | "auto"
+  measure: DamageMeasure
+  /** The elements pushed along with the first; none for a single element. */
+  others?: ElementShare[]
+  /** "floor" when left out. */
+  mix?: ElementMix
+  /** The first element's weight in a sum; 100 when left out. */
+  share?: number
+}
+
+/**
  * One thing the search pushes up: a stat, what a weapon or a spell hits for,
- * or the damage of the class's spells in an element, which the search picks
- * itself when it is "auto".
+ * or the damage of the class's spells in one or several elements.
  */
 export type MaximizeEntry =
   | { kind: "stat"; statId: number }
   | { kind: "weapon" | "spell"; id: number; measure: DamageMeasure; element?: WeaponElement }
-  | { kind: "element"; element: WeaponElement | "auto"; measure: DamageMeasure }
+  | ElementEntry
 
 /** An attack to maximize, as the search receives it. */
 export interface MaximizedAttack {
-  kind: "weapon" | "spell" | "element"
+  kind: "weapon" | "spell" | "element" | "elements"
   id: number
   measure: DamageMeasure
   element?: WeaponElement
+  /** The elements of an "elements" attack, the main one first, and how they count together. */
+  parts?: ElementShare[]
+  mix?: ElementMix
 }
 
 export interface BuildInput extends Character {
@@ -399,6 +428,8 @@ export interface Solution {
   /** Indexes of the damage goals the stuff misses, and what each goal measures. */
   unmetDamage: number[]
   damage: number[]
+  /** For an attack about several elements, what each of them measures; null for the others. */
+  damageParts?: (number[] | null)[]
   /** The element the stuff was searched for, when the search chose it. */
   element?: WeaponElement
   evaluation: Evaluation
