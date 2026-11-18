@@ -89,7 +89,8 @@ type DamageGoal struct {
 	// Kind is "weapon" or "spell", with ID the item or the spell, or
 	// "element": the damage of the class's spells in one element, without
 	// naming any, or "elements": the same in several elements at once, as
-	// Parts and Mix say. An "elements" goal can only be maximized.
+	// Parts and Mix say, or in one element read on a spell or a weapon. An
+	// "elements" goal can only be maximized.
 	Kind string `json:"kind"`
 	ID   int    `json:"id"`
 	// Measure is one of the Measure constants; empty means MeasureNormal.
@@ -898,7 +899,7 @@ pick:
 		var groups []group
 		if g.Kind == "elements" {
 			floor := g.Mix == "" || g.Mix == MixFloor
-			if share == 0 || (!floor && g.Mix != MixSum) || len(g.Parts) < 2 || len(g.Parts) > maxParts || (floor && p.floor >= 0) {
+			if share == 0 || (!floor && g.Mix != MixSum) || len(g.Parts) < 1 || len(g.Parts) > maxParts || (floor && p.floor >= 0) {
 				return ErrBadDamageGoal
 			}
 			shares := 0.0

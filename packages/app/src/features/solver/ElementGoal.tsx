@@ -187,7 +187,7 @@ export function ElementGoalOptions({
           </span>
         )}
       </div>
-      {several && entry.element !== "auto" && (
+      {entry.element !== "auto" && (
         <TargetPicker
           meta={meta}
           breedId={breedId}

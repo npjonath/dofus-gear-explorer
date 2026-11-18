@@ -369,7 +369,7 @@ export interface ElementEntry {
   mix?: ElementMix
   /** The first element's weight in a sum; 100 when left out. */
   share?: number
-  /** What the first element is read on, when there are several. */
+  /** What the first element is read on, once it is named. */
   target?: ElementTarget
 }
 
