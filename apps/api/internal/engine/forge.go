@@ -101,8 +101,8 @@ var ForgeableSlots = map[game.Slot]bool{
 	game.SlotHat: true, game.SlotCloak: true, game.SlotWeapon: true, game.SlotShield: true,
 }
 
-// LimitedExos are the exos a character may carry only once across the whole
-// stuff, and only one of per item: AP, MP and Range.
+// LimitedExos are the exos that count once per character, whatever the number
+// of items carrying one: AP, MP and Range. An item holds one of them at most.
 var LimitedExos = []int{game.StatAP, game.StatMP, game.StatRange}
 
 func isLimitedExo(statID int) bool {
@@ -128,7 +128,6 @@ const (
 	ForgeIssueSlot          = "forge_slot"
 	ForgeIssueLine          = "forge_line"
 	ForgeIssueExo           = "forge_exo"
-	ForgeIssueExoLimit      = "forge_exo_limit"
 	ForgeIssueWeight        = "forge_weight"
 	ForgeIssueTranscendence = "forge_transcendence"
 	ForgeIssueDraco         = "forge_draco"
@@ -214,7 +213,7 @@ func naturalLines(it *game.Item) (order []int, ranges map[int]naturalRange) {
 
 // lineCap is the highest value a natural line can be forged to: the weight
 // rule, unless the item's own roll already goes higher. A malus can be
-// forged down to -1 and no further: at zero the line would be gone.
+// forged away, up to zero, and no further.
 func (e *Engine) lineCap(statID, naturalMax int) int {
 	st := e.Catalog.StatByID[statID]
 	if st == nil {
@@ -224,7 +223,7 @@ func (e *Engine) lineCap(statID, naturalMax int) int {
 		if st.Weight <= 0 {
 			return naturalMax
 		}
-		return -1
+		return 0
 	}
 	if forged := st.ForgeMax(); forged > naturalMax {
 		return forged
@@ -319,8 +318,9 @@ func (e *Engine) Forge(it *game.Item, mods *ItemMods) Forged {
 			}
 		}
 
-		// What the overs weigh. Raising a malus towards -1 is an over too,
-		// and a rune weighs half on a negative line.
+		// What the overs weigh. Raising a malus is an over too. A rune weighs
+		// half on a negative line, and its full weight for the last point,
+		// from -1 to zero.
 		var overs []overLine
 		for _, id := range order {
 			r := natural[id]
@@ -328,11 +328,16 @@ func (e *Engine) Forge(it *game.Item, mods *ItemMods) Forged {
 			if st == nil || st.Weight <= 0 || values[id] <= r.max {
 				continue
 			}
-			raised := float64(values[id]-r.max) * st.Weight
 			if r.max < 0 {
-				overs = append(overs, overLine{over: raised / 2})
+				// The cap keeps the value at zero or below.
+				negative := min(values[id], -1)
+				weight := float64(negative-r.max) * st.Weight / 2
+				if values[id] == 0 {
+					weight += st.Weight
+				}
+				overs = append(overs, overLine{over: weight})
 			} else {
-				overs = append(overs, overLine{natural: st.LineWeight(r.max), over: raised})
+				overs = append(overs, overLine{natural: st.LineWeight(r.max), over: float64(values[id]-r.max) * st.Weight})
 			}
 		}
 

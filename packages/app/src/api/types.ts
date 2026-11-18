@@ -341,7 +341,6 @@ export interface Issue {
     | "forge_slot"
     | "forge_line"
     | "forge_exo"
-    | "forge_exo_limit"
     | "forge_weight"
     | "forge_transcendence"
     | "forge_draco"
@@ -358,6 +357,8 @@ export interface Evaluation {
   /** Per position, the weight the item's overs and exos use out of the 101 they share. */
   forgeWeight: Record<string, number>
   /** Stats whose sum went over the game's cap: `raw - max` points are lost. */
+  /** AP, MP and Range exos that do not count: a character counts one of each. */
+  ignoredExos: { position: string; itemId: number; statId: number; value: number }[]
   capped: { statId: number; max: number; raw: number }[]
   sets: SetStatus[]
   setBonuses: number

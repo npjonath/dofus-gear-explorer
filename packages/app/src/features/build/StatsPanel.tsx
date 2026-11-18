@@ -5,7 +5,7 @@ import { AP_STAT, HP_STAT, MP_STAT, RANGE_STAT, statLabel, toneOf } from "../../
 const vitals = [HP_STAT, AP_STAT, MP_STAT, RANGE_STAT]
 
 export function StatsPanel({ meta, evaluation }: { meta: Meta; evaluation: Evaluation | undefined }) {
-  const { t, number } = useI18n()
+  const { t, number, slotName } = useI18n()
   const byId = new Map(meta.stats.map((s) => [s.id, s]))
   const value = (id: number) => evaluation?.stats[String(id)] ?? 0
 
@@ -23,6 +23,20 @@ export function StatsPanel({ meta, evaluation }: { meta: Meta; evaluation: Evalu
           )
         })}
       </div>
+
+      {evaluation && evaluation.ignoredExos.length > 0 && (
+        <ul className="m-0 grid list-none gap-1 p-0 text-ink-2">
+          {evaluation.ignoredExos.map((exo) => {
+            const slot = meta.positions.find((p) => p.key === exo.position)?.slot
+            return (
+              <li key={`${exo.position}:${exo.statId}`} className="flex items-baseline gap-2">
+                <span className="pip" data-tone={toneOf(byId.get(exo.statId)?.key)} />
+                {t("build.exoIgnored", { slot: slot ? slotName(slot) : "", stat: byId.get(exo.statId)?.label ?? "" })}
+              </li>
+            )
+          })}
+        </ul>
+      )}
 
       {evaluation && evaluation.capped.length > 0 && (
         <ul className="m-0 grid list-none gap-1 p-0 text-ink-2">

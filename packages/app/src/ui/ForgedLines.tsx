@@ -12,7 +12,10 @@ export function ForgedLines({ lines, stats }: Props) {
   const { t } = useI18n()
   return (
     <ul className="effects">
-      {lines.map((line) => (
+      {/* A malus forged away leaves a line at zero: nothing to show. */}
+      {lines
+        .filter((line) => line.value !== 0)
+        .map((line) => (
         <li key={line.statId} data-negative={line.value < 0 ? "" : undefined}>
           <span className="pip" data-tone={toneOf(stats.get(line.statId)?.key)} />
           <span className="line-body">

@@ -281,6 +281,17 @@ type Issue struct {
 	ItemID   int    `json:"itemId,omitempty"`
 }
 
+// IgnoredExo is an AP, MP or Range exo that brings nothing: a character counts
+// one exo of each, and another item of the stuff already carries it. Taking a
+// malus off one of those lines counts as an exo too.
+type IgnoredExo struct {
+	Position string `json:"position"`
+	ItemID   int    `json:"itemId"`
+	StatID   int    `json:"statId"`
+	// Value is what the exo would have added.
+	Value int `json:"value"`
+}
+
 // CappedStat reports a stat whose sum went over the game's cap.
 type CappedStat struct {
 	StatID int `json:"statId"`
@@ -306,6 +317,9 @@ type Result struct {
 	// ForgeWeight holds, per position, the weight the item's overs and exos
 	// use out of the 101 they share.
 	ForgeWeight map[string]float64 `json:"forgeWeight"`
+	// IgnoredExos lists the AP, MP and Range exos that do not count; the stuff
+	// stays valid, as the game lets both items be worn.
+	IgnoredExos []IgnoredExo `json:"ignoredExos"`
 	// Capped lists the stats that went over the game's cap.
 	Capped     []CappedStat      `json:"capped"`
 	Sets       []SetStatus       `json:"sets"`
@@ -326,6 +340,7 @@ func (e *Engine) Evaluate(b Build, lang string) Result {
 		Forge:       map[string][]ForgedLine{},
 		Runes:       map[string][]int{},
 		ForgeWeight: map[string]float64{},
+		IgnoredExos: []IgnoredExo{},
 		Capped:      []CappedStat{},
 		Sets:        []SetStatus{},
 		Conditions:  []ConditionStatus{},
@@ -343,7 +358,7 @@ func (e *Engine) Evaluate(b Build, lang string) Result {
 	var items []worn
 	setCounts := map[int]int{}
 	seen := map[int]string{}
-	limitedExos := map[int][]string{}
+	limitedExos := map[int][]IgnoredExo{}
 
 	for _, pos := range game.Positions {
 		id := b.Items[pos.Key]
@@ -387,11 +402,19 @@ func (e *Engine) Evaluate(b Build, lang string) Result {
 				res.Runes[pos.Key] = append([]int{}, forged.Runes...)
 				res.ForgeWeight[pos.Key] = math.Round(forged.Weight*10) / 10
 			}
-			if mods != nil {
-				for _, exo := range mods.Exos {
-					if isLimitedExo(exo.StatID) {
-						limitedExos[exo.StatID] = append(limitedExos[exo.StatID], pos.Key)
-					}
+			for _, line := range forged.Lines {
+				if !isLimitedExo(line.StatID) {
+					continue
+				}
+				gain := 0
+				switch {
+				case line.Origin == OriginExo:
+					gain = line.Value
+				case line.Natural && line.Max < 0:
+					gain = line.Value - line.Max
+				}
+				if gain > 0 {
+					limitedExos[line.StatID] = append(limitedExos[line.StatID], IgnoredExo{Position: pos.Key, ItemID: id, StatID: line.StatID, Value: gain})
 				}
 			}
 		}
@@ -403,11 +426,24 @@ func (e *Engine) Evaluate(b Build, lang string) Result {
 		}
 	}
 
-	// A character carries at most one AP exo, one MP exo and one Range exo.
+	// A character counts one AP exo, one MP exo and one Range exo: the largest
+	// stays, and what the others add is taken back.
 	for _, statID := range LimitedExos {
-		positions := limitedExos[statID]
-		for _, position := range positions[min(1, len(positions)):] {
-			res.Issues = append(res.Issues, Issue{Code: ForgeIssueExoLimit, Position: position, ItemID: b.Items[position]})
+		exos := limitedExos[statID]
+		kept := 0
+		for i, exo := range exos {
+			if exo.Value > exos[kept].Value {
+				kept = i
+			}
+		}
+		for i, exo := range exos {
+			if i == kept {
+				continue
+			}
+			if idx := cat.Idx(statID); idx >= 0 {
+				raw[idx] -= int32(exo.Value)
+			}
+			res.IgnoredExos = append(res.IgnoredExos, exo)
 		}
 	}
 

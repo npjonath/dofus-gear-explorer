@@ -325,7 +325,8 @@ func TestEvaluateAppliesForgemagic(t *testing.T) {
 		t.Error("every forgeable item reports its lines, forged or not")
 	}
 
-	// One AP exo per character: the second one is flagged.
+	// One AP exo counts per character: the stuff stays valid, as the game lets
+	// both items be worn, and the second exo adds nothing.
 	res = eng.Evaluate(Build{
 		Character: Character{Level: 200},
 		Items:     map[string]int{"cloak": cloakID, "ring1": 12},
@@ -334,13 +335,14 @@ func TestEvaluateAppliesForgemagic(t *testing.T) {
 			"ring1": {Exos: []Exo{{StatID: game.StatAP, Value: 1}}},
 		},
 	}, "fr")
-	if res.Valid || len(res.Issues) != 1 || res.Issues[0].Code != ForgeIssueExoLimit {
-		t.Errorf("issues = %+v", res.Issues)
+	ignored := []IgnoredExo{{Position: "cloak", ItemID: cloakID, StatID: game.StatAP, Value: 1}}
+	if !res.Valid || res.Stats[game.StatAP] != 8 || !reflect.DeepEqual(res.IgnoredExos, ignored) {
+		t.Errorf("valid %v, AP %d, ignored %+v, issues %+v", res.Valid, res.Stats[game.StatAP], res.IgnoredExos, res.Issues)
 	}
 }
 
 func TestForgeNegativeLines(t *testing.T) {
-	const bootsID, runeDoCri = 61, 910
+	const bootsID, slowBootsID, runeDoCri = 61, 62, 910
 	const statCritDamage = 86
 	ds := gametest.Dataset()
 	ds.Stats = append(ds.Stats,
@@ -356,6 +358,14 @@ func TestForgeNegativeLines(t *testing.T) {
 			{EffectID: 419, Kind: game.EffectStat, StatID: statCritDamage, Min: -15, Max: -11},
 		},
 	})
+	ds.Items = append(ds.Items, game.Item{
+		ID: slowBootsID, TypeID: 11, Slot: game.SlotBoots, Level: 200, IconID: slowBootsID,
+		Name: game.Texts{"fr": "Bottes Lentes"}, Description: game.Texts{},
+		Effects: []game.ItemEffect{
+			{EffectID: gametest.EffectStrength, Kind: game.EffectStat, StatID: game.StatStrength, Min: 30, Max: 50},
+			{EffectID: 127, Kind: game.EffectStat, StatID: game.StatMP, Min: -1, Max: -1},
+		},
+	})
 	ds.Runes = append(ds.Runes, game.Rune{
 		ID: runeDoCri, EffectID: 418, StatID: statCritDamage, Value: 8, Density: 80, Name: game.Texts{"fr": "Rune Pata Do Cri"},
 	})
@@ -363,14 +373,48 @@ func TestForgeNegativeLines(t *testing.T) {
 	boots := eng.Catalog.ItemByID[bootsID]
 	value := func(f Forged, statID int) int { return forgedValues(f)[statID] }
 
-	// A malus is forged up to -1, never to zero.
+	// A malus is forged up to zero, where the line is gone, never above. A
+	// rune weighs half on a negative line (4 Critical weigh 20) and its full
+	// weight for the last point, from -1 to zero (10 more).
 	raised := eng.Forge(boots, &ItemMods{Lines: map[int]int{game.StatCritical: -1}})
-	if len(raised.Issues) != 0 || value(raised, game.StatCritical) != -1 {
+	if len(raised.Issues) != 0 || value(raised, game.StatCritical) != -1 || raised.Weight != 20 {
 		t.Errorf("-5 raised to -1: %+v", raised)
 	}
 	gone := eng.Forge(boots, &ItemMods{Lines: map[int]int{game.StatCritical: 0}})
-	if !reflect.DeepEqual(gone.Issues, []string{ForgeIssueLine}) || value(gone, game.StatCritical) != -1 {
+	if len(gone.Issues) != 0 || value(gone, game.StatCritical) != 0 || gone.Weight != 30 {
 		t.Errorf("-5 raised to 0: %+v", gone)
+	}
+	for _, sv := range gone.Vector {
+		if sv.Index == eng.Catalog.Idx(game.StatCritical) {
+			t.Errorf("a malus forged away adds nothing: %+v", gone.Vector)
+		}
+	}
+	above := eng.Forge(boots, &ItemMods{Lines: map[int]int{game.StatCritical: 1}})
+	if !reflect.DeepEqual(above.Issues, []string{ForgeIssueLine}) || value(above, game.StatCritical) != 0 {
+		t.Errorf("-5 raised to 1: %+v", above)
+	}
+
+	// Taking off a -1 MP malus weighs a whole MP rune, 90, and counts as the
+	// character's MP exo: next to a real one, it brings the malus back.
+	slow := eng.Catalog.ItemByID[slowBootsID]
+	freed := eng.Forge(slow, &ItemMods{Lines: map[int]int{game.StatMP: 0}})
+	if len(freed.Issues) != 0 || freed.Weight != 90 {
+		t.Errorf("-1 MP forged away: %+v", freed)
+	}
+	build := Build{
+		Character: Character{Level: 200},
+		Items:     map[string]int{"boots": slowBootsID},
+		Mods:      map[string]*ItemMods{"boots": {Lines: map[int]int{game.StatMP: 0}}},
+	}
+	alone := eng.Evaluate(build, "fr")
+	build.Items["ring1"] = 12
+	build.Mods["ring1"] = &ItemMods{Exos: []Exo{{StatID: game.StatMP, Value: 1}}}
+	both2 := eng.Evaluate(build, "fr")
+	lost := []IgnoredExo{{Position: "boots", ItemID: slowBootsID, StatID: game.StatMP, Value: 1}}
+	if !alone.Valid || len(alone.IgnoredExos) != 0 || !both2.Valid || !reflect.DeepEqual(both2.IgnoredExos, lost) ||
+		both2.Stats[game.StatMP] != alone.Stats[game.StatMP] {
+		t.Errorf("malus off and MP exo: alone MP %d %+v, both MP %d %+v, issues %+v",
+			alone.Stats[game.StatMP], alone.IgnoredExos, both2.Stats[game.StatMP], both2.IgnoredExos, both2.Issues)
 	}
 	// Raising a malus is an over that weighs half: 4 Critical weigh 20, so
 	// the MP exo (90) no longer fits; 2 Critical weigh 10 and leave it room.

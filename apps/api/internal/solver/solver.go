@@ -998,7 +998,7 @@ pick:
 			if mods.Transcendence != 0 {
 				return false
 			}
-			for _, statID := range req.Forge.Exos {
+			for _, statID := range p.exos {
 				if hasStat(it, statID) {
 					continue
 				}
