@@ -100,6 +100,7 @@ export function ForgePanel({ meta, item, position, mods, evaluation, onChange }:
   const patch = (next: Partial<ItemMods>) => onChange({ ...current, ...next })
 
   const forged: ForgedLine[] = evaluation?.forge[position] ?? []
+  const weight = evaluation?.forgeWeight?.[position] ?? 0
   const issues = evaluation?.issues.filter((issue) => issue.position === position && issue.code.startsWith("forge_")) ?? []
 
   const limited = meta.forge.limitedExos
@@ -167,6 +168,12 @@ export function ForgePanel({ meta, item, position, mods, evaluation, onChange }:
             <li key={issue.code}>{t(`build.issue.${issue.code}`, { item: item.name })}</li>
           ))}
         </ul>
+      )}
+
+      {weight > 0 && (
+        <p className={`m-0 font-semibold tabular-nums ${weight > 101 ? "text-bad" : "text-ink-2"}`}>
+          {t("forge.weight", { used: weight })}
+        </p>
       )}
 
       <section className="grid gap-2">

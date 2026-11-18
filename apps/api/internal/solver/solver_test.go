@@ -483,17 +483,31 @@ func TestSolveChoosesForgemagicForTheStuff(t *testing.T) {
 	if !tight.Feasible || count(tight, 900) != 4 || count(tight, 901) != 2 {
 		t.Errorf("Critical >= 3: feasible %v, %d Critical runes, %d Strength runes", tight.Feasible, count(tight, 900), count(tight, 901))
 	}
-	// Forging the boots' malus up to -1 saves two of those runes: the boots
+	// Forging the boots' malus away saves two of those runes: the boots
 	// give up their own Strength rune and two other items get theirs back.
 	raised := solve(3, ForgeOptions{Transcendence: true, RaiseCritical: true})
 	boots := raised.Mods["boots"]
-	if !raised.Feasible || boots == nil || boots.Lines[game.StatCritical] != -1 || count(raised, 900) != 2 || count(raised, 901) != 3 {
+	if !raised.Feasible || boots == nil || boots.Lines[game.StatCritical] != 0 || count(raised, 900) != 2 || count(raised, 901) != 3 {
 		t.Errorf("raised malus: feasible %v, boots %+v, %d Critical runes, %d Strength runes",
 			raised.Feasible, boots, count(raised, 900), count(raised, 901))
 	}
 	res := eng.Evaluate(engine.Build{Character: raised.Character, Items: raised.Items, Mods: raised.Mods}, "")
 	if !res.Valid {
 		t.Errorf("issues %+v", res.Issues)
+	}
+	// The malus forged away weighs 30 of the 101 an item's overs and exos share,
+	// so the MP exo (90) goes on another item.
+	withExo := solve(3, ForgeOptions{Transcendence: true, RaiseCritical: true, Exos: []int{game.StatMP}})
+	exos := 0
+	for position, mods := range withExo.Mods {
+		exos += len(mods.Exos)
+		if len(mods.Exos) > 0 && len(mods.Lines) > 0 {
+			t.Errorf("%s carries the exo and the raised malus: %+v", position, mods)
+		}
+	}
+	res = eng.Evaluate(engine.Build{Character: withExo.Character, Items: withExo.Items, Mods: withExo.Mods}, "")
+	if !withExo.Feasible || exos != 1 || !res.Valid {
+		t.Errorf("raised malus and MP exo: feasible %v, %d exos, issues %+v", withExo.Feasible, exos, res.Issues)
 	}
 }
 

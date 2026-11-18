@@ -992,6 +992,24 @@ pick:
 			return plain
 		}
 		variants := []*cand{plain}
+		// An item whose other forgemagic leaves no weight for an allowed exo
+		// is no home for one: overs and exos share 101 of weight.
+		hostsExos := func(mods engine.ItemMods) bool {
+			if mods.Transcendence != 0 {
+				return false
+			}
+			for _, statID := range p.exos {
+				if hasStat(it, statID) {
+					continue
+				}
+				with := mods
+				with.Exos = append(slices.Clone(mods.Exos), engine.Exo{StatID: statID, Value: 1})
+				if len(eng.Forge(it, &with).Issues) != 0 {
+					return false
+				}
+			}
+			return true
+		}
 		add := func(mods engine.ItemMods, runeUtility float64) {
 			forged := eng.Forge(it, &mods)
 			if len(forged.Issues) != 0 {
@@ -1010,7 +1028,7 @@ pick:
 			variants = append(variants, &cand{
 				item: it, mods: &mods, vec: forged.Vector, setOrd: setOrd, crit: plain.crit,
 				utility: utilityOf(forged.Vector) - cost, runeUtility: runeUtility,
-				exoHost: mods.Transcendence == 0, cost: cost,
+				exoHost: hostsExos(mods), cost: cost,
 			})
 		}
 		dracos := []*engine.Draco{nil}
@@ -1231,6 +1249,16 @@ func (p *problem) finish(assign []*cand, score float64, req Request) Solution {
 		best := -1
 		for i, c := range assign {
 			if c == nil || taken[i] || !engine.ForgeableSlots[c.item.Slot] || hasStat(c.item, statID) {
+				continue
+			}
+			// The exo must fit with what the item already carries.
+			with := engine.ItemMods{}
+			if m := mods[game.Positions[i].Key]; m != nil {
+				with = *m
+			}
+			with.Transcendence = 0
+			with.Exos = append(slices.Clone(with.Exos), engine.Exo{StatID: statID, Value: 1})
+			if len(p.eng.Forge(c.item, &with).Issues) != 0 {
 				continue
 			}
 			// An item without a rune first, else the one whose rune matters least.
