@@ -220,7 +220,7 @@ When forgemagic is allowed in a search:
 
 - an allowed PA, PM or PO exo counts as one more point, then goes to an item of the result that lacks the stat;
 - each forgeable item comes with every forgemagic the request allows (each dracorune, the strongest rune that fits per useful characteristic, a negative Critical line forged away), and the search switches between them on the stuff's real score: a rune that fills a missed condition beats one that adds to what is maximized;
-- an exo needs an item with no transcendence rune, so the search keeps one free per exo.
+- an exo needs an item of its own that lacks the stat, holds no transcendence rune and has the weight left for it, so the search keeps one such item per exo: an item that already gives PM is no home for the PM exo.
 
 Required items take the first free place that fits them, before the items kept from the current stuff; one that finds no place is reported in `unplaced`.
 

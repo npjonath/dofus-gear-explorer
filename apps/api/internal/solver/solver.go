@@ -12,6 +12,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"math/bits"
 	"math/rand/v2"
 	"runtime"
 	"slices"
@@ -329,9 +330,10 @@ type cand struct {
 	// variants lists every forgemagic the search may give this item, this
 	// candidate included; nil when there is only one.
 	variants []*cand
-	// exoHost says the item can take a limited exo as it is: forgeable and
-	// without a transcendence rune.
-	exoHost bool
+	// hosts says which of the allowed exos the item can take as it is, one
+	// bit per entry of problem.exos: it must be forgeable, hold no
+	// transcendence rune, lack the stat and have the weight left for it.
+	hosts uint8
 	// cost is a token price per rune, dracorune or forged line, so that
 	// forgemagic that changes nothing for the request is left out.
 	cost    float64
@@ -985,31 +987,34 @@ pick:
 		}
 		forgeable := engine.ForgeableSlots[it.Slot]
 		plain := &cand{
-			item: it, vec: cat.ItemVector[it.ID], setOrd: setOrd, crit: eng.Criteria(it.ID), exoHost: forgeable,
+			item: it, vec: cat.ItemVector[it.ID], setOrd: setOrd, crit: eng.Criteria(it.ID),
 		}
 		plain.utility = utilityOf(plain.vec)
 		if !forgeable {
 			return plain
 		}
-		variants := []*cand{plain}
-		// An item whose other forgemagic leaves no weight for an allowed exo
-		// is no home for one: overs and exos share 101 of weight.
-		hostsExos := func(mods engine.ItemMods) bool {
+		// An item is a home for an allowed exo when it lacks the stat, holds
+		// no transcendence rune, and its other forgemagic leaves the weight:
+		// overs and exos share 101 of it.
+		hostsExos := func(mods engine.ItemMods) uint8 {
 			if mods.Transcendence != 0 {
-				return false
+				return 0
 			}
-			for _, statID := range p.exos {
+			var hosts uint8
+			for i, statID := range p.exos {
 				if hasStat(it, statID) {
 					continue
 				}
 				with := mods
 				with.Exos = append(slices.Clone(mods.Exos), engine.Exo{StatID: statID, Value: 1})
-				if len(eng.Forge(it, &with).Issues) != 0 {
-					return false
+				if len(eng.Forge(it, &with).Issues) == 0 {
+					hosts |= 1 << i
 				}
 			}
-			return true
+			return hosts
 		}
+		plain.hosts = hostsExos(engine.ItemMods{})
+		variants := []*cand{plain}
 		add := func(mods engine.ItemMods, runeUtility float64) {
 			forged := eng.Forge(it, &mods)
 			if len(forged.Issues) != 0 {
@@ -1028,7 +1033,7 @@ pick:
 			variants = append(variants, &cand{
 				item: it, mods: &mods, vec: forged.Vector, setOrd: setOrd, crit: plain.crit,
 				utility: utilityOf(forged.Vector) - cost, runeUtility: runeUtility,
-				exoHost: hostsExos(mods), cost: cost,
+				hosts: hostsExos(mods), cost: cost,
 			})
 		}
 		dracos := []*engine.Draco{nil}
@@ -1241,42 +1246,69 @@ func (p *problem) finish(assign []*cand, score float64, req Request) Solution {
 		}
 	}
 
-	// Each exo goes to an item that lacks the stat and holds no other
-	// limited exo, preferring the one whose rune matters least: a
-	// transcendence rune and an exo cannot share an item.
-	taken := map[int]bool{}
-	for _, statID := range p.exos {
-		best := -1
+	// Each exo goes to an item of its own that lacks the stat and has the
+	// weight left for it. A transcendence rune and an exo cannot share an
+	// item, so the exos go where no rune is lost; when the stuff has too few
+	// such items, the runes that matter least give way.
+	const (
+		runeLost = 1e6
+		unplaced = 1e9
+	)
+	type home struct {
+		pos  int
+		cost float64
+	}
+	homes := make([][]home, len(p.exos))
+	for e, statID := range p.exos {
 		for i, c := range assign {
-			if c == nil || taken[i] || !engine.ForgeableSlots[c.item.Slot] || hasStat(c.item, statID) {
+			if c == nil || !engine.ForgeableSlots[c.item.Slot] || hasStat(c.item, statID) {
 				continue
 			}
-			// The exo must fit with what the item already carries.
 			with := engine.ItemMods{}
 			if m := mods[game.Positions[i].Key]; m != nil {
 				with = *m
 			}
+			cost := 0.0
+			if with.Transcendence != 0 {
+				cost = runeLost + c.runeUtility
+			}
 			with.Transcendence = 0
 			with.Exos = append(slices.Clone(with.Exos), engine.Exo{StatID: statID, Value: 1})
-			if len(p.eng.Forge(c.item, &with).Issues) != 0 {
+			if len(p.eng.Forge(c.item, &with).Issues) == 0 {
+				homes[e] = append(homes[e], home{i, cost})
+			}
+		}
+		homes[e] = append(homes[e], home{-1, unplaced})
+	}
+	placed, best, bestCost := make([]int, len(p.exos)), []int(nil), math.Inf(1)
+	var place func(e int, cost float64)
+	place = func(e int, cost float64) {
+		if cost >= bestCost {
+			return
+		}
+		if e == len(p.exos) {
+			best, bestCost = slices.Clone(placed), cost
+			return
+		}
+		for _, h := range homes[e] {
+			if h.pos >= 0 && slices.Contains(placed[:e], h.pos) {
 				continue
 			}
-			// An item without a rune first, else the one whose rune matters least.
-			if best < 0 || (c.exoHost && !assign[best].exoHost) ||
-				(c.exoHost == assign[best].exoHost && c.runeUtility < assign[best].runeUtility) {
-				best = i
-			}
+			placed[e] = h.pos
+			place(e+1, cost+h.cost)
 		}
-		if best < 0 {
+	}
+	place(0, 0)
+	for e, pos := range best {
+		if pos < 0 {
 			continue
 		}
-		taken[best] = true
-		key := game.Positions[best].Key
+		key := game.Positions[pos].Key
 		if mods[key] == nil {
 			mods[key] = &engine.ItemMods{}
 		}
 		mods[key].Transcendence = 0
-		mods[key].Exos = append(mods[key].Exos, engine.Exo{StatID: statID, Value: 1})
+		mods[key].Exos = append(mods[key].Exos, engine.Exo{StatID: p.exos[e], Value: 1})
 	}
 	// A weapon goal's elemental forgemagic goes on the weapon it names.
 	for _, d := range p.damage {
@@ -1471,27 +1503,48 @@ func (s *state) eval() (float64, bool) {
 		}
 	}
 	s.ctx.SetBonuses = s.setBonuses
-	hosts := 0
+	var hosts [1 << maxExos]int
 	for _, c := range s.cur {
 		if c == nil {
 			score -= emptyPenalty
 			continue
 		}
-		if c.exoHost {
-			hosts++
-		}
+		hosts[c.hosts]++
 		score -= c.cost
 		if c.crit != nil && !c.crit.Check(&s.ctx) {
 			feasible = false
 			score -= criteriaPenalty
 		}
 	}
-	// Each allowed exo was counted up front and needs an item to sit on.
-	if missing := len(p.exos) - hosts; missing > 0 {
+	// Each allowed exo was counted up front and needs an item of its own to
+	// sit on.
+	if missing := unhosted(len(p.exos), &hosts); missing > 0 {
 		feasible = false
 		score -= exoHostPenalty * float64(missing)
 	}
 	return score, feasible
+}
+
+// maxExos is the number of limited exos there are: AP, MP and Range.
+const maxExos = 3
+
+// unhosted returns how many of the allowed exos are left without an item
+// when each takes a different one. hosts counts the items worn by the set
+// of exos each can take. By Hall's theorem, the exos left over are the
+// largest shortfall of any group of exos against the items that can take
+// one of the group.
+func unhosted(exos int, hosts *[1 << maxExos]int) int {
+	missing := 0
+	for group := 1; group < 1<<exos; group++ {
+		able := 0
+		for set, count := range hosts {
+			if set&group != 0 {
+				able += count
+			}
+		}
+		missing = max(missing, bits.OnesCount(uint(group))-able)
+	}
+	return missing
 }
 
 // climb greedily replaces one item at a time while the score improves.
