@@ -227,7 +227,7 @@ func linesIn(spec *engine.AttackSpec, element int, withBest bool) *engine.Attack
 	}
 	var lines []game.AttackLine
 	for _, line := range spec.Lines {
-		if line.Delay == 0 && (line.Element == element || (withBest && line.Element == game.ElementBest)) {
+		if line.Hits() && (line.Element == element || (withBest && line.Element == game.ElementBest)) {
 			line.Element = element
 			lines = append(lines, line)
 		}
@@ -993,7 +993,7 @@ pick:
 			hits := false
 			for _, spec := range gr.specs {
 				for _, line := range spec.Lines {
-					if line.Delay > 0 {
+					if !line.Hits() {
 						continue
 					}
 					canCrit := line.CritMax > 0 && spec.CritChance > 0
@@ -1012,7 +1012,12 @@ pick:
 					if element == game.ElementBest {
 						element = bestElement
 					}
+					// A line in the caster's lowest element gains nothing
+					// from a characteristic the search could push.
 					el := game.ElementStats[element]
+					if element == game.ElementWorst {
+						el.Stat, el.Damage = -1, -1
+					}
 					add(el.Stat, base/100)
 					add(game.StatPower, base/100)
 					add(game.StatDamage, 1)

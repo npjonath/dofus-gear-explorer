@@ -4,6 +4,7 @@ import * as React from "react"
 import { useDamage } from "../../api/queries"
 import type { Attack, AttackLine, AttackRange, BuildInput, Hit, Meta } from "../../api/types"
 import { useI18n } from "../../i18n"
+import { targetKeys } from "../../lib/targets"
 import type { Build } from "../../store"
 
 export const elementKeys = ["neutral", "earth", "fire", "water", "air"] as const
@@ -22,17 +23,35 @@ function HitCells({ hit, canCrit }: { hit: Hit; canCrit: boolean }) {
   )
 }
 
+// What a line does, then who it applies to and when.
 function LineLabel({ line }: { line: AttackLine }) {
   const { t } = useI18n()
   const element = elementKeys[line.element] ?? "neutral"
+  const name =
+    line.kind === "push"
+      ? t("damage.push", { count: line.cells ?? 0 })
+      : line.kind === "healPercent"
+        ? t("damage.healPercent")
+        : t(line.kind === "heal" ? "damage.heal" : line.steal ? "damage.steal" : "damage.hit", { element: t(`element.${element}`) })
+  const damage = !line.kind
+  const notes = [
+    targetKeys(line.targets)
+      .map((key) => t(key))
+      .join(" / "),
+    line.best ? t("damage.best") : "",
+    line.worst ? t("damage.worst") : "",
+    line.conditional ? t("damage.conditional") : "",
+    line.trigger ? t(`damage.trigger.${line.trigger}`) : "",
+    line.delay > 0 ? t("damage.delay", { count: line.delay }) : "",
+    damage && !line.counted && !line.conditional && line.delay === 0 ? t("damage.notCounted") : "",
+  ].filter(Boolean)
   return (
-    <span className="flex min-w-0 items-center gap-2">
-      <span className="pip" data-tone={element} />
-      <span className="truncate">
-        {t(line.steal ? "damage.steal" : "damage.hit", { element: t(`element.${element}`) })}
-        {line.best ? ` · ${t("damage.best")}` : ""}
-        {line.delay > 0 ? ` · ${t("damage.delay", { count: line.delay })}` : ""}
+    <span className="grid min-w-0">
+      <span className="flex min-w-0 items-center gap-2">
+        {line.kind === "healPercent" || line.kind === "push" ? null : <span className="pip" data-tone={element} />}
+        <span className="truncate">{name}</span>
       </span>
+      {notes.length > 0 && <span className="truncate text-[0.86rem] text-ink-3">{notes.join(" · ")}</span>}
     </span>
   )
 }
@@ -43,7 +62,7 @@ function AttackRow({ attack, variant }: { attack: Attack; variant: boolean }) {
   const canCrit = attack.critChance > 0 && attack.lines.some((line) => line.critMax > 0)
   const reach =
     attack.rangeMin === attack.rangeMax ? String(attack.rangeMax) : `${attack.rangeMin} – ${attack.rangeMax}`
-  const direct = attack.lines.filter((line) => line.delay === 0)
+  const counted = attack.lines.filter((line) => line.counted)
   return (
     <li className="damage-attack">
       <div className="damage-head">
@@ -63,21 +82,37 @@ function AttackRow({ attack, variant }: { attack: Attack; variant: boolean }) {
         </span>
       </div>
       {attack.lines.map((line, index) => (
-        <div key={index} className="damage-line">
-          <LineLabel line={line} />
-          <HitCells hit={line} canCrit={canCrit && line.critMax > 0} />
-        </div>
+        <React.Fragment key={index}>
+          <div className="damage-line">
+            <LineLabel line={line} />
+            <HitCells hit={line} canCrit={canCrit && line.critMax > 0} />
+          </div>
+          {line.regen && (
+            <div className="damage-line damage-sub">
+              <span className="truncate">{t("damage.regen")}</span>
+              <HitCells hit={line.regen} canCrit={canCrit && line.critMax > 0} />
+            </div>
+          )}
+          {line.steps?.map((step, used) => (
+            <div key={used} className="damage-line damage-sub">
+              <span className="truncate">{t("damage.mpUsed", { count: used + 1 })}</span>
+              <HitCells hit={step} canCrit={canCrit && line.critMax > 0} />
+            </div>
+          ))}
+        </React.Fragment>
       ))}
-      {direct.length > 1 && (
+      {counted.length > 1 && (
         <div className="damage-line damage-total">
           <span>{t("damage.total")}</span>
           <HitCells hit={attack.total} canCrit={canCrit} />
         </div>
       )}
-      <div className="damage-mean">
-        <span>{canCrit ? t("damage.meanAt", { chance: attack.critRate }) : t("damage.mean")}</span>
-        <strong>{number(attack.mean)}</strong>
-      </div>
+      {counted.length > 0 && (
+        <div className="damage-mean">
+          <span>{canCrit ? t("damage.meanAt", { chance: attack.critRate }) : t("damage.mean")}</span>
+          <strong>{number(attack.mean)}</strong>
+        </div>
+      )}
     </li>
   )
 }
