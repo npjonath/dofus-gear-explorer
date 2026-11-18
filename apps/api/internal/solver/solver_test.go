@@ -793,7 +793,7 @@ func TestSolveMaximizesSeveralElements(t *testing.T) {
 	}
 
 	for name, bad := range map[string]Request{
-		"one element":    {Maximize: []Weight{{Damage: &DamageGoal{Kind: "elements", Parts: parts(50)[:1]}}}},
+		"no element":     {Maximize: []Weight{{Damage: &DamageGoal{Kind: "elements"}}}},
 		"same element":   {Maximize: []Weight{{Damage: &DamageGoal{Kind: "elements", Parts: []ElementPart{{Element: "fire", Share: 100}, {Element: "fire", Share: 50}}}}}},
 		"no share":       {Maximize: []Weight{{Damage: &DamageGoal{Kind: "elements", Parts: parts(0)}}}},
 		"share over 100": {Maximize: []Weight{{Damage: &DamageGoal{Kind: "elements", Parts: parts(101)}}}},
@@ -878,6 +878,15 @@ func TestSolveReadsEachElementOnASpellOrAWeapon(t *testing.T) {
 	class := solve(ElementPart{Element: "earth", Share: 100}, ElementPart{Element: "fire", Share: 100, Kind: "spell", ID: fireSpell})
 	if class.Character.Base["intelligence"] >= spells.Character.Base["intelligence"] {
 		t.Errorf("points with the class average %v, with the named spell %v", class.Character.Base, spells.Character.Base)
+	}
+
+	// One element alone can name its weapon too: the stuff wears it, forged.
+	alone := solve(ElementPart{Element: "fire", Share: 100, Kind: "weapon", ID: bow})
+	if alone.Items["weapon"] != bow || alone.Mods["weapon"] == nil || alone.Mods["weapon"].Element != "fire" || len(alone.DamageParts[0]) != 1 {
+		t.Errorf("one element on a weapon: weapon %d with %+v, parts %v", alone.Items["weapon"], alone.Mods["weapon"], alone.DamageParts)
+	}
+	if want := engine.WeaponSpec(eng.Catalog.ItemByID[bow], engine.WeaponOptions{Element: "fire", Mastery: true}).Mean(stats(alone)); alone.Damage[0] != want {
+		t.Errorf("one element on a weapon reported %d, engine %d", alone.Damage[0], want)
 	}
 
 	// A weapon: the stuff wears it, forged to the element of its part, and
