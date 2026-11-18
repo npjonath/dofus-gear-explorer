@@ -231,6 +231,8 @@ export interface SpellInfo {
   variantOf: number
   /** The spell deals direct damage at some grade. */
   damage: boolean
+  /** The elements it hits in at once, at some grade; "best" follows the character's best element. */
+  elements: (WeaponElement | "neutral" | "best")[]
 }
 
 /** 0 neutral, 1 earth, 2 fire, 3 water, 4 air. */
@@ -299,10 +301,25 @@ export interface DamageGoal {
  */
 export type ElementMix = "floor" | "sum"
 
+/** What an element of a goal is read on, instead of every spell of the class: one spell, or the weapon. */
+export interface ElementTarget {
+  kind: "spell" | "weapon"
+  id: number
+}
+
 /** An element of a goal about several, with its share from 1 to 100. */
 export interface ElementShare {
   element: WeaponElement
   share: number
+  target?: ElementTarget
+}
+
+/** An element of a goal about several, as the search receives it. */
+export interface ElementPart {
+  element: WeaponElement
+  share: number
+  kind?: "spell" | "weapon"
+  id?: number
 }
 
 /** The damage of the class's spells in an element, or in several at once. */
@@ -317,6 +334,8 @@ export interface ElementEntry {
   mix?: ElementMix
   /** The first element's weight in a sum; 100 when left out. */
   share?: number
+  /** What the first element is read on, when there are several. */
+  target?: ElementTarget
 }
 
 /**
@@ -335,7 +354,7 @@ export interface MaximizedAttack {
   measure: DamageMeasure
   element?: WeaponElement
   /** The elements of an "elements" attack, the main one first, and how they count together. */
-  parts?: ElementShare[]
+  parts?: ElementPart[]
   mix?: ElementMix
 }
 

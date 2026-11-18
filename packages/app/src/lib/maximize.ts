@@ -1,4 +1,4 @@
-import type { ElementEntry, MaximizeEntry, MaximizedAttack, WeaponElement } from "../api/types"
+import type { ElementEntry, ElementPart, ElementShare, MaximizeEntry, MaximizedAttack, SpellInfo, WeaponElement } from "../api/types"
 
 export const weaponElements: WeaponElement[] = ["earth", "fire", "water", "air"]
 
@@ -26,6 +26,13 @@ export function addElement(entry: ElementEntry): ElementEntry {
   return { ...entry, element: first, others: [...(entry.others ?? []), { element: next, share: DEFAULT_SHARE }] }
 }
 
+/** Whether a spell has a line in an element, counting the lines that follow the best element. */
+export function spellHitsIn(spell: SpellInfo, element: WeaponElement): boolean {
+  return spell.elements.includes(element) || spell.elements.includes("best")
+}
+
+const part = ({ element, share, target }: ElementShare): ElementPart => ({ element, share, kind: target?.kind, id: target?.id })
+
 /** The attack the search receives for an entry about a weapon, a spell or elements. */
 export function maximizedAttack(entry: Exclude<MaximizeEntry, { kind: "stat" }>): MaximizedAttack {
   if (entry.kind !== "element") {
@@ -40,6 +47,6 @@ export function maximizedAttack(entry: Exclude<MaximizeEntry, { kind: "stat" }>)
     id: 0,
     measure: entry.measure,
     mix: entry.mix ?? "floor",
-    parts: [{ element: entry.element, share: entry.share ?? 100 }, ...others],
+    parts: [part({ element: entry.element, share: entry.share ?? 100, target: entry.target }), ...others.map(part)],
   }
 }

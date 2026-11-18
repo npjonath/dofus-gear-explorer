@@ -114,6 +114,13 @@ type DamageGoal struct {
 // ElementPart is one element of a goal about several.
 type ElementPart struct {
 	Element string `json:"element"`
+	// Kind narrows the part to one attack: "spell" or "weapon", with ID the
+	// spell or the item, read on its lines in the element. Empty reads every
+	// spell of the class in the element. A weapon is worn by the stuff, so
+	// the parts of a goal name one weapon at most; its Neutral damage is
+	// forged to the element of the first part that names it.
+	Kind string `json:"kind,omitempty"`
+	ID   int    `json:"id,omitempty"`
 	// Share is a percentage from 1 to 100. Under MixFloor the element must
 	// reach that share of the main one, whose own share is ignored; under
 	// MixSum it is the element's weight in the total.
@@ -194,20 +201,11 @@ func elementSpecs(cat *game.Catalog, level, breedID int, name, mode string, with
 	var specs []*engine.AttackSpec
 	for _, sp := range cat.SpellsByBreed[breedID] {
 		spec, _ := engine.SpellSpec(sp, level, mode)
-		if spec == nil || breedID == 0 {
+		if breedID == 0 {
 			continue
 		}
-		var lines []game.AttackLine
-		for _, line := range spec.Lines {
-			if line.Delay == 0 && (line.Element == element || (withBest && line.Element == game.ElementBest)) {
-				line.Element = element
-				lines = append(lines, line)
-			}
-		}
-		if len(lines) > 0 {
-			copied := *spec
-			copied.Lines = lines
-			specs = append(specs, &copied)
+		if spec = linesIn(spec, element, withBest); spec != nil {
+			specs = append(specs, spec)
 		}
 	}
 	if len(specs) == 0 {
@@ -218,6 +216,28 @@ func elementSpecs(cat *game.Catalog, level, breedID int, name, mode string, with
 		})
 	}
 	return specs
+}
+
+// linesIn returns an attack cut down to the lines that hit at once in an
+// element, or nil when it has none. A line that follows the character's best
+// element counts as one of the element when withBest is set.
+func linesIn(spec *engine.AttackSpec, element int, withBest bool) *engine.AttackSpec {
+	if spec == nil {
+		return nil
+	}
+	var lines []game.AttackLine
+	for _, line := range spec.Lines {
+		if line.Delay == 0 && (line.Element == element || (withBest && line.Element == game.ElementBest)) {
+			line.Element = element
+			lines = append(lines, line)
+		}
+	}
+	if len(lines) == 0 {
+		return nil
+	}
+	copied := *spec
+	copied.Lines = lines
+	return &copied
 }
 
 // ForgeOptions opens forgemagic to the search. What each item takes is
@@ -401,6 +421,10 @@ type damageGoal struct {
 	weight float64
 	// parts holds the elements of a goal about several; specs is then empty.
 	parts []goalPart
+	// weaponID is the weapon the parts name, if any, and forge the element
+	// its Neutral damage is forged to.
+	weaponID int
+	forge    string
 }
 
 type goalPart struct {
@@ -447,6 +471,7 @@ func (part *goalPart) estimate(measure string, stat func(statID int) int) (level
 	fixed := float64(stat(game.StatDamage) + stat(el.Damage))
 	critical := fixed + float64(stat(game.StatCritDamage))
 	ranged, melee := percent(stat(game.StatRangedDamage)), percent(stat(game.StatMeleeDamage))
+	spell, weapon := percent(stat(game.StatSpellDamage)), percent(stat(game.StatWeaponDamage))
 	for i, spec := range part.specs {
 		base := part.bases[i]
 		normalShare, criticalShare := 1.0, 0.0
@@ -459,15 +484,20 @@ func (part *goalPart) estimate(measure string, stat func(statID int) int) (level
 		}
 		rolled := base.normal*normalShare + base.critical*criticalShare
 		added := base.normalLines*fixed*normalShare + base.criticalLines*critical*criticalShare
-		reach := ranged
+		final := ranged
 		if spec.Melee {
-			reach = melee
+			final = melee
 		}
-		level += (rolled*percent(characteristic+spec.Power) + added) * reach
-		perPoint += rolled / 100 * reach
+		if spec.Weapon {
+			final *= weapon
+		} else {
+			final *= spell
+		}
+		level += (rolled*percent(characteristic+spec.Power) + added) * final
+		perPoint += rolled / 100 * final
 	}
-	scale := percent(stat(game.StatSpellDamage)) / float64(len(part.specs))
-	return level * scale, perPoint * scale
+	count := float64(len(part.specs))
+	return level / count, perPoint / count
 }
 
 // read returns what a goal shows on a stuff, what it counts for in the
@@ -875,15 +905,42 @@ pick:
 			for i, part := range g.Parts {
 				element, ok := engine.ElementID(part.Element)
 				for _, other := range g.Parts[:i] {
-					ok = ok && other.Element != part.Element
+					ok = ok && (other.Element != part.Element || other.Kind != part.Kind || other.ID != part.ID)
 				}
 				if !ok || part.Share < 1 || part.Share > 100 {
 					return ErrBadDamageGoal
 				}
-				// A line in the best element follows the main one.
-				gp := goalPart{
-					specs: elementSpecs(cat, p.level, req.BreedID, part.Element, g.Range, i == 0),
-					share: float64(part.Share) / 100, element: element,
+				gp := goalPart{share: float64(part.Share) / 100, element: element}
+				switch part.Kind {
+				case "":
+					// A line in the best element follows the main one.
+					gp.specs = elementSpecs(cat, p.level, req.BreedID, part.Element, g.Range, i == 0)
+				case "spell":
+					// A spell named by the player counts with its lines in
+					// the best element, wherever it comes in the goal.
+					spec, _ := engine.SpellSpec(cat.SpellByID[part.ID], p.level, g.Range)
+					if spec = linesIn(spec, element, true); spec != nil {
+						gp.specs = []*engine.AttackSpec{spec}
+					}
+				case "weapon":
+					it := cat.ItemByID[part.ID]
+					if goal.weaponID == 0 {
+						goal.weaponID = part.ID
+						if engine.CanTakeElement(it, part.Element) {
+							goal.forge = part.Element
+						}
+					}
+					if part.ID != goal.weaponID {
+						return ErrBadDamageGoal
+					}
+					// A weapon is counted with its mastery, as players wield it.
+					spec := engine.WeaponSpec(it, engine.WeaponOptions{Range: g.Range, Element: goal.forge, Mastery: true})
+					if spec = linesIn(spec, element, false); spec != nil {
+						gp.specs = []*engine.AttackSpec{spec}
+					}
+				}
+				if len(gp.specs) == 0 {
+					return ErrBadDamageGoal
 				}
 				for _, spec := range gp.specs {
 					gp.bases = append(gp.bases, newSpecBase(spec))
@@ -1099,8 +1156,16 @@ pick:
 		}
 	}
 	for _, m := range req.Maximize {
-		if m.Damage != nil && m.Damage.Kind == "weapon" {
+		if m.Damage == nil {
+			continue
+		}
+		if m.Damage.Kind == "weapon" {
 			weapons = append(weapons, m.Damage.ID)
+		}
+		for _, part := range m.Damage.Parts {
+			if m.Damage.Kind == "elements" && part.Kind == "weapon" {
+				weapons = append(weapons, part.ID)
+			}
 		}
 	}
 	for _, id := range append(weapons, req.Required...) {
@@ -1504,13 +1569,17 @@ func (p *problem) finish(assign []*cand, score float64, req Request) Solution {
 	}
 	// A weapon goal's elemental forgemagic goes on the weapon it names.
 	for _, d := range p.damage {
-		if d.goal.Element == "" || sol.Items["weapon"] != d.goal.ID {
+		id, element := d.goal.ID, d.goal.Element
+		if len(d.parts) > 0 {
+			id, element = d.weaponID, d.forge
+		}
+		if element == "" || id == 0 || sol.Items["weapon"] != id {
 			continue
 		}
 		if mods["weapon"] == nil {
 			mods["weapon"] = &engine.ItemMods{}
 		}
-		mods["weapon"].Element = d.goal.Element
+		mods["weapon"].Element = element
 	}
 	if len(mods) > 0 {
 		sol.Mods = mods

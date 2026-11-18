@@ -794,11 +794,11 @@ func TestSolveMaximizesSeveralElements(t *testing.T) {
 
 	for name, bad := range map[string]Request{
 		"one element":    {Maximize: []Weight{{Damage: &DamageGoal{Kind: "elements", Parts: parts(50)[:1]}}}},
-		"same element":   {Maximize: []Weight{{Damage: &DamageGoal{Kind: "elements", Parts: []ElementPart{{"fire", 100}, {"fire", 50}}}}}},
+		"same element":   {Maximize: []Weight{{Damage: &DamageGoal{Kind: "elements", Parts: []ElementPart{{Element: "fire", Share: 100}, {Element: "fire", Share: 50}}}}}},
 		"no share":       {Maximize: []Weight{{Damage: &DamageGoal{Kind: "elements", Parts: parts(0)}}}},
 		"share over 100": {Maximize: []Weight{{Damage: &DamageGoal{Kind: "elements", Parts: parts(101)}}}},
 		"unknown mix":    {Maximize: []Weight{{Damage: &DamageGoal{Kind: "elements", Mix: "best", Parts: parts(50)}}}},
-		"neutral":        {Maximize: []Weight{{Damage: &DamageGoal{Kind: "elements", Parts: []ElementPart{{"earth", 100}, {"neutral", 50}}}}}},
+		"neutral":        {Maximize: []Weight{{Damage: &DamageGoal{Kind: "elements", Parts: []ElementPart{{Element: "earth", Share: 100}, {Element: "neutral", Share: 50}}}}}},
 		"to reach":       {Damage: []DamageGoal{{Kind: "elements", Parts: parts(50), Value: 100}}},
 		"two floors": {Maximize: []Weight{
 			{Damage: &DamageGoal{Kind: "elements", Parts: parts(50)}}, {Damage: &DamageGoal{Kind: "elements", Parts: parts(80)}},
@@ -806,6 +806,108 @@ func TestSolveMaximizesSeveralElements(t *testing.T) {
 	} {
 		bad.Character, bad.BreedID = engine.Character{Level: 200}, gametest.BreedID
 		if _, err := Solve(context.Background(), eng, bad); !errors.Is(err, ErrBadDamageGoal) {
+			t.Errorf("%s: err = %v", name, err)
+		}
+	}
+}
+
+// Each element of a goal can name what it reads: one spell or the weapon
+// instead of every spell of the class.
+func TestSolveReadsEachElementOnASpellOrAWeapon(t *testing.T) {
+	const fireSpell, bow, sword = 502, 90, 91
+	ds := elementsDataset()
+	ds.Types = append(ds.Types, game.ItemType{ID: 2, SuperTypeID: 2, Slot: game.SlotWeapon, Name: game.Texts{"fr": "Arc"}})
+	weapon := func(id int, name string) game.Item {
+		return game.Item{
+			ID: id, TypeID: 2, Slot: game.SlotWeapon, Level: 100, IconID: id,
+			Name: game.Texts{"fr": name}, Description: game.Texts{},
+			Weapon: &game.WeaponInfo{APCost: 4, RangeMin: 2, RangeMax: 6, CritChance: 10, CritBonus: 5},
+			// A Neutral line: the forgemagic can turn it to an element.
+			Effects: []game.ItemEffect{{EffectID: 100, Kind: game.EffectWeapon, StatID: -1, Min: 10, Max: 20}},
+		}
+	}
+	ds.Items = append(ds.Items, weapon(bow, "Arc d'Essai"), weapon(sword, "Épée d'Essai"))
+	// A second, weaker Earth spell: the class's average and its best spell differ.
+	weak := ds.Spells[0]
+	weak.ID, weak.Order = 503, 2
+	weak.Levels = []game.SpellLevel{{Grade: 1, MinLevel: 1, APCost: 2, RangeMin: 1, RangeMax: 6, CritChance: 10,
+		Lines: []game.AttackLine{{Element: game.ElementEarth, Min: 4, Max: 6, CritMin: 6, CritMax: 8}}}}
+	ds.Spells = append(ds.Spells, weak)
+	eng := engine.New(game.NewCatalog(ds))
+	if element, _, ok := game.AttackAction(100); !ok || element != game.ElementNeutral {
+		t.Fatalf("action 100 should be a Neutral hit, got element %d", element)
+	}
+	solve := func(parts ...ElementPart) Solution {
+		t.Helper()
+		out, err := Solve(context.Background(), eng, Request{
+			Character: engine.Character{Level: 200}, AutoPoints: true, BreedID: gametest.BreedID,
+			Maximize: []Weight{{Damage: &DamageGoal{Kind: "elements", Measure: MeasureMean, Parts: parts}}},
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return out.Solutions[0]
+	}
+	stats := func(sol Solution) func(int) int {
+		res := eng.Evaluate(engine.Build{Character: sol.Character, Items: sol.Items, Mods: sol.Mods}, "")
+		if !res.Valid {
+			t.Errorf("issues %+v", res.Issues)
+		}
+		return func(id int) int { return res.Stats[id] }
+	}
+	spell := func(id int) *engine.AttackSpec {
+		spec, _ := engine.SpellSpec(eng.Catalog.SpellByID[id], 200, engine.RangeAuto)
+		return spec
+	}
+
+	// Two spells: each part reports its spell, and the floor holds between them.
+	spells := solve(
+		ElementPart{Element: "earth", Share: 100, Kind: "spell", ID: gametest.SpellEarth},
+		ElementPart{Element: "fire", Share: 100, Kind: "spell", ID: fireSpell},
+	)
+	stat := stats(spells)
+	earth, fire := spells.DamageParts[0][0], spells.DamageParts[0][1]
+	if earth != spell(gametest.SpellEarth).Mean(stat) || fire != spell(fireSpell).Mean(stat) {
+		t.Errorf("reported %v, engine %d and %d", spells.DamageParts, spell(gametest.SpellEarth).Mean(stat), spell(fireSpell).Mean(stat))
+	}
+	if fire < earth*97/100 || earth < fire*97/100 {
+		t.Errorf("balance between two spells: %v", spells.DamageParts)
+	}
+	// Read on every Earth spell, the same floor asks less of Fire: the weak
+	// spell pulls the Earth average down.
+	class := solve(ElementPart{Element: "earth", Share: 100}, ElementPart{Element: "fire", Share: 100, Kind: "spell", ID: fireSpell})
+	if class.Character.Base["intelligence"] >= spells.Character.Base["intelligence"] {
+		t.Errorf("points with the class average %v, with the named spell %v", class.Character.Base, spells.Character.Base)
+	}
+
+	// A weapon: the stuff wears it, forged to the element of its part, and
+	// the part reports what it hits for.
+	armed := solve(
+		ElementPart{Element: "earth", Share: 100, Kind: "spell", ID: gametest.SpellEarth},
+		ElementPart{Element: "fire", Share: 60, Kind: "weapon", ID: bow},
+	)
+	if armed.Items["weapon"] != bow || armed.Mods["weapon"] == nil || armed.Mods["weapon"].Element != "fire" {
+		t.Fatalf("weapon %d with %+v, want the bow forged to Fire", armed.Items["weapon"], armed.Mods["weapon"])
+	}
+	spec := engine.WeaponSpec(eng.Catalog.ItemByID[bow], engine.WeaponOptions{Element: "fire", Mastery: true})
+	if want := spec.Mean(stats(armed)); armed.DamageParts[0][1] != want {
+		t.Errorf("weapon part reported %d, engine %d", armed.DamageParts[0][1], want)
+	}
+
+	for name, parts := range map[string][]ElementPart{
+		"two weapons":                {{Element: "earth", Share: 100, Kind: "weapon", ID: bow}, {Element: "fire", Share: 50, Kind: "weapon", ID: sword}},
+		"spell without the element":  {{Element: "earth", Share: 100}, {Element: "fire", Share: 50, Kind: "spell", ID: gametest.SpellEarth}},
+		"weapon without the element": {{Element: "fire", Share: 100, Kind: "weapon", ID: bow}, {Element: "earth", Share: 50, Kind: "weapon", ID: bow}},
+		"unknown spell":              {{Element: "earth", Share: 100}, {Element: "fire", Share: 50, Kind: "spell", ID: 99999}},
+		"not a weapon":               {{Element: "earth", Share: 100}, {Element: "fire", Share: 50, Kind: "weapon", ID: 40}},
+		"unknown kind":               {{Element: "earth", Share: 100}, {Element: "fire", Share: 50, Kind: "item", ID: bow}},
+		"same spell twice":           {{Element: "earth", Share: 100, Kind: "spell", ID: gametest.SpellEarth}, {Element: "earth", Share: 50, Kind: "spell", ID: gametest.SpellEarth}},
+	} {
+		_, err := Solve(context.Background(), eng, Request{
+			Character: engine.Character{Level: 200}, BreedID: gametest.BreedID,
+			Maximize: []Weight{{Damage: &DamageGoal{Kind: "elements", Parts: parts}}},
+		})
+		if !errors.Is(err, ErrBadDamageGoal) {
 			t.Errorf("%s: err = %v", name, err)
 		}
 	}
