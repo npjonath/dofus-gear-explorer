@@ -39,7 +39,9 @@ export function maximizedAttack(entry: Exclude<MaximizeEntry, { kind: "stat" }>)
     return { kind: entry.kind, id: entry.id, measure: entry.measure, element: entry.element }
   }
   const others = entry.others ?? []
-  if (entry.element === "auto" || others.length === 0) {
+  // One element read on every spell of the class is the plain element goal;
+  // read on a spell or a weapon, it is a goal of one part.
+  if (entry.element === "auto" || (others.length === 0 && !entry.target)) {
     return { kind: "element", id: 0, measure: entry.measure, element: entry.element === "auto" ? undefined : entry.element }
   }
   return {

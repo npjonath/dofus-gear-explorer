@@ -43,6 +43,15 @@ describe("what the search receives for an entry to maximize", () => {
       { element: "water", share: 100, kind: "spell", id: 12 },
       { element: "fire", share: 70, kind: "weapon", id: 34 },
     ])
+    // An element alone keeps the spell or the weapon it names.
+    const alone: ElementEntry = { kind: "element", element: "fire", measure: "mean", target: { kind: "weapon", id: 34 } }
+    expect(maximizedAttack(alone)).toEqual({
+      kind: "elements",
+      id: 0,
+      measure: "mean",
+      mix: "floor",
+      parts: [{ element: "fire", share: 100, kind: "weapon", id: 34 }],
+    })
     const summed: ElementEntry = { ...entry, mix: "sum", share: 60 }
     expect(maximizedAttack(summed).parts?.[0]).toEqual({ element: "water", share: 60 })
   })

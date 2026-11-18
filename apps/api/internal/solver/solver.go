@@ -89,7 +89,8 @@ type DamageGoal struct {
 	// Kind is "weapon" or "spell", with ID the item or the spell, or
 	// "element": the damage of the class's spells in one element, without
 	// naming any, or "elements": the same in several elements at once, as
-	// Parts and Mix say. An "elements" goal can only be maximized.
+	// Parts and Mix say, or in one element read on a spell or a weapon. An
+	// "elements" goal can only be maximized.
 	Kind string `json:"kind"`
 	ID   int    `json:"id"`
 	// Measure is one of the Measure constants; empty means MeasureNormal.
@@ -227,7 +228,7 @@ func linesIn(spec *engine.AttackSpec, element int, withBest bool) *engine.Attack
 	}
 	var lines []game.AttackLine
 	for _, line := range spec.Lines {
-		if line.Delay == 0 && (line.Element == element || (withBest && line.Element == game.ElementBest)) {
+		if line.Hits() && (line.Element == element || (withBest && line.Element == game.ElementBest)) {
 			line.Element = element
 			lines = append(lines, line)
 		}
@@ -898,7 +899,7 @@ pick:
 		var groups []group
 		if g.Kind == "elements" {
 			floor := g.Mix == "" || g.Mix == MixFloor
-			if share == 0 || (!floor && g.Mix != MixSum) || len(g.Parts) < 2 || len(g.Parts) > maxParts || (floor && p.floor >= 0) {
+			if share == 0 || (!floor && g.Mix != MixSum) || len(g.Parts) < 1 || len(g.Parts) > maxParts || (floor && p.floor >= 0) {
 				return ErrBadDamageGoal
 			}
 			shares := 0.0
@@ -993,7 +994,7 @@ pick:
 			hits := false
 			for _, spec := range gr.specs {
 				for _, line := range spec.Lines {
-					if line.Delay > 0 {
+					if !line.Hits() {
 						continue
 					}
 					canCrit := line.CritMax > 0 && spec.CritChance > 0
@@ -1012,7 +1013,12 @@ pick:
 					if element == game.ElementBest {
 						element = bestElement
 					}
+					// A line in the caster's lowest element gains nothing
+					// from a characteristic the search could push.
 					el := game.ElementStats[element]
+					if element == game.ElementWorst {
+						el.Stat, el.Damage = -1, -1
+					}
 					add(el.Stat, base/100)
 					add(game.StatPower, base/100)
 					add(game.StatDamage, 1)

@@ -232,7 +232,7 @@ export interface SpellInfo {
   /** The spell deals direct damage at some grade. */
   damage: boolean
   /** The elements it hits in at once, at some grade; "best" follows the character's best element. */
-  elements: (WeaponElement | "neutral" | "best")[]
+  elements: (WeaponElement | "neutral" | "best" | "worst")[]
 }
 
 /** 0 neutral, 1 earth, 2 fire, 3 water, 4 air. */
@@ -245,13 +245,48 @@ export interface Hit {
   critMax: number
 }
 
+/** Who a line of an attack applies to. Lower-case names are on the caster's side. */
+export type AttackTarget =
+  | "ally"
+  | "enemy"
+  | "allyOther"
+  | "caster"
+  | "allyPlayer"
+  | "enemyPlayer"
+  | "allyMonster"
+  | "enemyMonster"
+  | "allyCompanion"
+  | "enemyCompanion"
+  | "allyPlayerCompanion"
+  | "enemyPlayerCompanion"
+  | "allySummon"
+  | "enemySummon"
+
 export interface AttackLine extends Hit {
   element: ElementId
-  /** The line follows the highest elemental characteristic. */
+  /** The line follows the highest elemental characteristic, or the lowest one. */
   best: boolean
+  worst?: boolean
   steal: boolean
   /** Turns before the line applies. */
   delay: number
+  /** Damage when left out; a heal that scales with a characteristic, a heal in % of health points, or a pushback. */
+  kind?: "heal" | "healPercent" | "push"
+  /** Who the line applies to; empty for a weapon. */
+  targets: AttackTarget[]
+  /** The line applies later, when a condition is met. */
+  conditional?: boolean
+  /** When the line applies, if not as the spell is cast. */
+  trigger?: "turnStart" | "turnEnd"
+  /** The line is part of the attack's total: damage dealt to an enemy as the attack is made. */
+  counted: boolean
+  /** Cells a pushback pushes, on a normal and on a critical hit. */
+  cells?: number
+  critCells?: number
+  /** What a steal gives back to the caster. */
+  regen?: Hit
+  /** The line for each MP the caster has used this turn, from one up, when it grows with them. */
+  steps?: Hit[]
 }
 
 export interface Attack {
@@ -265,7 +300,7 @@ export interface Attack {
   critChance: number
   melee: boolean
   lines: AttackLine[]
-  /** The lines that hit at once, summed. */
+  /** The counted lines, summed: what an enemy takes as the attack is made. */
   total: Hit
   /** Chance of a critical hit with this stuff, 0 to 100, and the average hit at that rate. */
   critRate: number
@@ -334,7 +369,7 @@ export interface ElementEntry {
   mix?: ElementMix
   /** The first element's weight in a sum; 100 when left out. */
   share?: number
-  /** What the first element is read on, when there are several. */
+  /** What the first element is read on, once it is named. */
   target?: ElementTarget
 }
 

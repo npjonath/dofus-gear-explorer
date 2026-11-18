@@ -26,6 +26,8 @@ type AttackSpec struct {
 	// Power is added to the character's Power for this attack only: the
 	// weapon mastery.
 	Power int
+	// Level is the caster's level, which pushback damage scales with.
+	Level int
 }
 
 // WeaponMastery is the Power a weapon mastery adds to a weapon's hits.
@@ -78,6 +80,18 @@ func BestElement(stat func(statID int) int) int {
 		}
 	}
 	return best
+}
+
+// WorstElement is the element of the lowest elemental characteristic, the
+// first one in the game's order when several are equal.
+func WorstElement(stat func(statID int) int) int {
+	worst := game.ElementEarth
+	for _, el := range []int{game.ElementFire, game.ElementWater, game.ElementAir} {
+		if stat(game.ElementStats[el].Stat) < stat(game.ElementStats[worst].Stat) {
+			worst = el
+		}
+	}
+	return worst
 }
 
 func percent(value int) int {
@@ -139,14 +153,64 @@ func (t terms) line(line game.AttackLine) Hit {
 // Line computes one line. It also returns the element the line ends up in.
 func (spec *AttackSpec) Line(line game.AttackLine, stat func(statID int) int) (Hit, int) {
 	element := line.Element
-	if element == game.ElementBest {
+	switch element {
+	case game.ElementBest:
 		element = BestElement(stat)
+	case game.ElementWorst:
+		element = WorstElement(stat)
+	}
+	switch line.Kind {
+	case game.LineHeal:
+		// A heal scales with the element's characteristic alone, then adds
+		// the caster's Heals.
+		multiplier, heals := percent(stat(game.ElementStats[element].Stat)), stat(game.StatHeal)
+		heal := func(base int) int { return max(0, base*multiplier/100+heals) }
+		hit := Hit{Min: heal(line.Min), Max: heal(line.Max)}
+		if line.CritMax > 0 {
+			hit.CritMin, hit.CritMax = heal(line.CritMin), heal(line.CritMax)
+		}
+		return hit, element
+	case game.LineHealPercent:
+		health := stat(game.StatHP)
+		hit := Hit{Min: health * line.Min / 100, Max: health * line.Max / 100}
+		if line.CritMax > 0 {
+			hit.CritMin, hit.CritMax = health*line.CritMin/100, health*line.CritMax/100
+		}
+		return hit, element
+	case game.LinePush:
+		// Pushback damage grows with the caster's level and the cells pushed.
+		push := func(cells int) int { return max(0, (spec.Level/2+32+stat(game.StatPushDamage))*cells/4) }
+		hit := Hit{Min: push(line.Min), Max: push(line.Max)}
+		if line.CritMax > 0 {
+			hit.CritMin, hit.CritMax = push(line.CritMin), push(line.CritMax)
+		}
+		return hit, element
 	}
 	return spec.terms(element, stat).line(line), element
 }
 
-// Total sums the lines that hit when the attack is made, leaving out the
-// delayed ones.
+// Steps computes a line whose rolls grow with the MP the caster has used:
+// one hit per MP, up to the character's own. It is empty for other lines.
+func (spec *AttackSpec) Steps(line game.AttackLine, stat func(statID int) int) []Hit {
+	if line.PerMP == 0 || line.Kind != "" {
+		return nil
+	}
+	steps := make([]Hit, 0, max(0, stat(game.StatMP)))
+	for used := 1; used <= stat(game.StatMP); used++ {
+		grown := line
+		grown.Min, grown.Max = line.Min+used*line.PerMP, line.Max+used*line.PerMP
+		if line.CritMax > 0 {
+			grown.CritMin, grown.CritMax = line.CritMin+used*line.PerMP, line.CritMax+used*line.PerMP
+		}
+		hit, _ := spec.Line(grown, stat)
+		steps = append(steps, hit)
+	}
+	return steps
+}
+
+// Total sums the lines that hit an enemy when the attack is made. It leaves
+// out the delayed and conditional ones, those kept for summons or allies,
+// and what is not damage.
 func (spec *AttackSpec) Total(stat func(statID int) int) Hit {
 	var total Hit
 	// The characteristics are read once per element, not once per roll: the
@@ -155,7 +219,7 @@ func (spec *AttackSpec) Total(stat func(statID int) int) Hit {
 	var known [5]bool
 	best := -1
 	for _, line := range spec.Lines {
-		if line.Delay > 0 {
+		if !line.Hits() {
 			continue
 		}
 		element := line.Element
@@ -164,6 +228,9 @@ func (spec *AttackSpec) Total(stat func(statID int) int) Hit {
 				best = BestElement(stat)
 			}
 			element = best
+		}
+		if element == game.ElementWorst {
+			element = WorstElement(stat)
 		}
 		if element < 0 || element >= len(cached) {
 			continue
@@ -282,17 +349,36 @@ func SpellSpec(sp *game.Spell, level int, mode string) (*AttackSpec, *game.Spell
 	if grade == nil || len(grade.Lines) == 0 {
 		return nil, grade
 	}
-	return &AttackSpec{Lines: grade.Lines, Melee: melee(mode, grade.RangeMax), CritChance: grade.CritChance}, grade
+	return &AttackSpec{Lines: grade.Lines, Melee: melee(mode, grade.RangeMax), CritChance: grade.CritChance, Level: level}, grade
 }
 
 // AttackLineResult is one line of an attack with a stuff's characteristics.
 type AttackLineResult struct {
 	// Element is the element the line hits in; Best says it follows the
-	// highest characteristic.
+	// highest characteristic, Worst the lowest.
 	Element int  `json:"element"`
 	Best    bool `json:"best"`
+	Worst   bool `json:"worst,omitempty"`
 	Steal   bool `json:"steal"`
 	Delay   int  `json:"delay"`
+	// Kind is empty for damage, or "heal", "healPercent" or "push".
+	Kind string `json:"kind,omitempty"`
+	// Targets names who the line applies to; empty for a weapon.
+	Targets []string `json:"targets"`
+	// Conditional says the line applies later, when a condition is met, and
+	// Trigger when it applies if not as the spell is cast.
+	Conditional bool   `json:"conditional,omitempty"`
+	Trigger     string `json:"trigger,omitempty"`
+	// Counted says the line is part of the attack's total.
+	Counted bool `json:"counted"`
+	// Cells is how far a pushback pushes, on a normal and on a critical hit.
+	Cells     int `json:"cells,omitempty"`
+	CritCells int `json:"critCells,omitempty"`
+	// Regen is what a steal gives back to the caster: half the damage.
+	Regen *Hit `json:"regen,omitempty"`
+	// Steps holds the line for each MP the caster has used, from one MP up
+	// to the character's own, when its rolls grow with them.
+	Steps []Hit `json:"steps,omitempty"`
 	Hit
 }
 
@@ -319,9 +405,22 @@ func describe(spec *AttackSpec, stat func(statID int) int) ([]AttackLineResult, 
 	lines := make([]AttackLineResult, 0, len(spec.Lines))
 	for _, line := range spec.Lines {
 		hit, element := spec.Line(line, stat)
-		lines = append(lines, AttackLineResult{
+		result := AttackLineResult{
 			Element: element, Best: line.Element == game.ElementBest, Steal: line.Steal, Delay: line.Delay, Hit: hit,
-		})
+			Worst: line.Element == game.ElementWorst,
+			Kind:  line.Kind, Targets: game.Targets(line.Targets), Conditional: line.Conditional, Trigger: line.Trigger,
+			Counted: line.Hits(), Steps: spec.Steps(line, stat),
+		}
+		if result.Targets == nil {
+			result.Targets = []string{}
+		}
+		if line.Kind == game.LinePush {
+			result.Cells, result.CritCells = line.Min, line.CritMin
+		}
+		if line.Steal && line.Kind == "" {
+			result.Regen = &Hit{Min: hit.Min / 2, Max: hit.Max / 2, CritMin: hit.CritMin / 2, CritMax: hit.CritMax / 2}
+		}
+		lines = append(lines, result)
 	}
 	return lines, spec.Total(stat)
 }

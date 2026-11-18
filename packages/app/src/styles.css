@@ -1518,6 +1518,11 @@ th[aria-sort="descending"] .th-sort svg { opacity: 1; }
 
 .damage-columns { padding: 0 0.85rem; color: var(--ink-2); font-size: 0.86rem; }
 
+/* What follows from the line above: the health a steal gives back, a line's
+   value for each MP used. */
+.damage-sub { padding-left: 1.1rem; color: var(--ink-2); font-size: 0.93rem; }
+.damage-sub .damage-value { font-weight: 600; }
+
 .damage-value {
   text-align: right;
   font-weight: 700;

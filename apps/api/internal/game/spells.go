@@ -1,5 +1,7 @@
 package game
 
+import "strings"
+
 // Elements of an attack line, numbered as in the game data.
 const (
 	ElementNeutral = 0
@@ -7,8 +9,10 @@ const (
 	ElementFire    = 2
 	ElementWater   = 3
 	ElementAir     = 4
-	// ElementBest is the element of the caster's highest characteristic.
-	ElementBest = -1
+	// ElementBest is the element of the caster's highest characteristic, and
+	// ElementWorst that of the lowest.
+	ElementBest  = -1
+	ElementWorst = -2
 )
 
 // attackActions maps the game's damage and steal actions to their element.
@@ -17,7 +21,7 @@ var attackActions = map[int]struct {
 	steal   bool
 }{
 	100: {ElementNeutral, false}, 97: {ElementEarth, false}, 99: {ElementFire, false},
-	96: {ElementWater, false}, 98: {ElementAir, false}, 2822: {ElementBest, false},
+	96: {ElementWater, false}, 98: {ElementAir, false}, 2822: {ElementBest, false}, 2832: {ElementWorst, false},
 	95: {ElementNeutral, true}, 92: {ElementEarth, true}, 94: {ElementFire, true},
 	91: {ElementWater, true}, 93: {ElementAir, true}, 2828: {ElementBest, true},
 }
@@ -29,8 +33,27 @@ func AttackAction(actionID int) (element int, steal, ok bool) {
 	return a.element, a.steal, ok
 }
 
-// AttackLine is one damage line of a weapon or a spell, before the
-// character's characteristics apply.
+// What a line of a spell does besides damage.
+const (
+	// LineHeal heals for a roll that scales with the element's
+	// characteristic and the caster's Heals.
+	LineHeal = "heal"
+	// LineHealPercent heals for a percentage of the caster's health points:
+	// Min and Max hold the percentage.
+	LineHealPercent = "healPercent"
+	// LinePush pushes back: Min and Max hold the number of cells, and the
+	// line deals pushback damage.
+	LinePush = "push"
+)
+
+// When a line applies, when it is not as the spell is cast.
+const (
+	TriggerTurnStart = "turnStart"
+	TriggerTurnEnd   = "turnEnd"
+)
+
+// AttackLine is one line of a weapon or a spell, before the character's
+// characteristics apply: damage or a steal, unless Kind says otherwise.
 type AttackLine struct {
 	Element int  `json:"element"`
 	Steal   bool `json:"steal,omitempty"`
@@ -42,6 +65,71 @@ type AttackLine struct {
 	CritMax int `json:"critMax"`
 	// Delay is the number of turns before the line applies.
 	Delay int `json:"delay,omitempty"`
+	// Kind is empty for damage, or one of the Line constants.
+	Kind string `json:"kind,omitempty"`
+	// Targets is the game's mask of who the line applies to, such as "a,A"
+	// for allies and enemies; empty for a weapon, which hits whoever it is
+	// aimed at.
+	Targets string `json:"targets,omitempty"`
+	// Conditional says the spell only describes the line: it applies later,
+	// when a condition is met, such as a state the spell leaves on its
+	// target being triggered.
+	Conditional bool `json:"conditional,omitempty"`
+	// Trigger is empty for a line applied as the spell is cast, or one of
+	// the Trigger constants.
+	Trigger string `json:"trigger,omitempty"`
+	// PerMP is what the line's rolls gain for each MP the caster has used
+	// this turn.
+	PerMP int `json:"perMp,omitempty"`
+}
+
+// Hits reports whether the line is damage dealt to an enemy when the attack
+// is made: what the total of an attack counts. A line kept for summons, or
+// for allies, or dealt later, is shown but not added.
+func (l AttackLine) Hits() bool {
+	return l.Kind == "" && l.Delay == 0 && !l.Conditional && l.Trigger == "" && TargetsEnemy(l.Targets)
+}
+
+// targetNames names the plain letters of a target mask. Lower case is the
+// caster's side, upper case the other one.
+var targetNames = map[string]string{
+	"a": "ally", "A": "enemy", "g": "allyOther", "C": "caster",
+	"h": "allyPlayer", "H": "enemyPlayer", "m": "allyMonster", "M": "enemyMonster",
+	"d": "allyCompanion", "D": "enemyCompanion", "l": "allyPlayerCompanion", "L": "enemyPlayerCompanion",
+	"j": "allySummon", "J": "enemySummon", "i": "allySummon", "I": "enemySummon", "s": "allySummon", "S": "enemySummon",
+}
+
+// Targets names who a mask applies to, in the mask's order. The conditions a
+// mask can also carry, such as a state the target must be in, are left out.
+func Targets(mask string) []string {
+	var out []string
+	for _, token := range strings.Split(mask, ",") {
+		name, ok := targetNames[token]
+		if !ok {
+			continue
+		}
+		known := false
+		for _, other := range out {
+			known = known || other == name
+		}
+		if !known {
+			out = append(out, name)
+		}
+	}
+	return out
+}
+
+// TargetsEnemy reports whether a mask covers an enemy that is not a summon:
+// the opponent an attack is measured on. A mask that names nobody does.
+func TargetsEnemy(mask string) bool {
+	names := Targets(mask)
+	for _, name := range names {
+		switch name {
+		case "enemy", "enemyPlayer", "enemyMonster", "enemyPlayerCompanion":
+			return true
+		}
+	}
+	return len(names) == 0
 }
 
 // SpellLevel is a spell at one of its grades.
@@ -55,7 +143,8 @@ type SpellLevel struct {
 	Lines      []AttackLine `json:"lines"`
 }
 
-// Spell is a class spell or a common spell. Only its damage lines are kept.
+// Spell is a class spell or a common spell. Only the lines the damage panel
+// computes are kept: damage, steals, heals and pushbacks.
 type Spell struct {
 	ID     int
 	IconID int
