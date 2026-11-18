@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -247,6 +248,15 @@ type spellDTO struct {
 	VariantOf int    `json:"variantOf"`
 	// Damage says the spell deals direct damage at some grade.
 	Damage bool `json:"damage"`
+	// Elements lists the elements the spell hits in at once, at some grade:
+	// "earth", "fire", "water", "air", "neutral", or "best" for a line that
+	// follows the character's best element.
+	Elements []string `json:"elements"`
+}
+
+var elementNames = map[int]string{
+	game.ElementNeutral: "neutral", game.ElementEarth: "earth", game.ElementFire: "fire",
+	game.ElementWater: "water", game.ElementAir: "air", game.ElementBest: "best",
 }
 
 type prysmaraditeDTO struct {
@@ -303,9 +313,14 @@ func (s *Server) handleMeta(w http.ResponseWriter, r *http.Request, eng *engine.
 	}
 	for _, breedID := range append(breedIDs, 0) {
 		for _, sp := range cat.SpellsByBreed[breedID] {
-			dto := spellDTO{ID: sp.ID, Name: sp.Name.Get(lang), BreedID: sp.BreedID, VariantOf: sp.VariantOf}
+			dto := spellDTO{ID: sp.ID, Name: sp.Name.Get(lang), BreedID: sp.BreedID, VariantOf: sp.VariantOf, Elements: []string{}}
 			for _, level := range sp.Levels {
 				dto.Damage = dto.Damage || len(level.Lines) > 0
+				for _, line := range level.Lines {
+					if name := elementNames[line.Element]; line.Delay == 0 && name != "" && !slices.Contains(dto.Elements, name) {
+						dto.Elements = append(dto.Elements, name)
+					}
+				}
 			}
 			meta.Spells = append(meta.Spells, dto)
 		}

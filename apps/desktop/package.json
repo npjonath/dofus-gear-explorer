@@ -1,7 +1,7 @@
 {
   "name": "@dde/desktop",
   "private": true,
-  "version": "0.3.2",
+  "version": "0.4.0",
   "description": "Electron shell of Dofus Gear Explorer. Runs the Go API as a local sidecar.",
   "author": "Dofus Gear Explorer contributors",
   "license": "MIT",

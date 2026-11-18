@@ -3,6 +3,7 @@ package solver
 import (
 	"context"
 	"errors"
+	"math"
 	"reflect"
 	"testing"
 
@@ -136,6 +137,88 @@ func TestSolveHandsOutAllowedExos(t *testing.T) {
 	res := eng.Evaluate(engine.Build{Character: req.Character, Items: best.Items, Mods: best.Mods}, "fr")
 	if !res.Valid || res.Stats[game.StatAP] < 10 {
 		t.Errorf("valid %v, AP %d, issues %+v", res.Valid, res.Stats[game.StatAP], res.Issues)
+	}
+}
+
+// An exo goes to an item that lacks the stat. An item that already gives MP
+// is no home for the MP exo, even without a rune: counting it as one made the
+// search keep a rune that the exo then took away.
+func TestSolveKeepsAnItemForEachExo(t *testing.T) {
+	const belt, boots, cloakWithMP, cloak, rataFo = 70, 71, 72, 73, 900
+	ds := gametest.Dataset()
+	ds.Types = append(ds.Types,
+		game.ItemType{ID: 10, SuperTypeID: 4, Slot: game.SlotBelt, Name: game.Texts{"fr": "Ceinture"}},
+		game.ItemType{ID: 11, SuperTypeID: 5, Slot: game.SlotBoots, Name: game.Texts{"fr": "Bottes"}},
+		game.ItemType{ID: 17, SuperTypeID: 11, Slot: game.SlotCloak, Name: game.Texts{"fr": "Cape"}},
+	)
+	gear := func(id, typeID int, slot game.Slot, name string, effects ...game.ItemEffect) game.Item {
+		return game.Item{
+			ID: id, TypeID: typeID, Slot: slot, Level: 200, IconID: id,
+			Name: game.Texts{"fr": name}, Description: game.Texts{}, Effects: effects,
+		}
+	}
+	line := func(effectID, statID, value int) game.ItemEffect {
+		return game.ItemEffect{EffectID: effectID, Kind: game.EffectStat, StatID: statID, Min: value, Max: value}
+	}
+	ds.Items = append(ds.Items,
+		gear(belt, 10, game.SlotBelt, "Ceinture d'Essai", line(gametest.EffectVitality, game.StatVitality, 100)),
+		gear(boots, 11, game.SlotBoots, "Bottes d'Essai", line(gametest.EffectVitality, game.StatVitality, 100)),
+		// Neither cloak has room for the rune; only the second can take the exo.
+		gear(cloakWithMP, 17, game.SlotCloak, "Cape Rapide", line(gametest.EffectStrength, game.StatStrength, 25), line(128, game.StatMP, 1)),
+		gear(cloak, 17, game.SlotCloak, "Cape d'Essai", line(gametest.EffectStrength, game.StatStrength, 24)),
+	)
+	ds.Runes = append(ds.Runes,
+		game.Rune{ID: rataFo, EffectID: gametest.EffectStrength, StatID: game.StatStrength, Value: 20, Density: 80, Name: game.Texts{"fr": "Rune Rata Fo"}},
+	)
+	eng := engine.New(game.NewCatalog(ds))
+	out, err := Solve(context.Background(), eng, Request{
+		Character: engine.Character{Level: 200},
+		Maximize:  []Weight{{StatID: game.StatStrength, Weight: 1}},
+		// Only the items above can be forged.
+		Excluded: []int{10, 11, 12, 30, 40},
+		Forge:    ForgeOptions{Exos: []int{game.StatMP}, Transcendence: true},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	best := out.Solutions[0]
+	if best.Items["cloak"] != cloak {
+		t.Fatalf("cloak = %d, want %d: the other one cannot take the MP exo", best.Items["cloak"], cloak)
+	}
+	for _, position := range []string{"belt", "boots"} {
+		if mods := best.Mods[position]; mods == nil || mods.Transcendence != rataFo || len(mods.Exos) != 0 {
+			t.Errorf("%s holds %+v, want the rune and no exo", position, mods)
+		}
+	}
+	if mods := best.Mods["cloak"]; mods == nil || len(mods.Exos) != 1 || mods.Exos[0].StatID != game.StatMP {
+		t.Errorf("cloak holds %+v, want the MP exo", mods)
+	}
+	res := eng.Evaluate(engine.Build{Character: best.Character, Items: best.Items, Mods: best.Mods}, "fr")
+	if !res.Valid || !best.Feasible {
+		t.Errorf("valid %v, feasible %v, issues %+v", res.Valid, best.Feasible, res.Issues)
+	}
+}
+
+// Exos take different items: two that only the same item can hold leave one
+// without a home.
+func TestUnhostedExos(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		exos  int
+		hosts [1 << maxExos]int
+		want  int
+	}{
+		{"no exo", 0, [8]int{0: 9}, 0},
+		{"an item for each", 2, [8]int{0b01: 1, 0b10: 1}, 0},
+		{"one item for both", 2, [8]int{0b11: 1}, 1},
+		{"two items, both for the first only", 2, [8]int{0b01: 2}, 1},
+		{"no item at all", 3, [8]int{0: 5}, 3},
+		{"three exos, the third has no home", 3, [8]int{0b011: 4}, 1},
+		{"three exos sharing three items", 3, [8]int{0b111: 1, 0b011: 1, 0b100: 1}, 0},
+	} {
+		if got := unhosted(tc.exos, &tc.hosts); got != tc.want {
+			t.Errorf("%s: unhosted = %d, want %d", tc.name, got, tc.want)
+		}
 	}
 }
 
@@ -598,6 +681,272 @@ func TestSolveMaximizesDamageInAnElement(t *testing.T) {
 		Maximize:  []Weight{{Damage: &DamageGoal{Kind: "element", Element: "neutral"}}},
 	}); !errors.Is(err, ErrBadDamageGoal) {
 		t.Errorf("unknown element: err = %v", err)
+	}
+}
+
+// elementsDataset gives the test class a Fire spell as strong as its Earth
+// one, and gear for each element: a stuff can lean either way.
+func elementsDataset() *game.Dataset {
+	const fireSpell = 502
+	ds := gametest.Dataset()
+	ds.Stats = append(ds.Stats, game.Stat{
+		ID: game.StatIntel, Key: "intelligence", CategoryID: 2, Order: game.StatIntel, Weight: 1, Label: game.Texts{"fr": "Intelligence"},
+	})
+	ds.Types = append(ds.Types,
+		game.ItemType{ID: 10, SuperTypeID: 4, Slot: game.SlotBelt, Name: game.Texts{"fr": "Ceinture"}},
+		game.ItemType{ID: 11, SuperTypeID: 5, Slot: game.SlotBoots, Name: game.Texts{"fr": "Bottes"}},
+		game.ItemType{ID: 17, SuperTypeID: 11, Slot: game.SlotCloak, Name: game.Texts{"fr": "Cape"}},
+	)
+	id := 70
+	for _, slot := range []struct {
+		typeID int
+		slot   game.Slot
+	}{{10, game.SlotBelt}, {11, game.SlotBoots}, {17, game.SlotCloak}} {
+		for _, stats := range [][2]int{{120, 0}, {0, 120}, {70, 70}} {
+			item := game.Item{ID: id, TypeID: slot.typeID, Slot: slot.slot, Level: 200, IconID: id, Name: game.Texts{"fr": "Essai"}, Description: game.Texts{}}
+			if stats[0] > 0 {
+				item.Effects = append(item.Effects, game.ItemEffect{EffectID: gametest.EffectStrength, Kind: game.EffectStat, StatID: game.StatStrength, Min: stats[0], Max: stats[0]})
+			}
+			if stats[1] > 0 {
+				item.Effects = append(item.Effects, game.ItemEffect{EffectID: 126, Kind: game.EffectStat, StatID: game.StatIntel, Min: stats[1], Max: stats[1]})
+			}
+			ds.Items = append(ds.Items, item)
+			id++
+		}
+	}
+	earth := ds.Spells[0].Levels[1]
+	fire := earth
+	fire.Lines = []game.AttackLine{{Element: game.ElementFire, Min: 20, Max: 30, CritMin: 30, CritMax: 40}}
+	ds.Spells = append(ds.Spells, game.Spell{
+		ID: fireSpell, IconID: 3, BreedID: gametest.BreedID, Order: 1, Name: game.Texts{"fr": "Flèche de Feu"},
+		Levels: []game.SpellLevel{fire},
+	})
+	return ds
+}
+
+func TestSolveMaximizesSeveralElements(t *testing.T) {
+	eng := engine.New(game.NewCatalog(elementsDataset()))
+	solve := func(goal DamageGoal) Solution {
+		t.Helper()
+		goal.Measure = MeasureMean
+		out, err := Solve(context.Background(), eng, Request{
+			Character: engine.Character{Level: 200}, AutoPoints: true, BreedID: gametest.BreedID,
+			Maximize: []Weight{{Damage: &goal}},
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		best := out.Solutions[0]
+		// What the solution reports is what the engine computes for each
+		// element, and the goal itself reads the main one.
+		res := eng.Evaluate(engine.Build{Character: best.Character, Items: best.Items, Mods: best.Mods}, "")
+		stat := func(id int) int { return res.Stats[id] }
+		for i, part := range goal.Parts {
+			one := DamageGoal{Kind: "element", Element: part.Element, Measure: MeasureMean}
+			if want := one.Measured(one.Specs(eng.Catalog, 200, gametest.BreedID), stat); best.DamageParts[0][i] != want {
+				t.Errorf("%s reported %d, engine %d", part.Element, best.DamageParts[0][i], want)
+			}
+		}
+		if len(goal.Parts) > 0 && best.Damage[0] != best.DamageParts[0][0] {
+			t.Errorf("damage %v, parts %v", best.Damage, best.DamageParts)
+		}
+		if !res.Valid || res.Points.Spent > res.Points.Total {
+			t.Errorf("valid %v, spent %d of %d", res.Valid, res.Points.Spent, res.Points.Total)
+		}
+		return best
+	}
+	parts := func(fire int) []ElementPart {
+		return []ElementPart{{Element: "earth", Share: 100}, {Element: "fire", Share: fire}}
+	}
+	mono := solve(DamageGoal{Kind: "element", Element: "earth"})
+	if mono.DamageParts != nil || mono.Character.Base["intelligence"] != 0 {
+		t.Errorf("one element: parts %v, base %v", mono.DamageParts, mono.Character.Base)
+	}
+
+	// A floor holds the second element to its share of the first, and the
+	// first gives up as little as that takes: the higher the floor, the
+	// lower the main element.
+	last := mono.Damage[0]
+	for _, share := range []int{50, 80, 100} {
+		sol := solve(DamageGoal{Kind: "elements", Parts: parts(share)})
+		earth, fire := sol.DamageParts[0][0], sol.DamageParts[0][1]
+		// One step of points or one item is the grain of the balance.
+		if floor := earth * share / 100; fire < floor*97/100 {
+			t.Errorf("floor %d%%: earth %d, fire %d", share, earth, fire)
+		}
+		if earth > last || earth < fire*97/100 {
+			t.Errorf("floor %d%%: earth %d, fire %d, earth before %d", share, earth, fire, last)
+		}
+		if sol.Character.Base["strength"] == 0 || sol.Character.Base["intelligence"] == 0 {
+			t.Errorf("floor %d%%: points %v, want both elements", share, sol.Character.Base)
+		}
+		last = earth
+	}
+
+	// A sum follows the weights: nearly all on Earth is the Earth stuff, and
+	// the heavier element comes out ahead.
+	if sum := solve(DamageGoal{Kind: "elements", Mix: MixSum, Parts: []ElementPart{{Element: "earth", Share: 100}, {Element: "fire", Share: 1}}}); sum.Damage[0] != mono.Damage[0] {
+		t.Errorf("sum 100/1: earth %d, want the Earth stuff's %d", sum.Damage[0], mono.Damage[0])
+	}
+	if sum := solve(DamageGoal{Kind: "elements", Mix: MixSum, Parts: []ElementPart{{Element: "earth", Share: 30}, {Element: "fire", Share: 70}}}); sum.DamageParts[0][1] <= sum.DamageParts[0][0] {
+		t.Errorf("sum 30/70: parts %v, want Fire ahead", sum.DamageParts)
+	}
+
+	for name, bad := range map[string]Request{
+		"one element":    {Maximize: []Weight{{Damage: &DamageGoal{Kind: "elements", Parts: parts(50)[:1]}}}},
+		"same element":   {Maximize: []Weight{{Damage: &DamageGoal{Kind: "elements", Parts: []ElementPart{{Element: "fire", Share: 100}, {Element: "fire", Share: 50}}}}}},
+		"no share":       {Maximize: []Weight{{Damage: &DamageGoal{Kind: "elements", Parts: parts(0)}}}},
+		"share over 100": {Maximize: []Weight{{Damage: &DamageGoal{Kind: "elements", Parts: parts(101)}}}},
+		"unknown mix":    {Maximize: []Weight{{Damage: &DamageGoal{Kind: "elements", Mix: "best", Parts: parts(50)}}}},
+		"neutral":        {Maximize: []Weight{{Damage: &DamageGoal{Kind: "elements", Parts: []ElementPart{{Element: "earth", Share: 100}, {Element: "neutral", Share: 50}}}}}},
+		"to reach":       {Damage: []DamageGoal{{Kind: "elements", Parts: parts(50), Value: 100}}},
+		"two floors": {Maximize: []Weight{
+			{Damage: &DamageGoal{Kind: "elements", Parts: parts(50)}}, {Damage: &DamageGoal{Kind: "elements", Parts: parts(80)}},
+		}},
+	} {
+		bad.Character, bad.BreedID = engine.Character{Level: 200}, gametest.BreedID
+		if _, err := Solve(context.Background(), eng, bad); !errors.Is(err, ErrBadDamageGoal) {
+			t.Errorf("%s: err = %v", name, err)
+		}
+	}
+}
+
+// Each element of a goal can name what it reads: one spell or the weapon
+// instead of every spell of the class.
+func TestSolveReadsEachElementOnASpellOrAWeapon(t *testing.T) {
+	const fireSpell, bow, sword = 502, 90, 91
+	ds := elementsDataset()
+	ds.Types = append(ds.Types, game.ItemType{ID: 2, SuperTypeID: 2, Slot: game.SlotWeapon, Name: game.Texts{"fr": "Arc"}})
+	weapon := func(id int, name string) game.Item {
+		return game.Item{
+			ID: id, TypeID: 2, Slot: game.SlotWeapon, Level: 100, IconID: id,
+			Name: game.Texts{"fr": name}, Description: game.Texts{},
+			Weapon: &game.WeaponInfo{APCost: 4, RangeMin: 2, RangeMax: 6, CritChance: 10, CritBonus: 5},
+			// A Neutral line: the forgemagic can turn it to an element.
+			Effects: []game.ItemEffect{{EffectID: 100, Kind: game.EffectWeapon, StatID: -1, Min: 10, Max: 20}},
+		}
+	}
+	ds.Items = append(ds.Items, weapon(bow, "Arc d'Essai"), weapon(sword, "Épée d'Essai"))
+	// A second, weaker Earth spell: the class's average and its best spell differ.
+	weak := ds.Spells[0]
+	weak.ID, weak.Order = 503, 2
+	weak.Levels = []game.SpellLevel{{Grade: 1, MinLevel: 1, APCost: 2, RangeMin: 1, RangeMax: 6, CritChance: 10,
+		Lines: []game.AttackLine{{Element: game.ElementEarth, Min: 4, Max: 6, CritMin: 6, CritMax: 8}}}}
+	ds.Spells = append(ds.Spells, weak)
+	eng := engine.New(game.NewCatalog(ds))
+	if element, _, ok := game.AttackAction(100); !ok || element != game.ElementNeutral {
+		t.Fatalf("action 100 should be a Neutral hit, got element %d", element)
+	}
+	solve := func(parts ...ElementPart) Solution {
+		t.Helper()
+		out, err := Solve(context.Background(), eng, Request{
+			Character: engine.Character{Level: 200}, AutoPoints: true, BreedID: gametest.BreedID,
+			Maximize: []Weight{{Damage: &DamageGoal{Kind: "elements", Measure: MeasureMean, Parts: parts}}},
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return out.Solutions[0]
+	}
+	stats := func(sol Solution) func(int) int {
+		res := eng.Evaluate(engine.Build{Character: sol.Character, Items: sol.Items, Mods: sol.Mods}, "")
+		if !res.Valid {
+			t.Errorf("issues %+v", res.Issues)
+		}
+		return func(id int) int { return res.Stats[id] }
+	}
+	spell := func(id int) *engine.AttackSpec {
+		spec, _ := engine.SpellSpec(eng.Catalog.SpellByID[id], 200, engine.RangeAuto)
+		return spec
+	}
+
+	// Two spells: each part reports its spell, and the floor holds between them.
+	spells := solve(
+		ElementPart{Element: "earth", Share: 100, Kind: "spell", ID: gametest.SpellEarth},
+		ElementPart{Element: "fire", Share: 100, Kind: "spell", ID: fireSpell},
+	)
+	stat := stats(spells)
+	earth, fire := spells.DamageParts[0][0], spells.DamageParts[0][1]
+	if earth != spell(gametest.SpellEarth).Mean(stat) || fire != spell(fireSpell).Mean(stat) {
+		t.Errorf("reported %v, engine %d and %d", spells.DamageParts, spell(gametest.SpellEarth).Mean(stat), spell(fireSpell).Mean(stat))
+	}
+	if fire < earth*97/100 || earth < fire*97/100 {
+		t.Errorf("balance between two spells: %v", spells.DamageParts)
+	}
+	// Read on every Earth spell, the same floor asks less of Fire: the weak
+	// spell pulls the Earth average down.
+	class := solve(ElementPart{Element: "earth", Share: 100}, ElementPart{Element: "fire", Share: 100, Kind: "spell", ID: fireSpell})
+	if class.Character.Base["intelligence"] >= spells.Character.Base["intelligence"] {
+		t.Errorf("points with the class average %v, with the named spell %v", class.Character.Base, spells.Character.Base)
+	}
+
+	// A weapon: the stuff wears it, forged to the element of its part, and
+	// the part reports what it hits for.
+	armed := solve(
+		ElementPart{Element: "earth", Share: 100, Kind: "spell", ID: gametest.SpellEarth},
+		ElementPart{Element: "fire", Share: 60, Kind: "weapon", ID: bow},
+	)
+	if armed.Items["weapon"] != bow || armed.Mods["weapon"] == nil || armed.Mods["weapon"].Element != "fire" {
+		t.Fatalf("weapon %d with %+v, want the bow forged to Fire", armed.Items["weapon"], armed.Mods["weapon"])
+	}
+	spec := engine.WeaponSpec(eng.Catalog.ItemByID[bow], engine.WeaponOptions{Element: "fire", Mastery: true})
+	if want := spec.Mean(stats(armed)); armed.DamageParts[0][1] != want {
+		t.Errorf("weapon part reported %d, engine %d", armed.DamageParts[0][1], want)
+	}
+
+	for name, parts := range map[string][]ElementPart{
+		"two weapons":                {{Element: "earth", Share: 100, Kind: "weapon", ID: bow}, {Element: "fire", Share: 50, Kind: "weapon", ID: sword}},
+		"spell without the element":  {{Element: "earth", Share: 100}, {Element: "fire", Share: 50, Kind: "spell", ID: gametest.SpellEarth}},
+		"weapon without the element": {{Element: "fire", Share: 100, Kind: "weapon", ID: bow}, {Element: "earth", Share: 50, Kind: "weapon", ID: bow}},
+		"unknown spell":              {{Element: "earth", Share: 100}, {Element: "fire", Share: 50, Kind: "spell", ID: 99999}},
+		"not a weapon":               {{Element: "earth", Share: 100}, {Element: "fire", Share: 50, Kind: "weapon", ID: 40}},
+		"unknown kind":               {{Element: "earth", Share: 100}, {Element: "fire", Share: 50, Kind: "item", ID: bow}},
+		"same spell twice":           {{Element: "earth", Share: 100, Kind: "spell", ID: gametest.SpellEarth}, {Element: "earth", Share: 50, Kind: "spell", ID: gametest.SpellEarth}},
+	} {
+		_, err := Solve(context.Background(), eng, Request{
+			Character: engine.Character{Level: 200}, BreedID: gametest.BreedID,
+			Maximize: []Weight{{Damage: &DamageGoal{Kind: "elements", Parts: parts}}},
+		})
+		if !errors.Is(err, ErrBadDamageGoal) {
+			t.Errorf("%s: err = %v", name, err)
+		}
+	}
+}
+
+// A line that follows the character's best element belongs to the main
+// element of a goal about several, not to each of them.
+func TestBestElementLinesFollowTheMainElement(t *testing.T) {
+	ds := elementsDataset()
+	ds.Spells[1].BreedID = gametest.BreedID
+	cat := game.NewCatalog(ds)
+	if with, without := elementSpecs(cat, 200, gametest.BreedID, "fire", engine.RangeAuto, true), elementSpecs(cat, 200, gametest.BreedID, "fire", engine.RangeAuto, false); len(with) != 2 || len(without) != 1 {
+		t.Errorf("fire spells: %d with the best-element line, %d without; want 2 and 1", len(with), len(without))
+	}
+}
+
+func TestPointsLevelElementsHeldToAFloor(t *testing.T) {
+	eng := newEngine()
+	weights := make([]float64, eng.StatCount())
+	weights[eng.Catalog.Idx(game.StatStrength)] = 1
+	plan := newPointPlan(eng.Catalog, 200, weights, nil)
+	// The dataset has no Intelligence: give the plan a second element by hand.
+	const str, intel = 2, 3
+	plan.idx[intel], plan.value[intel] = plan.idx[str], 1
+	totals := make([]int32, eng.StatCount())
+	level := func(l lag, bought [primaries]int32) float64 { return l.level + l.perPoint*float64(bought[l.k]) }
+
+	// The element behind gets the points until it catches up, then both rise
+	// together: they end within a step of each other.
+	lagging := []lag{{k: str, level: 500, perPoint: 1}, {k: intel, level: 300, perPoint: 1}}
+	bought := plan.spend(nil, totals, lagging)
+	if a, b := level(lagging[0], bought), level(lagging[1], bought); math.Abs(a-b) > lagStep || bought[intel] <= bought[str] {
+		t.Errorf("levels %.0f and %.0f after %v", a, b, bought)
+	}
+	// An element too far behind to catch up takes every point it can; the
+	// few left, too few for one more of it, go to the other.
+	far := []lag{{k: str, level: 5000, perPoint: 1}, {k: intel, level: 300, perPoint: 1}}
+	if bought := plan.spend(nil, totals, far); bought[intel] != 398 || bought[str] != 3 {
+		t.Errorf("far behind: %v", bought)
 	}
 }
 

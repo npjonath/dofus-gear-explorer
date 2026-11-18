@@ -12,6 +12,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"math/bits"
 	"math/rand/v2"
 	"runtime"
 	"slices"
@@ -87,7 +88,8 @@ const (
 type DamageGoal struct {
 	// Kind is "weapon" or "spell", with ID the item or the spell, or
 	// "element": the damage of the class's spells in one element, without
-	// naming any.
+	// naming any, or "elements": the same in several elements at once, as
+	// Parts and Mix say. An "elements" goal can only be maximized.
 	Kind string `json:"kind"`
 	ID   int    `json:"id"`
 	// Measure is one of the Measure constants; empty means MeasureNormal.
@@ -102,7 +104,41 @@ type DamageGoal struct {
 	// Value is the least the measure must reach. It is required of a goal in
 	// Request.Damage and ignored in Request.Maximize.
 	Value int `json:"value"`
+	// Parts lists the elements of an "elements" goal, the main one first.
+	Parts []ElementPart `json:"parts,omitempty"`
+	// Mix is how those elements count together, one of the Mix constants;
+	// empty means MixFloor.
+	Mix string `json:"mix,omitempty"`
 }
+
+// ElementPart is one element of a goal about several.
+type ElementPart struct {
+	Element string `json:"element"`
+	// Kind narrows the part to one attack: "spell" or "weapon", with ID the
+	// spell or the item, read on its lines in the element. Empty reads every
+	// spell of the class in the element. A weapon is worn by the stuff, so
+	// the parts of a goal name one weapon at most; its Neutral damage is
+	// forged to the element of the first part that names it.
+	Kind string `json:"kind,omitempty"`
+	ID   int    `json:"id,omitempty"`
+	// Share is a percentage from 1 to 100. Under MixFloor the element must
+	// reach that share of the main one, whose own share is ignored; under
+	// MixSum it is the element's weight in the total.
+	Share int `json:"share"`
+}
+
+// How the elements of an "elements" goal count together.
+const (
+	// MixFloor pushes the main element as high as possible while each other
+	// element keeps up with its share of it: 100 everywhere is a balance.
+	MixFloor = "floor"
+	// MixSum pushes the average of the elements, weighted by their shares:
+	// the damage of a turn that casts them in those proportions.
+	MixSum = "sum"
+)
+
+// maxParts is the number of elements a goal can name: there are four.
+const maxParts = 4
 
 // Measured is what the goal reads on a stuff: the measure of its attack, or
 // the average of the measure over its attacks when it covers several.
@@ -148,41 +184,60 @@ func (g DamageGoal) Specs(cat *game.Catalog, level, breedID int) []*engine.Attac
 			return []*engine.AttackSpec{spec}
 		}
 	case "element":
-		element, ok := engine.ElementID(g.Element)
-		if !ok {
-			return nil
-		}
-		// Every spell of the class with a line in the element, or one that
-		// follows the best element; each counts with its own critical chance.
-		var specs []*engine.AttackSpec
-		for _, sp := range cat.SpellsByBreed[breedID] {
-			spec, _ := engine.SpellSpec(sp, level, g.Range)
-			if spec == nil || breedID == 0 {
-				continue
-			}
-			var lines []game.AttackLine
-			for _, line := range spec.Lines {
-				if line.Delay == 0 && (line.Element == element || line.Element == game.ElementBest) {
-					line.Element = element
-					lines = append(lines, line)
-				}
-			}
-			if len(lines) > 0 {
-				copied := *spec
-				copied.Lines = lines
-				specs = append(specs, &copied)
-			}
-		}
-		if len(specs) == 0 {
-			line := referenceHit
-			line.Element = element
-			specs = append(specs, &engine.AttackSpec{
-				Lines: []game.AttackLine{line}, CritChance: referenceCritChance, Melee: g.Range == engine.RangeMelee,
-			})
-		}
-		return specs
+		return elementSpecs(cat, level, breedID, g.Element, g.Range, true)
 	}
 	return nil
+}
+
+// elementSpecs lists what a class hits with in one element: every spell with
+// a line in it, each with its own critical chance. A line that follows the
+// character's best element counts when withBest is set: it belongs to one
+// element only, the one the stuff is built around.
+func elementSpecs(cat *game.Catalog, level, breedID int, name, mode string, withBest bool) []*engine.AttackSpec {
+	element, ok := engine.ElementID(name)
+	if !ok {
+		return nil
+	}
+	var specs []*engine.AttackSpec
+	for _, sp := range cat.SpellsByBreed[breedID] {
+		spec, _ := engine.SpellSpec(sp, level, mode)
+		if breedID == 0 {
+			continue
+		}
+		if spec = linesIn(spec, element, withBest); spec != nil {
+			specs = append(specs, spec)
+		}
+	}
+	if len(specs) == 0 {
+		line := referenceHit
+		line.Element = element
+		specs = append(specs, &engine.AttackSpec{
+			Lines: []game.AttackLine{line}, CritChance: referenceCritChance, Melee: mode == engine.RangeMelee,
+		})
+	}
+	return specs
+}
+
+// linesIn returns an attack cut down to the lines that hit at once in an
+// element, or nil when it has none. A line that follows the character's best
+// element counts as one of the element when withBest is set.
+func linesIn(spec *engine.AttackSpec, element int, withBest bool) *engine.AttackSpec {
+	if spec == nil {
+		return nil
+	}
+	var lines []game.AttackLine
+	for _, line := range spec.Lines {
+		if line.Delay == 0 && (line.Element == element || (withBest && line.Element == game.ElementBest)) {
+			line.Element = element
+			lines = append(lines, line)
+		}
+	}
+	if len(lines) == 0 {
+		return nil
+	}
+	copied := *spec
+	copied.Lines = lines
+	return &copied
 }
 
 // ForgeOptions opens forgemagic to the search. What each item takes is
@@ -216,7 +271,11 @@ type Solution struct {
 	UnmetDamage []int `json:"unmetDamage"`
 	// Damage is what each attack measures on this stuff: the goals of
 	// Request.Damage first, then the attacks of Request.Maximize in order.
+	// A goal about several elements reads its main one.
 	Damage []int `json:"damage"`
+	// DamageParts gives, for a goal about several elements, what each of
+	// them measures, in the order of the goal's parts; nil for other goals.
+	DamageParts [][]int `json:"damageParts,omitempty"`
 	// Element is the element this stuff was searched for, when a goal left
 	// the element to the search.
 	Element string `json:"element,omitempty"`
@@ -308,6 +367,10 @@ const (
 	// tieBreakShare is the share of its weight a stat outside the request
 	// counts for.
 	tieBreakShare = 0.001
+	// mixSlope is what the average of a goal's elements adds to its score
+	// when the elements are held to a floor: the search needs a direction
+	// while one element lags, and the floor must stay worth far more.
+	mixSlope = 0.03
 	// priorityStep is how much less a stat to maximize counts than the one
 	// ranked just before it. A lower priority decides between stuffs that
 	// are close on the higher ones, and a large gain can still outweigh a
@@ -329,9 +392,10 @@ type cand struct {
 	// variants lists every forgemagic the search may give this item, this
 	// candidate included; nil when there is only one.
 	variants []*cand
-	// exoHost says the item can take a limited exo as it is: forgeable and
-	// without a transcendence rune.
-	exoHost bool
+	// hosts says which of the allowed exos the item can take as it is, one
+	// bit per entry of problem.exos: it must be forgeable, hold no
+	// transcendence rune, lack the stat and have the weight left for it.
+	hosts uint8
 	// cost is a token price per rune, dracorune or forged line, so that
 	// forgemagic that changes nothing for the request is left out.
 	cost    float64
@@ -355,6 +419,106 @@ type damageGoal struct {
 	// weight is what one point of the measure adds to the score when the
 	// goal is maximized.
 	weight float64
+	// parts holds the elements of a goal about several; specs is then empty.
+	parts []goalPart
+	// weaponID is the weapon the parts name, if any, and forge the element
+	// its Neutral damage is forged to.
+	weaponID int
+	forge    string
+}
+
+type goalPart struct {
+	specs []*engine.AttackSpec
+	// bases sums up each spec, for estimate.
+	bases []specBase
+	// share is the part's share, from 0 to 1; the main element of a floor
+	// has 1.
+	share   float64
+	element int
+	// primary is the element's characteristic, by its place in the point plan.
+	primary int
+}
+
+// specBase sums up the lines of a spec: what they roll on average and how
+// many they are, on a normal hit and on a critical one.
+type specBase struct {
+	normal, critical           float64
+	normalLines, criticalLines float64
+}
+
+func newSpecBase(spec *engine.AttackSpec) specBase {
+	var base specBase
+	for _, line := range spec.Lines {
+		base.normal += float64(line.Min+line.Max) / 2
+		base.normalLines++
+		if line.CritMax > 0 {
+			base.critical += float64(line.CritMin+line.CritMax) / 2
+			base.criticalLines++
+		}
+	}
+	return base
+}
+
+// estimate returns about what the part measures on a stuff, and what one
+// point of its characteristic adds to that. It leaves out the rounding of
+// the damage formula, to be cheap enough to run before the points are
+// spent: it only guides how they are split, and the measure that counts is
+// always read in full afterwards.
+func (part *goalPart) estimate(measure string, stat func(statID int) int) (level, perPoint float64) {
+	percent := func(value int) float64 { return float64(max(0, 100+value)) / 100 }
+	el := game.ElementStats[part.element]
+	characteristic := stat(el.Stat) + stat(game.StatPower)
+	fixed := float64(stat(game.StatDamage) + stat(el.Damage))
+	critical := fixed + float64(stat(game.StatCritDamage))
+	ranged, melee := percent(stat(game.StatRangedDamage)), percent(stat(game.StatMeleeDamage))
+	spell, weapon := percent(stat(game.StatSpellDamage)), percent(stat(game.StatWeaponDamage))
+	for i, spec := range part.specs {
+		base := part.bases[i]
+		normalShare, criticalShare := 1.0, 0.0
+		switch measure {
+		case MeasureCrit:
+			normalShare, criticalShare = 0, 1
+		case MeasureMean:
+			criticalShare = float64(spec.CritRate(stat)) / 100
+			normalShare = 1 - criticalShare
+		}
+		rolled := base.normal*normalShare + base.critical*criticalShare
+		added := base.normalLines*fixed*normalShare + base.criticalLines*critical*criticalShare
+		final := ranged
+		if spec.Melee {
+			final = melee
+		}
+		if spec.Weapon {
+			final *= weapon
+		} else {
+			final *= spell
+		}
+		level += (rolled*percent(characteristic+spec.Power) + added) * final
+		perPoint += rolled / 100 * final
+	}
+	count := float64(len(part.specs))
+	return level / count, perPoint / count
+}
+
+// read returns what a goal shows on a stuff, what it counts for in the
+// score, and for a goal about several elements what each of them measures.
+func (d *damageGoal) read(stat func(statID int) int) (shown int, value float64, parts [maxParts]int) {
+	if len(d.parts) == 0 {
+		shown = d.goal.Measured(d.specs, stat)
+		return shown, float64(shown), parts
+	}
+	total, shares := 0.0, 0.0
+	lowest := math.Inf(1)
+	for i, part := range d.parts {
+		parts[i] = d.goal.Measured(part.specs, stat)
+		total += float64(parts[i]) * part.share
+		shares += part.share
+		lowest = math.Min(lowest, float64(parts[i])/part.share)
+	}
+	if d.goal.Mix == MixSum {
+		return parts[0], total / shares, parts
+	}
+	return parts[0], lowest + mixSlope*total/shares, parts
 }
 
 type problem struct {
@@ -378,6 +542,9 @@ type problem struct {
 	exos    []int
 	// points is set when the solver spends the characteristic points itself.
 	points *pointPlan
+	// floor is the index in damage of the goal that holds elements to a
+	// floor, or -1: its elements share the characteristic points.
+	floor int
 
 	setItems map[int][]*cand
 	setList  []int
@@ -638,6 +805,7 @@ func newProblem(eng *engine.Engine, req Request) (*problem, error) {
 		cands:    make([][]*cand, npos),
 		locked:   make([]bool, npos),
 		setItems: map[int][]*cand{},
+		floor:    -1,
 	}
 	p.base = eng.BaseVector(req.Character)
 	p.baseTotals = make([]int32, eng.StatCount())
@@ -710,17 +878,98 @@ pick:
 	// addGoal registers an attack: required to reach its value when share is
 	// zero, maximized at that share otherwise.
 	addGoal := func(g DamageGoal, share float64) error {
-		specs := g.Specs(cat, p.level, req.BreedID)
 		badMeasure := g.Measure != "" && g.Measure != MeasureNormal && g.Measure != MeasureCrit && g.Measure != MeasureMean
 		badRange := g.Range != engine.RangeAuto && g.Range != engine.RangeMelee && g.Range != engine.RangeRanged
 		badElement := g.Kind != "element" && g.Element != "" &&
 			(g.Kind != "weapon" || !engine.CanTakeElement(cat.ItemByID[g.ID], g.Element))
-		if len(specs) == 0 || badMeasure || badRange || badElement || (share == 0 && g.Value <= 0) {
+		if badMeasure || badRange || badElement || (share == 0 && g.Value <= 0) {
 			return ErrBadDamageGoal
 		}
-		goal := damageGoal{specs: specs, goal: g, weight: damageUnit * share}
+		goal := damageGoal{goal: g, weight: damageUnit * share}
 		if share == 0 {
 			goal.value = g.Value
+		}
+		// groups are the attacks the goal reads, each with what it counts
+		// for when items are shortlisted.
+		type group struct {
+			specs  []*engine.AttackSpec
+			factor float64
+		}
+		var groups []group
+		if g.Kind == "elements" {
+			floor := g.Mix == "" || g.Mix == MixFloor
+			if share == 0 || (!floor && g.Mix != MixSum) || len(g.Parts) < 2 || len(g.Parts) > maxParts || (floor && p.floor >= 0) {
+				return ErrBadDamageGoal
+			}
+			shares := 0.0
+			for i, part := range g.Parts {
+				element, ok := engine.ElementID(part.Element)
+				for _, other := range g.Parts[:i] {
+					ok = ok && (other.Element != part.Element || other.Kind != part.Kind || other.ID != part.ID)
+				}
+				if !ok || part.Share < 1 || part.Share > 100 {
+					return ErrBadDamageGoal
+				}
+				gp := goalPart{share: float64(part.Share) / 100, element: element}
+				switch part.Kind {
+				case "":
+					// A line in the best element follows the main one.
+					gp.specs = elementSpecs(cat, p.level, req.BreedID, part.Element, g.Range, i == 0)
+				case "spell":
+					// A spell named by the player counts with its lines in
+					// the best element, wherever it comes in the goal.
+					spec, _ := engine.SpellSpec(cat.SpellByID[part.ID], p.level, g.Range)
+					if spec = linesIn(spec, element, true); spec != nil {
+						gp.specs = []*engine.AttackSpec{spec}
+					}
+				case "weapon":
+					it := cat.ItemByID[part.ID]
+					if goal.weaponID == 0 {
+						goal.weaponID = part.ID
+						if engine.CanTakeElement(it, part.Element) {
+							goal.forge = part.Element
+						}
+					}
+					if part.ID != goal.weaponID {
+						return ErrBadDamageGoal
+					}
+					// A weapon is counted with its mastery, as players wield it.
+					spec := engine.WeaponSpec(it, engine.WeaponOptions{Range: g.Range, Element: goal.forge, Mastery: true})
+					if spec = linesIn(spec, element, false); spec != nil {
+						gp.specs = []*engine.AttackSpec{spec}
+					}
+				}
+				if len(gp.specs) == 0 {
+					return ErrBadDamageGoal
+				}
+				for _, spec := range gp.specs {
+					gp.bases = append(gp.bases, newSpecBase(spec))
+				}
+				if floor && i == 0 {
+					gp.share = 1
+				}
+				gp.primary = slices.Index(primaryIDs[:], game.ElementStats[element].Stat)
+				shares += gp.share
+				goal.parts = append(goal.parts, gp)
+			}
+			for _, part := range goal.parts {
+				// Under a floor every element is needed, whatever its share.
+				factor := 1 / float64(len(goal.parts))
+				if !floor {
+					factor = part.share / shares
+				}
+				groups = append(groups, group{part.specs, factor})
+			}
+			if floor {
+				goal.goal.Mix = MixFloor
+				p.floor = len(p.damage)
+			}
+		} else {
+			goal.specs = g.Specs(cat, p.level, req.BreedID)
+			if len(goal.specs) == 0 {
+				return ErrBadDamageGoal
+			}
+			groups = []group{{goal.specs, 1}}
 		}
 
 		// A point of the element's characteristic adds a hundredth of the
@@ -734,59 +983,61 @@ pick:
 			normalShare, critShare = 0.5, 0.5
 		}
 		weights := make([]float64, eng.StatCount())
-		perSpec := 1 / float64(len(specs))
-		add := func(statID int, perPoint float64) {
-			if idx := cat.Idx(statID); idx >= 0 {
-				weights[idx] += perPoint * damageUnit * perSpec
-			}
-		}
-		hits := false
-		for _, spec := range specs {
-			for _, line := range spec.Lines {
-				if line.Delay > 0 {
-					continue
-				}
-				canCrit := line.CritMax > 0 && spec.CritChance > 0
-				if g.Measure == MeasureCrit && !canCrit {
-					continue
-				}
-				hits = true
-				normal := float64(line.Min+line.Max) / 2
-				critical := float64(line.CritMin+line.CritMax) / 2
-				lineNormal, lineCrit := normalShare, critShare
-				if !canCrit {
-					lineNormal, lineCrit = normalShare+critShare, 0
-				}
-				base := normal*lineNormal + critical*lineCrit
-				element := line.Element
-				if element == game.ElementBest {
-					element = bestElement
-				}
-				el := game.ElementStats[element]
-				add(el.Stat, base/100)
-				add(game.StatPower, base/100)
-				add(game.StatDamage, 1)
-				add(el.Damage, 1)
-				add(game.StatCritDamage, lineCrit)
-				typical := (base*11 + 100) / 100
-				if spec.Weapon {
-					add(game.StatWeaponDamage, typical)
-				} else {
-					add(game.StatSpellDamage, typical)
-				}
-				if spec.Melee {
-					add(game.StatMeleeDamage, typical)
-				} else {
-					add(game.StatRangedDamage, typical)
-				}
-				// A percent of Critical turns a hundredth of the casts critical.
-				if g.Measure == MeasureMean && canCrit {
-					add(game.StatCritical, ((critical-normal)*11+100)/100)
+		for _, gr := range groups {
+			perSpec := gr.factor / float64(len(gr.specs))
+			add := func(statID int, perPoint float64) {
+				if idx := cat.Idx(statID); idx >= 0 {
+					weights[idx] += perPoint * damageUnit * perSpec
 				}
 			}
-		}
-		if !hits {
-			return ErrBadDamageGoal
+			hits := false
+			for _, spec := range gr.specs {
+				for _, line := range spec.Lines {
+					if line.Delay > 0 {
+						continue
+					}
+					canCrit := line.CritMax > 0 && spec.CritChance > 0
+					if g.Measure == MeasureCrit && !canCrit {
+						continue
+					}
+					hits = true
+					normal := float64(line.Min+line.Max) / 2
+					critical := float64(line.CritMin+line.CritMax) / 2
+					lineNormal, lineCrit := normalShare, critShare
+					if !canCrit {
+						lineNormal, lineCrit = normalShare+critShare, 0
+					}
+					base := normal*lineNormal + critical*lineCrit
+					element := line.Element
+					if element == game.ElementBest {
+						element = bestElement
+					}
+					el := game.ElementStats[element]
+					add(el.Stat, base/100)
+					add(game.StatPower, base/100)
+					add(game.StatDamage, 1)
+					add(el.Damage, 1)
+					add(game.StatCritDamage, lineCrit)
+					typical := (base*11 + 100) / 100
+					if spec.Weapon {
+						add(game.StatWeaponDamage, typical)
+					} else {
+						add(game.StatSpellDamage, typical)
+					}
+					if spec.Melee {
+						add(game.StatMeleeDamage, typical)
+					} else {
+						add(game.StatRangedDamage, typical)
+					}
+					// A percent of Critical turns a hundredth of the casts critical.
+					if g.Measure == MeasureMean && canCrit {
+						add(game.StatCritical, ((critical-normal)*11+100)/100)
+					}
+				}
+			}
+			if !hits {
+				return ErrBadDamageGoal
+			}
 		}
 		p.damage = append(p.damage, goal)
 		for idx, w := range weights {
@@ -905,8 +1156,16 @@ pick:
 		}
 	}
 	for _, m := range req.Maximize {
-		if m.Damage != nil && m.Damage.Kind == "weapon" {
+		if m.Damage == nil {
+			continue
+		}
+		if m.Damage.Kind == "weapon" {
 			weapons = append(weapons, m.Damage.ID)
+		}
+		for _, part := range m.Damage.Parts {
+			if m.Damage.Kind == "elements" && part.Kind == "weapon" {
+				weapons = append(weapons, part.ID)
+			}
 		}
 	}
 	for _, id := range append(weapons, req.Required...) {
@@ -985,31 +1244,34 @@ pick:
 		}
 		forgeable := engine.ForgeableSlots[it.Slot]
 		plain := &cand{
-			item: it, vec: cat.ItemVector[it.ID], setOrd: setOrd, crit: eng.Criteria(it.ID), exoHost: forgeable,
+			item: it, vec: cat.ItemVector[it.ID], setOrd: setOrd, crit: eng.Criteria(it.ID),
 		}
 		plain.utility = utilityOf(plain.vec)
 		if !forgeable {
 			return plain
 		}
-		variants := []*cand{plain}
-		// An item whose other forgemagic leaves no weight for an allowed exo
-		// is no home for one: overs and exos share 101 of weight.
-		hostsExos := func(mods engine.ItemMods) bool {
+		// An item is a home for an allowed exo when it lacks the stat, holds
+		// no transcendence rune, and its other forgemagic leaves the weight:
+		// overs and exos share 101 of it.
+		hostsExos := func(mods engine.ItemMods) uint8 {
 			if mods.Transcendence != 0 {
-				return false
+				return 0
 			}
-			for _, statID := range p.exos {
+			var hosts uint8
+			for i, statID := range p.exos {
 				if hasStat(it, statID) {
 					continue
 				}
 				with := mods
 				with.Exos = append(slices.Clone(mods.Exos), engine.Exo{StatID: statID, Value: 1})
-				if len(eng.Forge(it, &with).Issues) != 0 {
-					return false
+				if len(eng.Forge(it, &with).Issues) == 0 {
+					hosts |= 1 << i
 				}
 			}
-			return true
+			return hosts
 		}
+		plain.hosts = hostsExos(engine.ItemMods{})
+		variants := []*cand{plain}
 		add := func(mods engine.ItemMods, runeUtility float64) {
 			forged := eng.Forge(it, &mods)
 			if len(forged.Issues) != 0 {
@@ -1028,7 +1290,7 @@ pick:
 			variants = append(variants, &cand{
 				item: it, mods: &mods, vec: forged.Vector, setOrd: setOrd, crit: plain.crit,
 				utility: utilityOf(forged.Vector) - cost, runeUtility: runeUtility,
-				exoHost: hostsExos(mods), cost: cost,
+				hosts: hostsExos(mods), cost: cost,
 			})
 		}
 		dracos := []*engine.Draco{nil}
@@ -1241,52 +1503,83 @@ func (p *problem) finish(assign []*cand, score float64, req Request) Solution {
 		}
 	}
 
-	// Each exo goes to an item that lacks the stat and holds no other
-	// limited exo, preferring the one whose rune matters least: a
-	// transcendence rune and an exo cannot share an item.
-	taken := map[int]bool{}
-	for _, statID := range p.exos {
-		best := -1
+	// Each exo goes to an item of its own that lacks the stat and has the
+	// weight left for it. A transcendence rune and an exo cannot share an
+	// item, so the exos go where no rune is lost; when the stuff has too few
+	// such items, the runes that matter least give way.
+	const (
+		runeLost = 1e6
+		unplaced = 1e9
+	)
+	type home struct {
+		pos  int
+		cost float64
+	}
+	homes := make([][]home, len(p.exos))
+	for e, statID := range p.exos {
 		for i, c := range assign {
-			if c == nil || taken[i] || !engine.ForgeableSlots[c.item.Slot] || hasStat(c.item, statID) {
+			if c == nil || !engine.ForgeableSlots[c.item.Slot] || hasStat(c.item, statID) {
 				continue
 			}
-			// The exo must fit with what the item already carries.
 			with := engine.ItemMods{}
 			if m := mods[game.Positions[i].Key]; m != nil {
 				with = *m
 			}
+			cost := 0.0
+			if with.Transcendence != 0 {
+				cost = runeLost + c.runeUtility
+			}
 			with.Transcendence = 0
 			with.Exos = append(slices.Clone(with.Exos), engine.Exo{StatID: statID, Value: 1})
-			if len(p.eng.Forge(c.item, &with).Issues) != 0 {
+			if len(p.eng.Forge(c.item, &with).Issues) == 0 {
+				homes[e] = append(homes[e], home{i, cost})
+			}
+		}
+		homes[e] = append(homes[e], home{-1, unplaced})
+	}
+	placed, best, bestCost := make([]int, len(p.exos)), []int(nil), math.Inf(1)
+	var place func(e int, cost float64)
+	place = func(e int, cost float64) {
+		if cost >= bestCost {
+			return
+		}
+		if e == len(p.exos) {
+			best, bestCost = slices.Clone(placed), cost
+			return
+		}
+		for _, h := range homes[e] {
+			if h.pos >= 0 && slices.Contains(placed[:e], h.pos) {
 				continue
 			}
-			// An item without a rune first, else the one whose rune matters least.
-			if best < 0 || (c.exoHost && !assign[best].exoHost) ||
-				(c.exoHost == assign[best].exoHost && c.runeUtility < assign[best].runeUtility) {
-				best = i
-			}
+			placed[e] = h.pos
+			place(e+1, cost+h.cost)
 		}
-		if best < 0 {
+	}
+	place(0, 0)
+	for e, pos := range best {
+		if pos < 0 {
 			continue
 		}
-		taken[best] = true
-		key := game.Positions[best].Key
+		key := game.Positions[pos].Key
 		if mods[key] == nil {
 			mods[key] = &engine.ItemMods{}
 		}
 		mods[key].Transcendence = 0
-		mods[key].Exos = append(mods[key].Exos, engine.Exo{StatID: statID, Value: 1})
+		mods[key].Exos = append(mods[key].Exos, engine.Exo{StatID: p.exos[e], Value: 1})
 	}
 	// A weapon goal's elemental forgemagic goes on the weapon it names.
 	for _, d := range p.damage {
-		if d.goal.Element == "" || sol.Items["weapon"] != d.goal.ID {
+		id, element := d.goal.ID, d.goal.Element
+		if len(d.parts) > 0 {
+			id, element = d.weaponID, d.forge
+		}
+		if element == "" || id == 0 || sol.Items["weapon"] != id {
 			continue
 		}
 		if mods["weapon"] == nil {
 			mods["weapon"] = &engine.ItemMods{}
 		}
-		mods["weapon"].Element = d.goal.Element
+		mods["weapon"].Element = element
 	}
 	if len(mods) > 0 {
 		sol.Mods = mods
@@ -1301,9 +1594,16 @@ func (p *problem) finish(assign []*cand, score float64, req Request) Solution {
 	}
 	// The damage goals are judged on the evaluated stuff, like the rest.
 	stat := func(id int) int { return res.Stats[id] }
-	for i, d := range p.damage {
-		got := d.goal.Measured(d.specs, stat)
+	for i := range p.damage {
+		d := &p.damage[i]
+		got, _, parts := d.read(stat)
 		sol.Damage = append(sol.Damage, got)
+		if len(d.parts) > 0 {
+			if sol.DamageParts == nil {
+				sol.DamageParts = make([][]int, len(p.damage))
+			}
+			sol.DamageParts[i] = slices.Clone(parts[:len(d.parts)])
+		}
 		if got < d.value {
 			sol.UnmetDamage = append(sol.UnmetDamage, i)
 		}
@@ -1433,7 +1733,22 @@ func (s *state) derive() {
 	if p.points == nil {
 		return
 	}
-	s.spent = p.points.spend(p.cons, s.totals)
+	// Elements held to a floor share the points: the plan needs about what
+	// each hits for before any point, and what a point adds.
+	var lagging [maxParts]lag
+	n := 0
+	if p.floor >= 0 {
+		d := &p.damage[p.floor]
+		for _, part := range d.parts {
+			if part.primary < 0 {
+				continue
+			}
+			level, perPoint := part.estimate(d.goal.Measure, s.stat)
+			lagging[n] = lag{k: part.primary, level: level / part.share, perPoint: perPoint / part.share}
+			n++
+		}
+	}
+	s.spent = p.points.spend(p.cons, s.totals, lagging[:n])
 	copy(s.withPoints, s.raw)
 	for k, idx := range p.points.idx {
 		if idx >= 0 {
@@ -1463,35 +1778,56 @@ func (s *state) eval() (float64, bool) {
 	}
 	for i := range p.damage {
 		d := &p.damage[i]
-		got := d.goal.Measured(d.specs, s.stat)
-		score += d.weight * float64(got)
+		got, value, _ := d.read(s.stat)
+		score += d.weight * value
 		if miss := d.value - got; miss > 0 {
 			feasible = false
 			score -= constraintFlat + constraintPenalty*damageUnit*float64(miss)
 		}
 	}
 	s.ctx.SetBonuses = s.setBonuses
-	hosts := 0
+	var hosts [1 << maxExos]int
 	for _, c := range s.cur {
 		if c == nil {
 			score -= emptyPenalty
 			continue
 		}
-		if c.exoHost {
-			hosts++
-		}
+		hosts[c.hosts]++
 		score -= c.cost
 		if c.crit != nil && !c.crit.Check(&s.ctx) {
 			feasible = false
 			score -= criteriaPenalty
 		}
 	}
-	// Each allowed exo was counted up front and needs an item to sit on.
-	if missing := len(p.exos) - hosts; missing > 0 {
+	// Each allowed exo was counted up front and needs an item of its own to
+	// sit on.
+	if missing := unhosted(len(p.exos), &hosts); missing > 0 {
 		feasible = false
 		score -= exoHostPenalty * float64(missing)
 	}
 	return score, feasible
+}
+
+// maxExos is the number of limited exos there are: AP, MP and Range.
+const maxExos = 3
+
+// unhosted returns how many of the allowed exos are left without an item
+// when each takes a different one. hosts counts the items worn by the set
+// of exos each can take. By Hall's theorem, the exos left over are the
+// largest shortfall of any group of exos against the items that can take
+// one of the group.
+func unhosted(exos int, hosts *[1 << maxExos]int) int {
+	missing := 0
+	for group := 1; group < 1<<exos; group++ {
+		able := 0
+		for set, count := range hosts {
+			if set&group != 0 {
+				able += count
+			}
+		}
+		missing = max(missing, bits.OnesCount(uint(group))-able)
+	}
+	return missing
 }
 
 // climb greedily replaces one item at a time while the score improves.

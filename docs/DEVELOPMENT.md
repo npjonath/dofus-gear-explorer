@@ -51,9 +51,9 @@ The version shown in the app comes from `apps/desktop/package.json` (desktop) an
 
 ### App updates
 
-The desktop app checks this repository's GitHub releases at startup and every six hours with `electron-updater` (`apps/desktop/src/main/updates.ts`). Development runs skip it.
+The desktop app checks this repository's GitHub releases with `electron-updater` (`apps/desktop/src/main/updates.ts`): at startup, every hour, when its window comes back to the front or the computer wakes after an hour without a check (timers stand still while it sleeps), and when the player picks "Check for updates" in the About menu. Development runs skip it.
 
-On every system the new version downloads in the background; a notice offers to restart, and it installs on the next quit anyway.
+On every system the new version downloads in the background; a notice offers to restart, and it installs on the next quit anyway. The main process tells the interface each step through `Platform.updates` (`downloading`, then `ready`, or `available` when the app can only link to the release page). The interface shows it as a button in the top strip next to the About button (`packages/app/src/shell/UpdateButton.tsx`), which stays after the notice is dismissed.
 
 - **Windows and Linux**: `electron-updater` downloads and installs it (the NSIS installer, the AppImage). On Linux only the AppImage updates itself.
 - **macOS**: the native updater (Squirrel.Mac) only installs updates signed with the same Apple Developer ID, and the app is signed ad hoc. So `electron-updater` only finds the release, and `apps/desktop/src/main/macUpdate.ts` installs it. It downloads the release's `-mac-<arch>.zip`, checks it against the sha512 in `latest-mac.yml`, and unpacks it with `ditto`. Then it checks the bundle id, the version and the code signature (`codesign --verify --deep --strict`). Once the app quits, a small script swaps the `.app` bundle and puts the old one back if the move fails. When the bundle can't be replaced (the app runs from the disk image, from a read-only folder, or from the copy Gatekeeper makes of an app never moved to Applications), the notice links to the release page instead.
@@ -160,7 +160,7 @@ When it listens on a loopback address (the default), it also rejects requests ad
 | `GET /api/sets/{id}` | One set with its bonuses |
 | `POST /api/builds/evaluate` | Characteristics, set bonuses and validity of a stuff, with the forgemagic in `mods` |
 | `POST /api/builds/damage` | What the stuff's weapon and the spells of `breedId` hit for; `range` forces `melee` or `ranged` |
-| `POST /api/solver/search` | Stuffs that meet constraints; `forge` says which exos, runes and dracorunes are allowed, `required` lists items every stuff must wear, `excluded` those none may wear, `damage` lists attacks that must hit for a value. Answers the first `limit` stuffs (5 by default, 20 at most) with `total` and an `id` |
+| `POST /api/solver/search` | Stuffs that meet constraints; `forge` says which exos, runes and dracorunes are allowed, `required` lists items every stuff must wear, `excluded` those none may wear, `damage` lists attacks that must hit for a value, and an entry of `maximize` can be an attack too, over several elements if need be. Answers the first `limit` stuffs (5 by default, 20 at most) with `total` and an `id` |
 | `GET /api/solver/results/{id}` | The next stuffs of a search: `offset`, `limit`. The API keeps the last 8 searches in memory and answers 404 `results_expired` past that |
 
 Every data route takes `lang=fr` or `lang=en`. Answers are gzipped when the client accepts it.
@@ -216,11 +216,18 @@ A stuff has 16 positions with hundreds of candidates each, and set bonuses tie p
 
 What the search maximizes, characteristics and attacks alike, is ranked: each entry counts ten times less than the one before it in the list, so a lower priority decides between stuffs that are close on the higher ones. Characteristics are compared on the scale of forgemagic rune weights, so one PA weighs as much as about a hundred Force. A typical search evaluates several million stuffs in well under a second. When nothing satisfies every condition, the closest stuffs are returned with the missed conditions marked.
 
+A damage goal can cover several elements (`kind: "elements"`, with `parts`, the main element first, and `mix`). Each part reads the class's spells in its element, where a "best element" line counts in the main one only. A part can instead name one attack (`kind: "spell"` or `"weapon"`, with `id`), read on its lines in the element: the average over every spell of a class says little about how the player hits, since a class is often stronger in one element (a Cra's Earth spells against its Water ones). A weapon named by a part is worn by the stuff, its Neutral damage forged to the element of the first part that names it; the parts of a goal name one weapon at most. `GET /api/meta` lists the elements of each spell. Two mixes:
+
+- `floor`: the main element is pushed as high as possible while each other element reaches its `share` (1 to 100) of it; 100 everywhere is a balance. The score is the lowest of the elements once each is divided by its share, plus a small part of their average so the search has a direction while one lags.
+- `sum`: the average of the elements weighted by their shares, which is what a turn casting them in those proportions deals. The share an element ends up with is not set by its weight: it depends on what the gear offers.
+
+Under a floor, the characteristic points go to the element furthest behind, ten at a time, so the elements stay level. That split uses an estimate of each element's damage that leaves out the rounding of the formula; the damage that is scored and reported is always the full computation. A solution lists what each element measures in `damageParts`. An "elements" goal can only be maximized, and a request holds one floor at most.
+
 When forgemagic is allowed in a search:
 
 - an allowed PA, PM or PO exo counts as one more point, then goes to an item of the result that lacks the stat;
 - each forgeable item comes with every forgemagic the request allows (each dracorune, the strongest rune that fits per useful characteristic, a negative Critical line forged away), and the search switches between them on the stuff's real score: a rune that fills a missed condition beats one that adds to what is maximized;
-- an exo needs an item with no transcendence rune, so the search keeps one free per exo.
+- an exo needs an item of its own that lacks the stat, holds no transcendence rune and has the weight left for it, so the search keeps one such item per exo: an item that already gives PM is no home for the PM exo.
 
 Required items take the first free place that fits them, before the items kept from the current stuff; one that finds no place is reported in `unplaced`.
 

@@ -16,6 +16,7 @@ Browse every piece of equipment in the game, assemble a stuff with its real char
 - **Stuffs**: one tab per stuff, a 16-slot builder with characteristics, set bonuses, passive effects and equip conditions. Each item can carry forgemagic: overs, exos, a transcendence rune and a dracorune.
 - **Damage**: what the weapon and every spell of the stuff's class hit for, normal and critical, checked against dofusbook on the same stuffs.
 - **Stuff search**: set conditions (11 AP, 300 Wisdom, a spell that hits for 1,000…), order what to maximize, require or forbid items, and get the best stuffs with their forgemagic.
+- **Comparison**: set two stuffs side by side, or a search result against a stuff, and read what the change gains and loses: characteristics, items with their forgemagic, damage.
 - **Sharing**: copy a stuff's code and send it to a friend, who pastes it in "Import". Nothing goes through a server.
 - French, English, Spanish and Portuguese, for the interface and the game data. Dark and light theme.
 
