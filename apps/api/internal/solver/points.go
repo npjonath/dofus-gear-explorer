@@ -16,6 +16,25 @@ import (
 
 const primaries = 6
 
+// primaryIDs lists the characteristics points are spent on, in the order of
+// engine.PrimaryStats.
+var primaryIDs = [primaries]int{
+	game.StatVitality, game.StatWisdom, game.StatStrength, game.StatIntel, game.StatChance, game.StatAgility,
+}
+
+// lagStep is how many points an element held to a floor gets at a time, so
+// that the elements stay level as the points are spent.
+const lagStep = 10
+
+// lag describes one element of a goal that holds its elements to a floor.
+type lag struct {
+	// k is the element's characteristic among the primaries.
+	k int
+	// level is what the element hits for before any point is spent, over
+	// its share, and perPoint what one point adds to that.
+	level, perPoint float64
+}
+
 // costKind says how a primary stat is priced.
 type costKind int
 
@@ -83,9 +102,7 @@ type pointPlan struct {
 // the objective weight of each stat by dense index, before tie-breaks.
 func newPointPlan(cat *game.Catalog, level int, userWeight []float64, cons []constraint) *pointPlan {
 	plan := &pointPlan{budget: int32(engine.PointsTotal(level))}
-	ids := [primaries]int{
-		game.StatVitality, game.StatWisdom, game.StatStrength, game.StatIntel, game.StatChance, game.StatAgility,
-	}
+	ids := primaryIDs
 	const (
 		vit = iota
 		wis
@@ -160,8 +177,10 @@ func newPointPlan(cat *game.Catalog, level int, userWeight []float64, cons []con
 }
 
 // spend returns the points bought in each primary for a stuff whose final
-// stats, before any point is spent, are `totals`.
-func (plan *pointPlan) spend(cons []constraint, totals []int32) [primaries]int32 {
+// stats, before any point is spent, are `totals`. Among the elements held to
+// a floor, only the one furthest behind is worth its full value: the others
+// count as mixSlope of theirs until it catches up.
+func (plan *pointPlan) spend(cons []constraint, totals []int32, lagging []lag) [primaries]int32 {
 	var bought [primaries]int32
 	budget := plan.budget
 
@@ -179,23 +198,40 @@ func (plan *pointPlan) spend(cons []constraint, totals []int32) [primaries]int32
 	}
 
 	for budget > 0 {
+		behind := -1
+		var held [primaries]bool
+		for i, l := range lagging {
+			held[l.k] = true
+			level := func(l lag) float64 { return l.level + l.perPoint*float64(bought[l.k]) }
+			if behind < 0 || level(l) < level(lagging[behind]) {
+				behind = i
+			}
+		}
 		best, bestRatio := -1, 0.0
 		for k := range primaries {
-			if plan.value[k] <= 0 || plan.idx[k] < 0 {
+			value := plan.value[k]
+			if held[k] && k != lagging[behind].k {
+				value *= mixSlope
+			}
+			if value <= 0 || plan.idx[k] < 0 {
 				continue
 			}
 			price := unitCost(plan.kind[k], bought[k])
 			if price > budget {
 				continue
 			}
-			if ratio := plan.value[k] / float64(price); ratio > bestRatio {
+			if ratio := value / float64(price); ratio > bestRatio {
 				best, bestRatio = k, ratio
 			}
 		}
 		if best < 0 {
 			break
 		}
-		got, paid := buy(plan.kind[best], bought[best], tierRoom(plan.kind[best], bought[best]), budget)
+		room := tierRoom(plan.kind[best], bought[best])
+		if held[best] {
+			room = min(room, lagStep)
+		}
+		got, paid := buy(plan.kind[best], bought[best], room, budget)
 		if got == 0 {
 			break
 		}
