@@ -22,10 +22,13 @@ import { useI18n } from "../../i18n"
 import { useApi } from "../../platform"
 import { useAddToBuild } from "../../lib/useAddToBuild"
 import { useBreakpoint } from "../../lib/useBreakpoint"
+import { maximizedAttack, weaponElements } from "../../lib/maximize"
 import { AP_STAT, HP_STAT, MP_STAT, RANGE_STAT, statLabel, toneOf } from "../../lib/stats"
 import { newBuild, useActiveBuild, useStore } from "../../store"
 import { nextBuildName } from "../build/BuildTabs"
 import { CompareDialog, savedOption, type CompareOption } from "../compare/CompareDialog"
+import { ElementGoalOptions } from "./ElementGoal"
+import { GoalName, ItemName } from "./GoalName"
 import { defaultThreshold, FilterRow } from "../../ui/FilterRow"
 import { ItemCell } from "../../ui/ItemCell"
 import { ItemHover } from "../../ui/ItemHover"
@@ -39,8 +42,6 @@ import { toaster } from "../../ui/toaster"
 
 // The search returns up to 20 stuffs, shown five at a time.
 const MAX_RESULTS = 20
-
-const weaponElements: WeaponElement[] = ["earth", "fire", "water", "air"]
 
 function entryKey(entry: MaximizeEntry): string {
   if (entry.kind === "stat") return `stat-${entry.statId}`
@@ -84,16 +85,6 @@ function RequiredItem({ id, unplaced, onRemove }: { id: number; unplaced: boolea
       </button>
     </li>
   )
-}
-
-function ItemName({ id }: { id: number }) {
-  return <>{useItem(id).data?.name ?? "…"}</>
-}
-
-// The weapon or spell a damage goal is about.
-function GoalName({ meta, goal }: { meta: Meta; goal: { kind: "weapon" | "spell"; id: number } }) {
-  if (goal.kind === "weapon") return <ItemName id={goal.id} />
-  return <>{meta.spells.find((spell) => spell.id === goal.id)?.name ?? "…"}</>
 }
 
 // How an attack is read: which hit, and for a weapon its elemental forgemagic.
@@ -285,6 +276,33 @@ function ResultRow({
           })}
           {attacks.map(({ goal, required }, index) => {
             const met = !solution.unmetDamage.includes(index)
+            const measure = t(`solver.damage.measure.${goal.measure}`)
+            if (goal.kind === "elements") {
+              const parts = solution.damageParts?.[index] ?? []
+              return (goal.parts ?? []).map((part, at) => {
+                const share = at > 0 && parts[0] ? Math.round(((parts[at] ?? 0) * 100) / parts[0]) : null
+                return (
+                  <span key={`${index}-${part.element}-${part.kind ?? "all"}-${part.id ?? 0}`} className="goal">
+                    <span className="pip" data-tone={part.element} />
+                    <span className="text-ink-2">
+                      {part.kind && part.id ? (
+                        <GoalName meta={meta} goal={{ kind: part.kind, id: part.id }} />
+                      ) : (
+                        t("solver.elementDamage", { element: t(`element.${part.element}`) })
+                      )}{" "}
+                      · {measure}
+                    </span>
+                    <strong>{number(parts[at] ?? 0)}</strong>
+                    {share !== null && (
+                      <span className="text-ink-3" title={t("solver.elements.ratio", { percent: share })}>
+                        <span aria-hidden="true">{t("solver.elements.percent", { percent: share })}</span>
+                        <span className="sr-only">{t("solver.elements.ratio", { percent: share })}</span>
+                      </span>
+                    )}
+                  </span>
+                )
+              })
+            }
             return (
               <span
                 key={`${index}-${goal.kind}-${goal.id}-${goal.measure}`}
@@ -298,7 +316,7 @@ function ResultRow({
                   ) : (
                     <GoalName meta={meta} goal={{ kind: goal.kind, id: goal.id }} />
                   )}{" "}
-                  · {t(`solver.damage.measure.${goal.measure}`)}
+                  · {measure}
                 </span>
                 <strong>{number(solution.damage[index] ?? 0)}</strong>
                 {required && <span className="sr-only">{met ? t("solver.met") : t("solver.unmet")}</span>}
@@ -452,21 +470,7 @@ export function SolverPage({ meta }: { meta: Meta }) {
       autoPoints: draft.autoPoints,
       constraints: draft.constraints,
       maximize: draft.maximize.map((entry) =>
-        entry.kind === "stat"
-          ? { statId: entry.statId, weight: 1 }
-          : {
-              statId: 0,
-              weight: 1,
-              damage:
-                entry.kind === "element"
-                  ? {
-                      kind: "element",
-                      id: 0,
-                      measure: entry.measure,
-                      element: entry.element === "auto" ? undefined : entry.element,
-                    }
-                  : { kind: entry.kind, id: entry.id, measure: entry.measure, element: entry.element },
-            }
+        entry.kind === "stat" ? { statId: entry.statId, weight: 1 } : { statId: 0, weight: 1, damage: maximizedAttack(entry) }
       ),
       breedId: build.breedId ?? 0,
       damage: draft.damage,
@@ -678,7 +682,7 @@ export function SolverPage({ meta }: { meta: Meta }) {
                 const replace = (next: MaximizeEntry) =>
                   updateSolver({ maximize: draft.maximize.map((e, i) => (i === index ? next : e)) })
                 return (
-                  <li key={key} className="grid gap-1 rounded-md border border-line-strong py-1 pr-0.5 pl-2">
+                  <li key={key} className="grid min-w-0 gap-1 rounded-md border border-line-strong py-1 pr-0.5 pl-2">
                     <div className="flex min-h-[1.9rem] items-center gap-2">
                       <span className="w-4 flex-none text-center font-extrabold text-ink-3">{index + 1}</span>
                       {entry.kind === "stat" ? (
@@ -733,46 +737,7 @@ export function SolverPage({ meta }: { meta: Meta }) {
                       </div>
                     )}
                     {entry.kind === "element" && (
-                      <div className="flex flex-wrap items-center gap-2 pr-1.5 pb-1">
-                        <Select
-                          value={entry.element}
-                          onValueChange={(next) =>
-                            replace({ ...entry, element: next && next !== "auto" ? (next as WeaponElement) : "auto" })
-                          }
-                        >
-                          <SelectTrigger aria-label={t("solver.finalDamage.element")} className="min-w-28 flex-1 justify-between">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="auto" label={t("solver.finalDamage.auto")}>
-                              {t("solver.finalDamage.auto")}
-                            </SelectItem>
-                            {weaponElements.map((element) => (
-                              <SelectItem key={element} value={element} label={t(`element.${element}`)}>
-                                <span className="pip" data-tone={element} />
-                                {t(`element.${element}`)}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                        <Select
-                          value={entry.measure}
-                          onValueChange={(next) =>
-                            replace({ ...entry, measure: next === "crit" || next === "normal" ? next : "mean" })
-                          }
-                        >
-                          <SelectTrigger aria-label={t("solver.damage.hit")} className="min-w-28 flex-1 justify-between">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {(["mean", "crit", "normal"] as const).map((measure) => (
-                              <SelectItem key={measure} value={measure} label={t(`solver.damage.measure.${measure}`)}>
-                                {t(`solver.damage.measure.${measure}`)}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
+                      <ElementGoalOptions meta={meta} breedId={build.breedId ?? 0} entry={entry} onChange={replace} />
                     )}
                   </li>
                 )
@@ -980,7 +945,7 @@ export function SolverPage({ meta }: { meta: Meta }) {
       <section ref={resultsRef} className="min-w-0 bg-panel lg:h-full lg:overflow-y-auto" aria-live="polite">
         {solver.isError ? (
           <p className="m-0 p-6 text-bad" role="alert">
-            {t("solver.error")}
+            {solver.error instanceof ApiError && solver.error.code === "bad_damage_goal" ? t("solver.badGoal") : t("solver.error")}
           </p>
         ) : solver.isPending ? (
           <div className="grid gap-3 p-5">
