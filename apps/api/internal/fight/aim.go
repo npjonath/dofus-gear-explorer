@@ -62,7 +62,8 @@ type Shift struct {
 
 // Target is a cell a spell can be aimed at, with what casting there does.
 type Target struct {
-	Cell int `json:"cell"`
+	Projected *int `json:"projected,omitempty"`
+	Cell      int  `json:"cell"`
 	// Zone is the cells the spell covers from there.
 	Zone   []int   `json:"zone"`
 	Losses []Loss  `json:"losses"`
@@ -109,7 +110,11 @@ func (s *Sim) Aim(st *State, spellID int) *Aim {
 }
 
 func (s *Sim) preview(st *State, a *attack, spellID, cell int, canCrit bool, work *int) Target {
-	target := Target{Cell: cell, Zone: s.shown(st, a, cell), Losses: []Loss{}, Shifts: []Shift{}}
+	projection := st.project(a, st.Active(), cell)
+	target := Target{Cell: cell, Zone: s.shown(st, a, projection.cell, projection.origin(st.Active().Cell)), Losses: []Loss{}, Shifts: []Shift{}}
+	if len(projection.route.Cells) > 1 {
+		target.Projected = &projection.cell
+	}
 	// run plays the cast on a copy of the fight, with the lowest or the
 	// highest rolls and one outcome of what the spell draws at random, and
 	// returns what each entity lost and where the cast left everyone.
@@ -134,7 +139,7 @@ func (s *Sim) preview(st *State, a *attack, spellID, cell int, canCrit bool, wor
 			},
 		}
 		id := trial.Active().ID
-		s.resolve(trial, c, id, id, a, cell, 0)
+		s.resolveProjected(trial, c, id, cell, a, projection)
 		if crit {
 			s.fire(trial, c, id, id, 0, "CC")
 		}
@@ -194,8 +199,7 @@ func (s *Sim) preview(st *State, a *attack, spellID, cell int, canCrit bool, wor
 
 // shown is the zone a spell covers when aimed at a cell: the cells of the
 // effects the game lists that do not apply to the caster alone.
-func (s *Sim) shown(st *State, a *attack, cell int) []int {
-	player := st.Active()
+func (s *Sim) shown(st *State, a *attack, cell, origin int) []int {
 	seen := map[int]bool{cell: true}
 	zone := []int{cell}
 	for _, e := range a.effects {
@@ -211,8 +215,8 @@ func (s *Sim) shown(st *State, a *attack, cell int) []int {
 		if game.CastsSpell(e.Action) {
 			continue
 		}
-		for _, c := range st.Board.zone(e.Zone, player.Cell, cell) {
-			if !seen[c] && !st.Board.wall(c) {
+		for _, c := range st.Board.zone(e.Zone, origin, cell) {
+			if !seen[c] && !st.Board.wall(c) && (!e.Zone.Sight || st.sees(cell, c)) {
 				seen[c] = true
 				zone = append(zone, c)
 			}

@@ -38,6 +38,7 @@ def import_pack(source, target):
     import UnityPy
     UnityPy.config.FALLBACK_UNITY_VERSION = "6000.0.44f1"
     from effects import export_effects
+    from audio import export_audio
     from maps import export_maps
     from hud import addressables_directory, export_hud
     from actors import export_actors, prepare_equipment_catalog
@@ -45,7 +46,7 @@ def import_pack(source, target):
     content = locate(source.resolve())
     target.mkdir(parents=True, exist_ok=True)
     # Both the extraction format and the source catalogs determine cache validity.
-    identity = hashlib.sha256(b"dge-fight-assets-2")
+    identity = hashlib.sha256(b"dge-fight-assets-3")
     identity.update(prepare_equipment_catalog(target).encode())
     builtins = addressables_directory(content)
     # Content and the UI that ships in the executable have independent update catalogs.
@@ -56,6 +57,9 @@ def import_pack(source, target):
         marker = (builtins / "figs_assets_2x.bundle").stat()
         identity.update(f"{marker.st_size}-{marker.st_mtime_ns}".encode())
     catalogs = sorted(content.rglob("catalog*.hash"))
+    for bank in sorted((content / "Audio/Banks").glob("*/*.bank")):
+        stat = bank.stat()
+        identity.update(f"{bank.name}:{stat.st_size}:{stat.st_mtime_ns}".encode())
     if not catalogs:
         raise ValueError("The DOFUS content catalogs are missing.")
     for catalog in catalogs:
@@ -66,7 +70,8 @@ def import_pack(source, target):
     if not (final / "complete.json").is_file():
         staging = Path(tempfile.mkdtemp(prefix=".import-", dir=target))
         try:
-            for stage, export in (("maps", export_maps), ("hud", export_hud), ("actors", export_actors), ("effects",export_effects)):
+            for stage, export in (("maps", export_maps), ("hud", export_hud), ("actors", export_actors),
+                                  ("effects", export_effects), ("audio", export_audio)):
                 print(stage, flush=True)
                 export(content, staging)
             (staging / "complete.json").write_text(json.dumps({"format": 1, "id": name}), encoding="utf-8")
@@ -104,7 +109,8 @@ if __name__ == "__main__":
     parser.add_argument("--source", required=True, type=Path)
     parser.add_argument("--output", required=True, type=Path)
     if sys.argv[1:] == ["--self-test"]:
-        import actors, effects, maps, hud
+        import actors, effects, maps, hud, audio, combat_bank
+        assert isinstance(next(iter(combat_bank.SETUPS.values())), bytes)
         import UnityPy
         from PIL import Image
         from io import BytesIO

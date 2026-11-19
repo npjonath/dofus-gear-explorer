@@ -17,7 +17,7 @@ import (
 
 // schemaVersion changes whenever the tables below change shape. A database
 // written by another schema version is rebuilt and its data re-imported.
-const schemaVersion = "11"
+const schemaVersion = "12"
 
 // Meta keys.
 const (
@@ -93,6 +93,7 @@ CREATE TABLE IF NOT EXISTS runes (
 CREATE TABLE IF NOT EXISTS item_types (
 	id            INTEGER PRIMARY KEY,
 	super_type_id INTEGER NOT NULL,
+ raw_zone TEXT NOT NULL,
 	slot          TEXT NOT NULL
 );
 
@@ -387,14 +388,17 @@ func (s *Store) Import(ctx context.Context, ds *game.Dataset, importedAt string)
 			sp.ID, sp.IconID, sp.BreedID, sp.Order, sp.VariantOf, sp.StartsFor, string(levels)); err != nil {
 			return err
 		}
+		if err := putTexts("spell_desc", sp.ID, sp.Description, false); err != nil {
+			return err
+		}
 		if err := putTexts(textSpell, sp.ID, sp.Name, false); err != nil {
 			return err
 		}
 	}
 	for _, t := range ds.Types {
 		if _, err := tx.ExecContext(ctx,
-			"INSERT INTO item_types(id, super_type_id, slot) VALUES(?, ?, ?)",
-			t.ID, t.SuperTypeID, string(t.Slot)); err != nil {
+			"INSERT INTO item_types(id, super_type_id, slot,raw_zone) VALUES(?, ?, ?,?)",
+			t.ID, t.SuperTypeID, string(t.Slot), t.RawZone); err != nil {
 			return err
 		}
 		if err := putTexts(textType, t.ID, t.Name, false); err != nil {
@@ -597,10 +601,10 @@ func (s *Store) Load(ctx context.Context) (*game.Dataset, error) {
 	}); err != nil {
 		return nil, err
 	}
-	if err := scan("SELECT id, super_type_id, slot FROM item_types ORDER BY id", func(r *sql.Rows) error {
+	if err := scan("SELECT id, super_type_id, slot,raw_zone FROM item_types ORDER BY id", func(r *sql.Rows) error {
 		var t game.ItemType
 		var slot string
-		if err := r.Scan(&t.ID, &t.SuperTypeID, &slot); err != nil {
+		if err := r.Scan(&t.ID, &t.SuperTypeID, &slot, &t.RawZone); err != nil {
 			return err
 		}
 		t.Slot = game.Slot(slot)
@@ -644,6 +648,7 @@ func (s *Store) Load(ctx context.Context) (*game.Dataset, error) {
 			return fmt.Errorf("spell %d: %w", sp.ID, err)
 		}
 		sp.Name = textsOf(textSpell, sp.ID)
+		sp.Description = texts[textKey{"spell_desc", sp.ID}]
 		ds.Spells = append(ds.Spells, sp)
 		return nil
 	}); err != nil {

@@ -120,6 +120,8 @@ export interface Timeline {
   turns: TurnCue[]
   graphics: GraphicCue[]
   carriers: Record<number, number>
+  invisible: number[]
+  visibility: { entity: number; at: number; invisible: boolean }[]
   lifts: { rider: number; carrier: number; pickup: boolean; start: number; end: number }[]
 }
 
@@ -164,6 +166,8 @@ export function buildTimeline(before: FightState, events: FightEvent[], zone?: n
     turns: [],
     graphics: [],
     carriers: Object.fromEntries(carrying),
+    invisible: before.entities.filter((entity) => entity.buffs.some((b) => b.kind === "invisible")).map((entity) => entity.id),
+    visibility: [],
     lifts: [],
   }
 
@@ -213,6 +217,10 @@ export function buildTimeline(before: FightState, events: FightEvent[], zone?: n
 
   events.forEach((event, index) => {
     const entity = event.entity ?? 0
+    if (event.type === "invisible" || event.type === "reveal") {
+      timeline.visibility.push({ entity, at: now, invisible: event.type === "invisible" })
+      return
+    }
     if (event.type === "rune") {
       if (event.cell === undefined || event.spell === undefined) return
       const caster = before.entities.find((fighter) => fighter.id === entity)
@@ -275,10 +283,12 @@ export function buildTimeline(before: FightState, events: FightEvent[], zone?: n
       // What a fight opens with is aimed at nothing: its effects show, the gesture does not.
       if (event.cell === undefined) return
       const to = event.cell
-      const dir = heading(board, from, to)
+      const entry = event.portalPath?.[0] ?? to
+      const exit = event.portalPath?.at(-1)
+      const dir = heading(board, from, entry)
       const tone = toneOfCast(events, index)
-      const distance = cellDistance(board, from, to)
-      const direction = gameDirection(board, from, to)
+      const distance = cellDistance(board, from, entry)
+      const direction = gameDirection(board, from, entry)
       if (direction !== undefined) timeline.turns.push({ entity, at: now, facing: dir || undefined, direction })
       const caster = before.entities.find((fighter) => fighter.id === entity)
       const target = before.entities.find((fighter) => cellOf.get(fighter.id) === to)
@@ -286,9 +296,17 @@ export function buildTimeline(before: FightState, events: FightEvent[], zone?: n
       if (visual) {
         timeline.poses.push({
           entity, pose: "windup", start: now, end: visual.poseEnd, dir: dir || 1,
-          cell: to, tone, animation: visual.animation, spell: event.spell,
+          cell: entry, tone, animation: visual.animation, spell: event.spell,
         })
-        timeline.graphics.push(...visual.graphics)
+        for (const cue of visual.graphics) {
+          const oriented = exit !== undefined && cue.isOriented && direction !== undefined ? { ...cue, direction } : cue
+          if (exit !== undefined && (cue.kind === "projectile" || cue.kind === "trail")) {
+            const mid = (cue.start + cue.end) / 2
+            timeline.graphics.push({ ...oriented, to: entry, end: mid }, { ...oriented, from: exit, start: mid })
+          } else {
+            timeline.graphics.push(oriented)
+          }
+        }
         zoneLeft = undefined
         end = Math.max(end, visual.end)
         free = Math.max(free, visual.hit + HIT_HOLD_MS)
@@ -296,17 +314,21 @@ export function buildTimeline(before: FightState, events: FightEvent[], zone?: n
         return
       }
       let impact: number
-      if (distance === 1) {
+      if (distance === 1 && exit === undefined) {
         // Next to the target: the caster strikes it, nothing flies.
         timeline.poses.push({ entity, pose: "lunge", start: now, end: now + LUNGE_MS, dir: dir || 1, cell: to, tone, spell: event.spell })
         impact = now + LUNGE_MS * 0.45
       } else {
-        timeline.poses.push({ entity, pose: "windup", start: now, end: now + WINDUP_MS, dir: dir || 1, cell: to, tone, spell: event.spell })
+        timeline.poses.push({ entity, pose: "windup", start: now, end: now + WINDUP_MS, dir: dir || 1, cell: entry, tone, spell: event.spell })
         impact = now + WINDUP_MS * 0.7
-        if (distance > 1) {
+        if (distance > 1 || exit !== undefined) {
           const flight = Math.max(BOLT_MIN_MS, Math.min(BOLT_MAX_MS, distance * BOLT_MS_PER_CELL))
           const onEntity = [...cellOf.values()].includes(to)
-          timeline.bolts.push({ caster: entity, from, to, onEntity, start: impact, end: impact + flight, tone, critical: Boolean(event.critical) })
+          const bolt = { caster: entity, from, to, onEntity, start: impact, end: impact + flight, tone, critical: Boolean(event.critical) }
+          if (exit !== undefined) {
+            const mid = impact + flight / 2
+            timeline.bolts.push({ ...bolt, to: entry, onEntity: false, end: mid }, { ...bolt, from: exit, start: mid })
+          } else timeline.bolts.push(bolt)
           impact += flight
         }
       }
@@ -340,7 +362,7 @@ export function buildTimeline(before: FightState, events: FightEvent[], zone?: n
         // Pushed, pulled or carried elsewhere: everything one effect shoves moves at once.
         shove ??= { start: now, end: now, last: now }
         const start = Math.max(shove.start, busy.get(entity) ?? 0)
-        const slides = contiguous(board, cells)
+        const slides = event.action !== 1182 && contiguous(board, cells)
         const length = slides ? SLIDE_BASE_MS + (cells.length - 1) * SLIDE_MS : BLINK_MS
         cue = { entity, cells, gait: slides ? "slide" : "blink", start, end: start + length }
         shove.end = Math.max(shove.end, cue.end)
@@ -416,6 +438,7 @@ export function buildTimeline(before: FightState, events: FightEvent[], zone?: n
 }
 
 export interface Actor {
+  invisible?: boolean
   /** Where the entity is on the grid; fractional between two cells. */
   x: number
   y: number
@@ -513,6 +536,10 @@ export function sceneAt(timeline: Timeline, time: number, facing: Record<number,
   }
 
   const carriers = { ...timeline.carriers }
+  for (const id of timeline.invisible) if (actors[id]) actors[id]!.invisible = true
+  for (const cue of timeline.visibility) {
+    if (time >= cue.at && actors[cue.entity]) actors[cue.entity]!.invisible = cue.invisible
+  }
   for (const lift of timeline.lifts) {
     if (time < lift.start) continue
     const actor = actors[lift.rider]

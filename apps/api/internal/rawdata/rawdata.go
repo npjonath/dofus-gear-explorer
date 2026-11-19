@@ -158,6 +158,7 @@ type rawCategory struct {
 }
 
 type rawType struct {
+	RawZone     string  `json:"rawZone"`
 	ID          int     `json:"id"`
 	NameID      flexInt `json:"nameId"`
 	SuperTypeID int     `json:"superTypeId"`
@@ -673,7 +674,7 @@ func Parse(dir, version string, langs []string) (*game.Dataset, error) {
 			continue
 		}
 		it := game.ItemType{
-			ID: t.ID, SuperTypeID: t.SuperTypeID,
+			ID: t.ID, SuperTypeID: t.SuperTypeID, RawZone: t.RawZone,
 			Slot: game.SlotBySuperType[t.SuperTypeID], Name: game.Texts{},
 		}
 		want(it.Name, t.NameID)
@@ -750,6 +751,12 @@ func Parse(dir, version string, langs []string) (*game.Dataset, error) {
 		for _, p := range pending {
 			if s, ok := texts[p.id]; ok {
 				p.target[lang] = s
+			}
+		}
+		for i := range ds.Spells {
+			d := ds.Spells[i].Description
+			if text, ok := d[lang]; ok {
+				d[lang] = cleanPassive(text, "")
 			}
 		}
 		for i := range ds.Items {

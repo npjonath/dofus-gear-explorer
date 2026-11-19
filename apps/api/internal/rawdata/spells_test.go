@@ -90,7 +90,7 @@ func TestCastRulesAndFightEffects(t *testing.T) {
 	}
 	hit := effects[0]
 	if hit.Action != 99 || hit.Min != 20 || hit.Max != 25 || hit.Trigger != "" || !hit.Shown || hit.Sign != 0 ||
-		hit.Zone != (game.Zone{Shape: "C", Size: 2, Min: 1, Decrease: 10, Steps: 4}) {
+		!reflect.DeepEqual(hit.Zone, game.Zone{Shape: "C", Size: 2, Min: 1, Decrease: 10, Steps: 4}) {
 		t.Errorf("damage effect = %+v", hit)
 	}
 	if boost := effects[1]; boost.Stat != game.StatAP || boost.Sign != 1 || boost.Duration != 2 || boost.Shown {

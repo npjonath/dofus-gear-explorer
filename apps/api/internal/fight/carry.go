@@ -122,8 +122,10 @@ func (s *Sim) relocate(st *State, c *casting, e *Entity, cell, depth int) {
 		s.uncarry(st, c, e, cell, depth, false)
 		return
 	}
+	e.rememberPosition(cell)
 	e.Cell = cell
 	if rider := st.passenger(e.ID); rider != nil {
+		rider.rememberPosition(cell)
 		rider.Cell = cell
 	}
 }

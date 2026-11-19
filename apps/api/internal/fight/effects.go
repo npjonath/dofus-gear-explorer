@@ -25,9 +25,10 @@ const (
 
 // Event is one thing that happened in a fight.
 type Event struct {
-	Carrier int    `json:"carrier,omitempty"`
-	Type    string `json:"type"`
-	Entity  int    `json:"entity,omitempty"`
+	PortalPath []int  `json:"portalPath,omitempty"`
+	Carrier    int    `json:"carrier,omitempty"`
+	Type       string `json:"type"`
+	Entity     int    `json:"entity,omitempty"`
 	// Spell is the spell cast, or the one a lasting effect comes from.
 	Spell        int   `json:"spell"`
 	TriggerSpell int   `json:"triggerSpell,omitempty"`
@@ -54,7 +55,11 @@ type Event struct {
 // casting is one cast being resolved, the spells it casts in turn and the
 // waiting effects it sets off included.
 type casting struct {
-	telefrag map[int]bool
+	triggeringDamage int // Damage from the hit currently firing reactive effects.
+	finishTurn       bool
+	acting           int // Fighter taking the action; zero for delayed effects and turns.
+	projection       portalProjection
+	telefrag         map[int]bool
 	// root is the spell the player cast: lasting effects are filed under it.
 	root       int
 	aura       int
@@ -158,7 +163,7 @@ func isSpellMod(action int) bool {
 	if action == actionSpellBase || action == actionSpellRange {
 		return false
 	}
-	return (action >= firstSpellMod && action <= lastSpellMod) || action == modTakenCellOn || action == modMaxRangeSet || action == modMinRangeSet
+	return (action >= firstSpellMod && action <= lastSpellMod) || (action >= 2908 && action <= 2911) || action == modTakenCellOn || action == modMaxRangeSet || action == modMinRangeSet
 }
 
 // healActions maps the heals that scale with a characteristic to their element.
@@ -180,6 +185,7 @@ const (
 // it names (allies, enemies, the caster), then conditions each of which
 // must hold.
 type mask struct {
+	projected, direct         bool
 	telefrag, withoutTelefrag bool
 	allySummon, enemySummon   bool
 	allyPlayer, ownerOnly     bool
@@ -209,6 +215,12 @@ func readMask(raw string) mask {
 			continue
 		}
 		switch token {
+		case "R":
+			m.projected = true
+			continue
+		case "r":
+			m.direct = true
+			continue
 		case "h", "l":
 			m.allyPlayer, named = true, true
 			continue
@@ -297,6 +309,11 @@ func (s *Sim) holds(c cond, e *Entity, had map[int]map[int]bool) bool {
 
 func (e *Entity) inState(id int) bool {
 	for _, b := range e.Buffs {
+		if b.Kind == buffStateDisabled && b.Ref == id {
+			return false
+		}
+	}
+	for _, b := range e.Buffs {
 		if b.Kind == BuffState && b.Ref == id {
 			return true
 		}
@@ -342,9 +359,12 @@ func (s *Sim) met(m mask, caster, target *Entity, had map[int]map[int]bool) bool
 // wherever it stands when the mask names it. Who stands in the zone is read
 // from where everyone stood as the spell was cast: an effect that pushes its
 // target away does not make the next one miss.
-func (s *Sim) targets(st *State, caster *Entity, e game.SpellEffect, m mask, cell int, stood map[int]int, had map[int]map[int]bool) []int {
+func (s *Sim) targets(st *State, caster *Entity, e game.SpellEffect, m mask, cell, origin int, stood map[int]int, had map[int]map[int]bool) []int {
 	var ids []int
-	for _, c := range st.Board.zone(e.Zone, stood[caster.ID], cell) {
+	for _, c := range st.Board.zone(e.Zone, origin, cell) {
+		if e.Zone.Sight && !st.sees(cell, c) {
+			continue
+		}
 		for i := range st.Entities {
 			target := &st.Entities[i]
 			if e.Zone.ExcludeCarried && had[target.ID][carriedState] {
@@ -442,7 +462,7 @@ func (s *Sim) resolveOn(st *State, c *casting, casterID, sourceID int, a *attack
 		stood[e.ID] = e.Cell
 		states := map[int]bool{}
 		for _, b := range e.Buffs {
-			if b.Kind == BuffState {
+			if b.Kind == BuffState && e.inState(b.Ref) {
 				states[b.Ref] = true
 			}
 		}
@@ -468,6 +488,13 @@ func (s *Sim) resolveOn(st *State, c *casting, casterID, sourceID int, a *attack
 			return
 		}
 		m := readMask(e.Targets)
+		if m.projected && len(c.projection.route.Cells) == 0 || m.direct && len(c.projection.route.Cells) > 0 {
+			continue
+		}
+		if portalAction(e.Action) && e.Trigger == "" && e.Delay == 0 {
+			s.applyPortal(st, c, at, a, e, had)
+			continue
+		}
 		if e.Action == actionTeleport && st.free(cell) && e.Trigger == "" && e.Delay == 0 {
 			// Teleportation targets the tile. There is no occupant to test
 			// against an unstarred condition on the recipient.
@@ -516,7 +543,11 @@ func (s *Sim) resolveOn(st *State, c *casting, casterID, sourceID int, a *attack
 			}
 			continue
 		}
-		for _, id := range s.targets(st, caster, e, m, cell, stood, had) {
+		origin := stood[caster.ID]
+		if depth == 0 {
+			origin = c.projection.origin(origin)
+		}
+		for _, id := range s.targets(st, caster, e, m, cell, origin, stood, had) {
 			if onlyTarget != 0 && id != onlyTarget && !(m.caster && id == casterID) {
 				continue
 			}
@@ -535,6 +566,10 @@ func (s *Sim) resolveOn(st *State, c *casting, casterID, sourceID int, a *attack
 			}
 			if e.Trigger != "" || e.Delay > 0 {
 				s.hook(st, target, a, e, Hook{Spell: a.id, Grade: a.grade, Critical: crit, Index: i, From: c.root, Caster: casterID, Mark: c.aura, Delay: max(0, e.Delay)})
+				// Composite triggers such as I|TB run on application and again at turn start.
+				if e.Delay == 0 && waitsFor(e.Trigger, []string{"I"}) && s.met(m, caster, target, had) {
+					s.apply(st, c, at, id, a, e)
+				}
 				continue
 			}
 			if s.met(m, caster, target, had) {
@@ -681,7 +716,11 @@ func (s *Sim) due(st *State, c *casting, entityID int) {
 }
 
 func (s *Sim) applyHook(st *State, c *casting, at place, target int, a *attack, e game.SpellEffect, h Hook) {
+	acting := c.acting
+	c.acting = 0
 	root, aura, action := c.root, c.aura, c.markAction
+	projected := c.projection
+	c.projection = portalProjection{}
 	c.root, c.aura, c.markAction = h.From, h.Mark, 0
 	if game.PlacesMark(e.Action) {
 		s.placeMark(st, c, at, a, h.Index, h.Critical, e)
@@ -689,6 +728,8 @@ func (s *Sim) applyHook(st *State, c *casting, at place, target int, a *attack, 
 		s.apply(st, c, at, target, a, e)
 	}
 	c.root, c.aura, c.markAction = root, aura, action
+	c.acting = acting
+	c.projection = projected
 }
 
 func waitsFor(trigger string, happened []string) bool {
@@ -718,6 +759,9 @@ func (s *Sim) apply(st *State, c *casting, at place, targetID int, a *attack, e 
 		return
 	}
 	lo, hi := span(e)
+	if s.extraEffect(st, c, at, a, e, caster, target, lo, hi) {
+		return
+	}
 	if element, steal, ok := game.AttackAction(e.Action); ok {
 		if e.Duration != 0 && !at.fired {
 			// Damage over several turns with nothing to trigger it.
@@ -728,11 +772,11 @@ func (s *Sim) apply(st *State, c *casting, at place, targetID int, a *attack, e 
 		return
 	}
 	if element, ok := healActions[e.Action]; ok {
-		base := c.roll(lo, hi)
+		base := c.amount(caster, target, lo, hi) + spellHealBonus(caster, a.id)
 		spec := engine.AttackSpec{Level: s.Level}
 		line := game.AttackLine{Kind: game.LineHeal, Element: element, Min: base, Max: base}
 		amount, _ := spec.Line(line, s.StatOf(caster))
-		s.heal(st, c, at, target, amount.Min)
+		s.heal(st, c, at, target, s.projectedHeal(st, c, at, amount.Min))
 		return
 	}
 	if game.CastsSpell(e.Action) {
@@ -744,6 +788,16 @@ func (s *Sim) apply(st *State, c *casting, at place, targetID int, a *attack, e 
 		return
 	}
 	switch e.Action {
+	case 1181, 1182, 1183, 2183, 4007:
+		s.applyPortal(st, c, at, a, e, nil)
+	case 150:
+		was := target.invisible()
+		s.buff(st, c, at, target, a, Buff{Kind: BuffInvisible, Turns: e.Duration}, false)
+		if !was && target.invisible() {
+			c.emit(Event{Type: "invisible", Entity: target.ID, Spell: c.root, Turns: e.Duration})
+		}
+	case 202:
+		s.reveal(st, c, at, target)
 	case pickupAction:
 		s.pickup(st, c, at, caster, target, a)
 	case throwAction:
@@ -777,7 +831,7 @@ func (s *Sim) apply(st *State, c *casting, at place, targetID int, a *attack, e 
 			}
 		}
 	case actionHealPercent:
-		s.heal(st, c, at, target, target.MaxHP*c.roll(lo, hi)/100)
+		s.heal(st, c, at, target, s.projectedHeal(st, c, at, target.MaxHP*c.roll(lo, hi)/100))
 	case actionPush, actionPushHarmless:
 		s.shove(st, c, caster, target, origin(caster, target, at.cell), e.Min, true, e.Action == actionPush, at.depth)
 	case actionPull:
@@ -860,7 +914,7 @@ func (s *Sim) apply(st *State, c *casting, at place, targetID int, a *attack, e 
 			c.skip(e)
 			return
 		}
-		value := c.roll(lo, hi) * e.Sign
+		value := c.amount(caster, target, lo, hi) * e.Sign
 		turns := e.Duration
 		if turns == 0 {
 			// Points given or taken at once count for the turn in progress.
@@ -916,6 +970,9 @@ func (s *Sim) drop(st *State, c *casting, at place, target *Entity, match func(B
 	for _, b := range target.Buffs {
 		if !match(b) {
 			kept = append(kept, b)
+		} else if b.Kind == buffVitality {
+			target.MaxHP = max(1, target.MaxHP-b.Value)
+			target.HP = min(target.MaxHP, target.HP-b.Value)
 		} else if b.Kind == BuffState {
 			left = append(left, b.Ref)
 		}
@@ -931,7 +988,7 @@ func (s *Sim) drop(st *State, c *casting, at place, target *Entity, match func(B
 
 // buff puts a lasting effect on a target, unless the spell's effects have
 // piled up on it as much as they can.
-func (s *Sim) buff(st *State, c *casting, at place, target *Entity, a *attack, b Buff, report bool) {
+func (s *Sim) buff(st *State, c *casting, at place, target *Entity, a *attack, b Buff, report bool) bool {
 	b.Dispellable = at.dispellable
 	b.Spell, b.From, b.Mark = a.id, c.root, c.aura
 	if b.Turns == 0 {
@@ -947,7 +1004,7 @@ func (s *Sim) buff(st *State, c *casting, at place, target *Entity, a *attack, b
 			if other.Turns >= 0 && (b.Turns < 0 || b.Turns > other.Turns) {
 				target.Buffs[i].Turns = b.Turns
 			}
-			return
+			return false
 		}
 	}
 	if a.rules.MaxStack > 0 {
@@ -958,11 +1015,11 @@ func (s *Sim) buff(st *State, c *casting, at place, target *Entity, a *attack, b
 			}
 		}
 		if count >= a.rules.MaxStack {
-			return
+			return false
 		}
 	}
 	if len(target.Buffs) >= maxBuffs {
-		return
+		return false
 	}
 	target.Buffs = append(target.Buffs, b)
 	if report {
@@ -972,6 +1029,7 @@ func (s *Sim) buff(st *State, c *casting, at place, target *Entity, a *attack, b
 	if b.Kind == BuffState && !hadState {
 		s.fire(st, c, target.ID, at.source, at.depth, "EON"+strconv.Itoa(b.Ref))
 	}
+	return true
 }
 
 func (s *Sim) heal(st *State, c *casting, at place, target *Entity, amount int) {
@@ -996,8 +1054,11 @@ var damageTriggers = map[int]string{
 
 // hit deals one damage line to a target.
 func (s *Sim) hit(st *State, c *casting, at place, caster, target *Entity, a *attack, e game.SpellEffect, element int, steal bool) {
+	s.hitWithRatio(st, c, at, caster, target, a, e, element, steal, 1, 1)
+}
+func (s *Sim) hitWithRatio(st *State, c *casting, at place, caster, target *Entity, a *attack, e game.SpellEffect, element int, steal bool, numerator, denominator int) {
 	lo, hi := span(e)
-	base := c.roll(lo, hi)
+	base := c.amount(caster, target, lo, hi)
 	flat := 0
 	for _, b := range caster.Buffs {
 		if a.weapon || b.Ref != a.id {
@@ -1031,7 +1092,15 @@ func (s *Sim) hit(st *State, c *casting, at place, caster, target *Entity, a *at
 		spec.Power += stat(106) // glyphPower
 	}
 	damage, element := spec.CombatHit(base, element, c.crit, stat)
-	damage = (damage + flat) * max(0, 100+stat(statFinalDamage)) / 100
+	s.dealHit(st, c, at, caster, target, e, element, (damage+flat)*numerator/denominator, melee, steal)
+}
+
+func (s *Sim) dealHit(st *State, c *casting, at place, caster, target *Entity, e game.SpellEffect, element, damage int, melee, steal bool) {
+	stat := s.StatOf(caster)
+	damage = damage * max(0, 100+stat(statFinalDamage)) / 100
+	if c.projection.route.Bonus > 0 {
+		damage = damage * (100 + c.projection.route.Bonus) / 100
+	}
 	// Away from the centre of a zone, a hit loses a share of its damage per
 	// cell.
 	if e.Zone.Shape != "" && e.Zone.Shape != "P" && !at.fired {
@@ -1058,6 +1127,9 @@ func (s *Sim) hit(st *State, c *casting, at place, caster, target *Entity, a *at
 	damage = s.absorb(c, target, damage)
 	s.loseHealth(target, damage)
 	c.emit(Event{Type: EventDamage, Entity: target.ID, Value: damage, Element: element, Critical: c.crit})
+	if damage > 0 && c.acting == caster.ID && caster.ID != target.ID && !at.fired && c.markAction == 0 {
+		s.reveal(st, c, at, caster)
+	}
 	casterID, targetID := caster.ID, target.ID
 	if steal && casterID != targetID {
 		s.heal(st, c, at, caster, damage/2)
@@ -1070,8 +1142,28 @@ func (s *Sim) hit(st *State, c *casting, at place, caster, target *Entity, a *at
 		if caster.enemyTeam() == target.enemyTeam() {
 			side = "DBA"
 		}
+		previous := c.triggeringDamage
+		c.triggeringDamage = damage
 		s.fire(st, c, targetID, casterID, at.depth, "D", damageTriggers[element], reach, side)
+		c.triggeringDamage = previous
 	}
+}
+
+func (e *Entity) invisible() bool {
+	for _, b := range e.Buffs {
+		if b.Kind == BuffInvisible {
+			return true
+		}
+	}
+	return false
+}
+
+func (s *Sim) reveal(st *State, c *casting, at place, target *Entity) {
+	if !target.invisible() {
+		return
+	}
+	s.drop(st, c, at, target, func(b Buff) bool { return b.Kind == BuffInvisible })
+	c.emit(Event{Type: "reveal", Entity: target.ID, Spell: c.root})
 }
 
 // shove moves an entity in a straight line, away from a cell or toward it,
@@ -1089,7 +1181,7 @@ func (s *Sim) shove(st *State, c *casting, caster, moved *Entity, from, cells in
 	var blocker *Entity
 	left := cells
 	for ; left > 0; left-- {
-		x, y := st.Board.xy(moved.Cell)
+		x, y := st.Board.xy(path[len(path)-1])
 		if !st.Board.inside(x+dx, y+dy) {
 			break
 		}
@@ -1098,10 +1190,10 @@ func (s *Sim) shove(st *State, c *casting, caster, moved *Entity, from, cells in
 			blocker = st.at(next)
 			break
 		}
-		s.relocate(st, c, moved, next, depth)
 		path = append(path, next)
 	}
 	if len(path) > 1 {
+		s.relocate(st, c, moved, path[len(path)-1], depth)
 		c.emit(Event{Type: EventMove, Entity: moved.ID, Path: path})
 		defer s.crossMarks(st, c, moved.ID, path[0], depth)
 	}
@@ -1171,6 +1263,12 @@ func (s *Sim) reflect(st *State, c *casting, at place, a *attack, action int, ca
 	if to == moved.Cell || st.Board.wall(to) {
 		return
 	}
+	s.teleportWithSwap(st, c, at, a, moved, to)
+}
+func (s *Sim) teleportWithSwap(st *State, c *casting, at place, a *attack, moved *Entity, to int) bool {
+	if !st.Board.valid(to) || st.Board.wall(to) || to == moved.Cell {
+		return false
+	}
 	from, id := moved.Cell, moved.ID
 	blocker := st.at(to)
 	if blocker != nil {
@@ -1182,19 +1280,20 @@ func (s *Sim) reflect(st *State, c *casting, at place, a *attack, action int, ca
 			}
 		}
 		if !swap {
-			return
+			return false
 		}
 		if c.telefrag == nil {
 			c.telefrag = map[int]bool{}
 		}
 		c.telefrag[id], c.telefrag[blocker.ID] = true, true
-		blocker.Cell = from
+		s.relocate(st, c, blocker, from, at.depth)
 		c.emit(Event{Type: EventMove, Entity: blocker.ID, Path: []int{to, from}})
 	}
-	moved.Cell = to
+	s.relocate(st, c, moved, to, at.depth)
 	c.emit(Event{Type: EventMove, Entity: id, Path: []int{from, to}})
 	if blocker != nil {
 		s.crossMarks(st, c, blocker.ID, to, at.depth)
 	}
 	s.crossMarks(st, c, id, from, at.depth)
+	return true
 }

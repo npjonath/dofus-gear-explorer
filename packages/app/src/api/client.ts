@@ -7,6 +7,7 @@ import type {
   FightAction,
   FightAim,
   FightDummies,
+  FightBookSpell,
   FightState,
   FightView,
   ItemDetail,
@@ -32,6 +33,7 @@ export class ApiError extends Error {
 export interface ApiClient {
   baseUrl: string
   imageUrl(path: string): string
+  fightBook(lang:Lang, breedId:number, signal?:AbortSignal):Promise<FightBookSpell[]>
   fightAssets(): Promise<{ maps: number[]; pack:string }>
   status(): Promise<DataStatus>
   checkForUpdate(): Promise<DataStatus>
@@ -100,6 +102,7 @@ export function createApiClient(baseUrl: string): ApiClient {
   return {
     baseUrl: root,
     imageUrl: (path) => root + path,
+    fightBook:(lang,breedId,signal)=>request(`/api/fight/book?lang=${lang}&breed=${breedId}`,{signal}),
     fightAssets: () => request("/api/fight/assets"),
     status: () => request("/api/data/status"),
     checkForUpdate: () => post("/api/data/check", {}),

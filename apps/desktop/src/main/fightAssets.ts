@@ -56,7 +56,7 @@ export function registerFightAssets(dataDir: string) {
       stage = "maps"
       child.stdout?.on("data", (chunk: Buffer) => {
         for (const line of chunk.toString().trim().split(/\r?\n/)) {
-          if (["maps", "hud", "actors", "effects"].includes(line)) stage = line
+          if (["maps", "hud", "actors", "effects", "audio"].includes(line)) stage = line
         }
       })
       child.stderr?.on("data", (chunk: Buffer) => {

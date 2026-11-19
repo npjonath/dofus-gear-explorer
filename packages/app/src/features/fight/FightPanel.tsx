@@ -4,6 +4,9 @@ import { loadFightKeys, keyLabel } from "../../lib/fightKeys"
 import { GameActor } from "./GameActor"
 import { useGameSpellCatalog } from "./GameSpellEffects"
 import { entityAt } from "../../lib/fightBoard"
+import { CombatInventory } from "./CombatInventory"
+import { FightSpellBook } from "./FightSpellBook"
+import { LightAnimations, useCombatPreferences, type CombatPreferences } from "./combatPreferences"
 import { FightOptions } from "./FightOptions"
 import { StatsPanel } from "../build/StatsPanel"
 import { Popover, PopoverContent, PopoverDescription, PopoverTitle, PopoverTrigger } from "@ui-sdk/react/popover"
@@ -19,7 +22,7 @@ import {
   SlidersHorizontalIcon,
 } from "lucide-react"
 import * as React from "react"
-import { useFightAction, useFightAim, useFightStart } from "../../api/queries"
+import { useEvaluation, useFightAction, useFightAim, useFightStart } from "../../api/queries"
 import type {
   BuildInput,
   Evaluation,
@@ -43,6 +46,7 @@ import { HitCells, LineLabel } from "../build/DamagePanel"
 import { elementTone, FightBoardView } from "./FightBoard"
 import { FigurePortrait } from "./FightFigures"
 import { useFightPlayback } from "./useFightPlayback"
+import { useFightAudio } from "./useFightAudio"
 
 interface LogLine {
   id: number
@@ -236,6 +240,10 @@ function EntitySheet({
   const { t, number } = useI18n()
   function describe(buff: FightBuff): { label: string; tone: string } | null {
     switch (buff.kind) {
+      case "finalHeal":
+        return { label: t("fight.portal.heals", { value: signed(buff.value, number) }), tone: "vitality" }
+      case "invisible":
+        return { label: t("fight.state.invisible"), tone: "plain" }
       case "state":
         if (buff.ref === 3) return { label: t("fight.state.carrier"), tone: "plain" }
         if (buff.ref === 8) return { label: t("fight.state.carried"), tone: "plain" }
@@ -252,6 +260,18 @@ function EntitySheet({
         return { label: t("fight.buff.base", { spell: names[buff.ref] ?? "", value: number(buff.value) }), tone: "plain" }
       case "range":
         return { label: t("fight.buff.range", { spell: names[buff.ref] ?? "", value: number(buff.value) }), tone: "range" }
+      case "vitality":
+        return { label: `${signed(buff.value, number)} ${stats.get(buff.ref)?.label ?? "PV"}`, tone: "vitality" }
+      case "minimum":
+      case "maximum":
+        return { label: t(`fight.buff.${buff.kind}`), tone: "plain" }
+      case "stateDisabled":
+        return { label: t("fight.buff.stateDisabled", { n: buff.ref }), tone: "plain" }
+      case "healBase":
+        return {
+          label: t("fight.buff.healBase", { spell: names[buff.ref] ?? "", value: signed(buff.value, number) }),
+          tone: "plain",
+        }
       case "suffered":
         return { label: t("fight.buff.suffered", { value: number(buff.value) }), tone: "plain" }
       case "healed":
@@ -292,11 +312,19 @@ function EntitySheet({
   )
 }
 
-function LogEntry({ line, stats }: { line: LogLine; stats: Map<number, Stat> }) {
+function LogEntry({ line, stats, inline = false }: { line: LogLine; stats: Map<number, Stat>; inline?: boolean }) {
   const { t, number } = useI18n()
   const { event, who, spell } = line
   const value = event.value ?? 0
   switch (event.type) {
+    case "invisible":
+      return (
+        <li>
+          {who} · {t("fight.state.invisible")} ({turnsText(t, event.turns ?? 1)})
+        </li>
+      )
+    case "reveal":
+      return <li>{t("fight.log.reveal", { who })}</li>
     case "armor":
     case "shield":
       return (
@@ -320,13 +348,15 @@ function LogEntry({ line, stats }: { line: LogLine; stats: Map<number, Stat> }) 
           <time>{line.time}</time> {t("fight.turn", { turn: value })}
         </li>
       )
-    case "cast":
+    case "cast": {
+      const Tag = inline ? "span" : "li"
       return (
-        <li>
+        <Tag>
           <time>{line.time}</time> <b>{t("fight.log.cast", { who, spell })}</b>
           {event.critical && <strong className="text-ink"> {t("fight.log.critical")}</strong>}
-        </li>
+        </Tag>
       )
+    }
     case "damage":
       return (
         <li className="flex items-baseline gap-2 pl-3">
@@ -355,6 +385,16 @@ function LogEntry({ line, stats }: { line: LogLine; stats: Map<number, Stat> }) 
     case "heal":
       return <li className="pl-3">{t("fight.log.heal", { who, value: number(value) })}</li>
     case "buff": {
+      if (event.action === 2971)
+        return (
+          <li>
+            {t("fight.log.buff", {
+              who,
+              effect: t("fight.portal.heals", { value: signed(value, number) }),
+              turns: turnsText(t, event.turns ?? 1),
+            })}
+          </li>
+        )
       const stat = stats.get(event.stat ?? -1)
       if (!stat) return null
       return (
@@ -381,6 +421,8 @@ function LogEntry({ line, stats }: { line: LogLine; stats: Map<number, Stat> }) 
         <li className="pl-3">{t(value > 0 ? "fight.log.walk" : "fight.log.moved", { who, count: value > 0 ? value : cells })}</li>
       )
     }
+    case "eliminated":
+      return <li>{t("fight.log.eliminated", { who })}</li>
     case "defeat":
       return <li className="pl-3">{t("fight.log.defeat", { who })}</li>
     case "skipped":
@@ -388,6 +430,88 @@ function LogEntry({ line, stats }: { line: LogLine; stats: Map<number, Stat> }) 
     default:
       return null
   }
+}
+
+function FightJournal({ log, stats, fold }: { log: LogLine[]; stats: Map<number, Stat>; fold: boolean }) {
+  if (!fold) return log.map((line) => <LogEntry key={line.id} line={line} stats={stats} />)
+  const blocks: { head: LogLine; effects: LogLine[] }[] = []
+  for (const line of log) {
+    const last = blocks.at(-1)
+    if (last?.head.event.type === "cast" && line.event.type !== "cast" && line.event.type !== "turn") last.effects.push(line)
+    else blocks.push({ head: line, effects: [] })
+  }
+  return blocks.map(({ head, effects }) =>
+    effects.length ? (
+      <li key={head.id}>
+        <details>
+          <summary>
+            <LogEntry line={head} stats={stats} inline />
+          </summary>
+          <ol>
+            {effects.map((line) => (
+              <LogEntry key={line.id} line={line} stats={stats} />
+            ))}
+          </ol>
+        </details>
+      </li>
+    ) : (
+      <LogEntry key={head.id} line={head} stats={stats} />
+    )
+  )
+}
+
+function ChatOptions({
+  prefs,
+  update,
+  copy,
+}: {
+  prefs: CombatPreferences
+  update: (v: Partial<CombatPreferences>) => void
+  copy: () => Promise<void>
+}) {
+  const { t } = useI18n()
+  const [copied, setCopied] = React.useState<"ok" | "failed" | null>(null)
+  return (
+    <section className="combat-chat-options">
+      <button
+        onClick={() =>
+          void copy().then(
+            () => setCopied("ok"),
+            () => setCopied("failed")
+          )
+        }
+      >
+        {t("fight.chat.copy")}
+      </button>
+      {copied && <span role="status">{t(copied === "ok" ? "fight.chat.copied" : "fight.chat.copyFailed")}</span>}
+      {(
+        [
+          { key: "chatSize", name: "size", min: 10, max: 22 },
+          { key: "chatSpacing", name: "spacing", min: 100, max: 180 },
+          { key: "chatOpacity", name: "opacity", min: 0, max: 100 },
+        ] as const
+      ).map(({ key, name, min, max }) => (
+        <label className="setting-line" key={key}>
+          {t(`fight.chat.${name}`)}
+          <input
+            type="range"
+            min={min}
+            max={max}
+            value={prefs[key]}
+            onChange={(e) => update({ [key]: e.target.valueAsNumber })}
+          />
+          <output>
+            {prefs[key]}
+            {key === "chatSize" ? " px" : " %"}
+          </output>
+        </label>
+      ))}
+      <label>
+        <input type="checkbox" checked={prefs.foldEffects} onChange={(e) => update({ foldEffects: e.target.checked })} />{" "}
+        {t("fight.chat.fold")}
+      </label>
+    </section>
+  )
 }
 
 function DummySettings({ dummies, onChange }: { dummies: FightDummies; onChange(next: FightDummies): void }) {
@@ -480,8 +604,8 @@ type Panel = "chat" | "stats" | "spells" | "gear" | "settings" | "entity" | null
 export function FightPanel({
   meta,
   build,
-  input,
-  evaluation,
+  input: savedInput,
+  evaluation: savedEvaluation,
   onExit,
 }: {
   meta: Meta
@@ -490,6 +614,13 @@ export function FightPanel({
   evaluation?: Evaluation
   onExit: () => void
 }) {
+  // Equipment changes are local trials. Only an explicit restart adopts a pending draft.
+  const [original] = React.useState(savedInput)
+  const [input, setInput] = React.useState(original)
+  const [draft, setDraft] = React.useState(original)
+  const applied = useEvaluation(input)
+  const evaluation =
+    applied.isPlaceholderData || !applied.data ? (input === savedInput ? savedEvaluation : undefined) : applied.data
   const api = useApi()
   const cache = useQueryClient()
   const assetQuery = useQuery({ queryKey: ["fight-assets", api.baseUrl], queryFn: () => api.fightAssets(), staleTime: 60000 })
@@ -503,7 +634,25 @@ export function FightPanel({
   const [showTip, setShowTip] = React.useState(false)
   const gameRef = React.useRef<HTMLDivElement>(null)
   const [fullscreen, setFullscreen] = React.useState(false)
+  const { prefs, update } = useCombatPreferences()
+  const [leaving, setLeaving] = React.useState(false)
+  const exitTimer = React.useRef<number | undefined>(undefined)
+  React.useEffect(() => () => clearTimeout(exitTimer.current), [])
+  const chatContent = React.useRef<HTMLOListElement>(null)
   function returnToBuild() {
+    if (leaving) return
+    if (
+      view?.state.phase === "fight" &&
+      view.state.board.id &&
+      !prefs.skipExit &&
+      !window.matchMedia("(prefers-reduced-motion: reduce)").matches
+    ) {
+      playback.skip()
+      setLeaving(true)
+      exitTimer.current = window.setTimeout(finishExit, 850)
+    } else finishExit()
+  }
+  function finishExit() {
     if (document.fullscreenElement) void document.exitFullscreen().catch(() => {})
     onExit()
   }
@@ -516,7 +665,8 @@ export function FightPanel({
     // What only a fight changes has no line in a stuff's sheet: it is named here.
     const index = statIndex(meta)
     for (const { id, unit } of fightStats) {
-      if (!index.has(id)) index.set(id, { id, key: `fight.${id}`, label: t(`fight.stat.${id}`), unit, categoryId: 0, forgeMax: 0 })
+      if (!index.has(id))
+        index.set(id, { id, key: `fight.${id}`, label: t(`fight.stat.${id}`), unit, categoryId: 0, forgeMax: 0 })
     }
     return index
   }, [meta, t])
@@ -541,7 +691,32 @@ export function FightPanel({
   const [pinned, setPinned] = React.useState<number | null>(null)
   const [refused, setRefused] = React.useState<string | null>(null)
   const visualCatalog = useGameSpellCatalog(mapId ? api.imageUrl("/fight-assets") : undefined, assetQuery.data?.pack)
+  const audio = useFightAudio(mapId ? api.imageUrl("/fight-assets") : undefined, assetQuery.data?.pack)
   const playback = useFightPlayback(key, visualCatalog)
+  const { play: playSound, interfaceSound, stop: stopAudio } = audio
+  React.useEffect(() => {
+    if (playback.run && view && !document.hidden) {
+      playSound(playback.run, view.state.entities, build.breedId ?? 0, input.items.weapon ?? 0)
+    }
+  }, [playback.run, view, playSound, build.breedId, input.items.weapon])
+  const previousPanel = React.useRef(panel)
+  React.useEffect(() => {
+    if (previousPanel.current === panel) return
+    if (panel === "spells") interfaceSound("open")
+    else if (previousPanel.current === "spells") interfaceSound("close")
+    else if (panel) interfaceSound("click")
+    previousPanel.current = panel
+  }, [panel, interfaceSound])
+  React.useEffect(() => {
+    const hide = () => {
+      if (document.hidden) stopAudio()
+    }
+    document.addEventListener("visibilitychange", hide)
+    return () => {
+      document.removeEventListener("visibilitychange", hide)
+      stopAudio()
+    }
+  }, [stopAudio, key])
   const logEnd = React.useRef<HTMLLIElement>(null)
   const pendingAction = React.useRef(false)
   const actionEpoch = React.useRef(0)
@@ -574,6 +749,7 @@ export function FightPanel({
   // `zone` is what the cast was shown to cover when it was aimed: the events do not say it.
   function act(next: FightAction, zone?: number[]) {
     if (!view || pendingAction.current || start.isPlaceholderData) return
+    audio.unlock()
     pendingAction.current = true
     const epoch = actionEpoch.current
     const before = view.state
@@ -585,6 +761,13 @@ export function FightPanel({
         },
         onSuccess: (result) => {
           if (epoch !== actionEpoch.current) return
+          if (!result.refused && !document.hidden && result.state.phase === "fight") {
+            audio.start(mapId)
+            if (next.type === "begin") interfaceSound("begin")
+            else if (next.type === "end") interfaceSound("endTurn")
+            else if (next.type === "move") interfaceSound("move")
+            if (result.events.some((event) => event.type === "cast" && event.critical)) interfaceSound("critical")
+          }
           const byId = new Map(result.state.entities.map((entity) => [entity.id, entity]))
           const time = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false })
           const lines: LogLine[] = []
@@ -650,7 +833,7 @@ export function FightPanel({
   }
 
   const stateBoard = view?.state.board
-  const groups = React.useMemo(() => spellGroups(view?.spells ?? []), [view?.spells])
+  const groups = spellGroups(view?.spells ?? [])
   const deck = groups.map(([base, slots]) => slots.find((slot) => slot.id === (variants[base] ?? base)) ?? slots[0]!)
   const weapon = view?.spells.find((slot) => slot.weapon)
   function endTurn() {
@@ -677,7 +860,7 @@ export function FightPanel({
       return
     }
     const pos = keys.indexOf(event.code)
-    if (pos < 0) return
+    if (pos < 0 || pos === 18 || leaving) return
     if (pos >= 12 && (event.ctrlKey || event.shiftKey)) return
     event.preventDefault()
     if (pos < 12) {
@@ -691,7 +874,7 @@ export function FightPanel({
     const keydown = (event: KeyboardEvent) => {
       if (event.key === "Alt") setShowTip(true)
       if (
-        event.code === "KeyY" &&
+        event.code === keys[18] &&
         !event.ctrlKey &&
         !(event.target instanceof HTMLElement && event.target.closest("input,textarea,[role=dialog]"))
       )
@@ -704,7 +887,7 @@ export function FightPanel({
     }
     const keyup = (event: KeyboardEvent) => {
       if (event.key === "Alt") setShowTip(false)
-      if (event.code === "KeyY") setHighlightMarks(false)
+      if (event.code === keys[18]) setHighlightMarks(false)
     }
     const sync = () => setFullscreen(Boolean(document.fullscreenElement))
     window.addEventListener("keydown", keydown)
@@ -717,7 +900,7 @@ export function FightPanel({
       window.removeEventListener("blur", clear)
       document.removeEventListener("fullscreenchange", sync)
     }
-  }, [])
+  }, [keys])
   function changeMap(id: number) {
     setMapChoice(id)
     restart()
@@ -751,7 +934,7 @@ export function FightPanel({
           : panel === "spells"
             ? t("fight.spells")
             : panel === "gear"
-              ? t("build.view.gear")
+              ? t("fight.inventory.title")
               : nameOf(shownEntity)
   const tool = (id: "stats" | "spells" | "gear", asset: string, label: string, icon: React.ReactNode) => (
     <button title={label} aria-label={label} onClick={() => setPanel(id)}>
@@ -769,327 +952,395 @@ export function FightPanel({
     />
   )
   return (
-    <div className="fight-screen" ref={gameRef} data-art={art || undefined}>
-      {art && (
-        <style>{`@font-face{font-family:CombatLexend;src:url("${api.imageUrl("/fight-assets/hud/lexend-regular.ttf")}")}@font-face{font-family:CombatLexend;src:url("${api.imageUrl("/fight-assets/hud/lexend-bold.ttf")}");font-weight:700}@font-face{font-family:CombatRowdies;src:url("${api.imageUrl("/fight-assets/hud/rowdies-regular.ttf")}")}`}</style>
-      )}
-      <header className="combat-top">
-        <div className="combat-summary">
-          <b>{build.name}</b>
-          {fighting && (
-            <>
-              <span>{t("fight.turn", { turn: state.turn })}</span>
-              <span>{t("fight.crit", { n: view.currentStats?.["18"] ?? 0 })}</span>
-              <span>{t("fight.damage", { turn: number(state.turnDamage), total: number(state.totalDamage) })}</span>
-            </>
-          )}
-        </div>
-        <nav aria-label={t("build.view.fight")}>
-          <button className="compact-chat" onClick={() => setPanel("chat")}>
-            {t("fight.chat")}
-          </button>
-          {tool("stats", "characteristic", t("build.stats"), <UserRoundIcon />)}
-          {tool("spells", "spells", t("fight.spells"), <BookOpenIcon />)}
-          {tool("gear", "inventory", t("build.view.gear"), <BackpackIcon />)}
-          <DummySettings
-            dummies={dummies}
-            onChange={(next) => {
-              actionEpoch.current++
-              setDummies(next)
-              setSpell(null)
-              setPicked(null)
-              playback.reset()
-            }}
-          />
-          <button title={t("fight.restart")} onClick={restart}>
-            <RotateCcwIcon />
-            <span>{t("fight.restart")}</span>
-          </button>
-          <button title={t("fight.back")} onClick={returnToBuild}>
-            <ArrowLeftIcon />
-            <span>{t("fight.back")}</span>
-          </button>
-          <button
-            aria-label={t("fight.fullscreen")}
-            aria-pressed={fullscreen}
-            onClick={() => void toggleFullscreen().catch(() => {})}
-          >
-            <MaximizeIcon />
-          </button>
-          <button aria-label={t("fight.settings")} title={t("fight.settings")} onClick={() => setPanel("settings")}>
-            <SettingsIcon />
-          </button>
-        </nav>
-      </header>
-      <div className="fight-stage combat-stage">
-        <FightBoardView
-          highlightMarks={highlightMarks}
-          view={view}
-          aim={aim}
-          spell={spell}
-          cursor={cursor}
-          picked={picked}
-          pointed={hovered?.id ?? pinned}
-          breedId={build.breedId}
-          items={input.items}
-          playback={playback}
-          busy={action.isPending || start.isPlaceholderData}
-          nameOf={nameOf}
-          onCursor={setCursor}
-          onAct={onCell}
-          onCancel={() => {
-            setSpell(null)
-            setPicked(null)
-          }}
-        />
-        <ol className="fight-order combat-order" aria-label={t("fight.order")}>
-          <li className="combat-round">
-            <svg width="16" height="17" viewBox="0 0 16 18" aria-hidden="true">
-              <path d="M6 1h4M8 2v2m5 0-1.5 1.5" fill="none" stroke="currentColor" strokeWidth="1.6" />
-              <circle cx="8" cy="10" r="5.3" fill="none" stroke="currentColor" strokeWidth="1.5" />
-              <path d="M8 6v4l2 1" fill="none" stroke="currentColor" strokeWidth="1.4" />
-            </svg>
-            {state.turn || 1}
-          </li>
-          {[...state.entities]
-            .sort((a, b) => Number(a.kind === "dummy" && !a.ally) - Number(b.kind === "dummy" && !b.ally))
-            .map((entity) => (
-              <li key={entity.id}>
-                <button
-                  type="button"
-                  className="cell fight-order-cell"
-                  title={nameOf(entity)}
-                  aria-label={`${nameOf(entity)}, ${number(hpOf(entity))} / ${number(entity.maxHp)} PV`}
-                  data-kind={entity.ally ? "player" : entity.kind}
-                  aria-current={(fighting && entity.id === player.id) || undefined}
-                  onClick={() => {
-                    setPinned(entity.id)
-                    setPanel("entity")
-                  }}
-                  onMouseEnter={() => setCursor(entity.cell)}
-                  onMouseLeave={() => setCursor(null)}
-                >
-                  {art ? (
-                    <svg
-                      viewBox={
-                        entity.kind === "player" ? "-15 -58 30 33" : entity.kind === "summon" ? "-14 -28 28 29" : "-20 -66 40 57"
-                      }
-                      aria-hidden="true"
-                    >
-                      <GameActor
-                        kind={entity.kind}
-                        breedId={build.breedId}
-                        items={input.items}
-                        monsterId={entity.monsterId}
-                        direction={entity.kind === "player" ? 3 : 1}
-                        portrait
-                        placement={!fighting}
-                        pose="idle"
-                      />
-                    </svg>
-                  ) : (
-                    <Portrait entity={entity} breedId={build.breedId} />
-                  )}
-                  <span className="fight-order-hp">
-                    <span style={{ transform: `scaleY(${Math.max(0, Math.min(1, hpOf(entity) / entity.maxHp))})` }} />
-                  </span>
-                </button>
-              </li>
-            ))}
-        </ol>
-        {state.entities.some((e) => e.kind === "summon") && (
-          <aside className="combat-summons">
-            <h3>{stats.get(26)?.label ?? t("fight.actors")}</h3>
-            {state.entities
-              .filter((e) => e.kind === "summon")
-              .map((e) => (
-                <button
-                  key={e.id}
-                  onClick={() => {
-                    setPinned(e.id)
-                    setPanel("entity")
-                  }}
-                >
-                  <svg viewBox="-14 -28 28 29" aria-hidden="true">
-                    <GameActor portrait kind="summon" monsterId={e.monsterId} pose="idle" direction={1} />
-                  </svg>
-                  <span>
-                    <b>{nameOf(e)}</b>
-                    <small>
-                      {number(hpOf(e))} ♥　{view.state.activeId === e.id ? view.ap : (e.stats?.["1"] ?? 0)} PA　
-                      {view.state.activeId === e.id ? view.mp : (e.stats?.["23"] ?? 0)} PM
-                    </small>
-                  </span>
-                </button>
-              ))}
-          </aside>
+    <LightAnimations.Provider value={prefs.light}>
+      <div
+        className="fight-screen"
+        ref={gameRef}
+        data-art={art || undefined}
+        data-exiting={leaving || undefined}
+        data-rows={prefs.rows}
+        style={
+          {
+            ...(!prefs.autoScale && { "--hud-unit": prefs.scale / 100 + "px" }),
+            "--chat-size": prefs.chatSize,
+            "--chat-leading": prefs.chatSpacing / 100,
+            "--chat-opacity": prefs.chatOpacity / 100,
+          } as React.CSSProperties
+        }
+      >
+        {art && (
+          <style>{`@font-face{font-family:CombatLexend;src:url("${api.imageUrl("/fight-assets/hud/lexend-regular.ttf")}")}@font-face{font-family:CombatLexend;src:url("${api.imageUrl("/fight-assets/hud/lexend-bold.ttf")}");font-weight:700}@font-face{font-family:CombatRowdies;src:url("${api.imageUrl("/fight-assets/hud/rowdies-regular.ttf")}")}`}</style>
         )}
-        {!fighting && (
-          <div className="combat-placement">
-            <span>{t("fight.placementHint")}</span>
-            {maps?.length ? (
-              <select aria-label={t("fight.arena")} value={mapId} onChange={(event) => changeMap(Number(event.target.value))}>
-                {maps.map((id) => (
-                  <option key={id} value={id}>
-                    {t(id === 99222029 ? "fight.village" : "fight.astrub")}
-                  </option>
-                ))}
-              </select>
-            ) : (
-              <button onClick={() => setPanel("settings")}>{t("fight.import")}</button>
-            )}
-          </div>
-        )}
-        {((showTip && shownSlot) || refused || action.isError) && (
-          <div className="combat-tooltip" role="status">
-            {showTip && shownSlot && <SpellSheet slot={shownSlot} />}
-            {refused && t(`fight.blocked.${refused}` as "fight.blocked.ap")}
-            {action.isError && t("fight.failed")}
-          </div>
-        )}
-      </div>
-      <footer className="combat-dock">
-        <section className="combat-chat">
-          <h3>{t("fight.chat")}</h3>
-          <ol className="fight-log" aria-live="polite">
-            {log.map((line) => (
-              <LogEntry key={line.id} line={line} stats={stats} />
-            ))}
-            <li ref={logEnd} aria-hidden="true" />
-          </ol>
-        </section>
-        <div className="combat-vitals">
-          <div className="combat-heart" title={t("fight.entity.hp", { hp: number(hpOf(player)), max: number(player.maxHp) })}>
-            {art && (
+        <header className="combat-top">
+          <div className="combat-summary">
+            <b>{build.name}</b>
+            {fighting && (
               <>
-                <img src={hud("heart-background")} alt="" />
-                <img
-                  src={hud("heart-fill")}
-                  alt=""
-                  style={{ clipPath: `inset(${100 - Math.max(0, hpOf(player) / player.maxHp) * 100}% 0 0)` }}
-                />
-                <img src={hud("heart-border")} alt="" />
+                <span>{t("fight.turn", { turn: state.turn })}</span>
+                <span>{t("fight.crit", { n: view.currentStats?.["18"] ?? 0 })}</span>
+                <span>{t("fight.damage", { turn: number(state.turnDamage), total: number(state.totalDamage) })}</span>
               </>
             )}
-            <strong>{hpOf(player)}</strong>
           </div>
-          <div className="combat-points">
-            <span title={stats.get(1)?.label} style={art ? imageStyle("ap") : undefined}>
-              {view.ap}
-            </span>
-            <span title={stats.get(23)?.label} style={art ? imageStyle("mp") : undefined}>
-              {view.mp}
-            </span>
-          </div>
+          <nav aria-label={t("build.view.fight")}>
+            <button className="compact-chat" onClick={() => setPanel("chat")}>
+              {t("fight.chat")}
+            </button>
+            {tool("stats", "characteristic", t("build.stats"), <UserRoundIcon />)}
+            {tool("spells", "spells", t("fight.spells"), <BookOpenIcon />)}
+            {tool("gear", "inventory", t("fight.inventory.title"), <BackpackIcon />)}
+            <DummySettings
+              dummies={dummies}
+              onChange={(next) => {
+                actionEpoch.current++
+                setDummies(next)
+                setSpell(null)
+                setPicked(null)
+                playback.reset()
+              }}
+            />
+            <button title={t("fight.restart")} onClick={restart}>
+              <RotateCcwIcon />
+              <span>{t("fight.restart")}</span>
+            </button>
+            <button title={t("fight.back")} onClick={returnToBuild}>
+              <ArrowLeftIcon />
+              <span>{t("fight.back")}</span>
+            </button>
+            <button
+              aria-label={t("fight.fullscreen")}
+              aria-pressed={fullscreen}
+              onClick={() => void toggleFullscreen().catch(() => {})}
+            >
+              <MaximizeIcon />
+            </button>
+            <button aria-label={t("fight.settings")} title={t("fight.settings")} onClick={() => setPanel("settings")}>
+              <SettingsIcon />
+            </button>
+          </nav>
+        </header>
+        <div className="fight-stage combat-stage">
+          <FightBoardView
+            showReach={prefs.showReach}
+            leaving={leaving}
+            highlightMarks={highlightMarks}
+            view={view}
+            aim={aim}
+            spell={spell}
+            cursor={cursor}
+            picked={picked}
+            pointed={hovered?.id ?? pinned}
+            breedId={build.breedId}
+            items={input.items}
+            playback={playback}
+            busy={action.isPending || start.isPlaceholderData}
+            nameOf={nameOf}
+            onCursor={setCursor}
+            onAct={onCell}
+            onCancel={() => {
+              setSpell(null)
+              setPicked(null)
+            }}
+          />
+          <ol className="fight-order combat-order" aria-label={t("fight.order")}>
+            <li className="combat-round">
+              <svg width="16" height="17" viewBox="0 0 16 18" aria-hidden="true">
+                <path d="M6 1h4M8 2v2m5 0-1.5 1.5" fill="none" stroke="currentColor" strokeWidth="1.6" />
+                <circle cx="8" cy="10" r="5.3" fill="none" stroke="currentColor" strokeWidth="1.5" />
+                <path d="M8 6v4l2 1" fill="none" stroke="currentColor" strokeWidth="1.4" />
+              </svg>
+              {state.turn || 1}
+            </li>
+            {[...state.entities]
+              .sort((a, b) => Number(a.kind === "dummy" && !a.ally) - Number(b.kind === "dummy" && !b.ally))
+              .map((entity) => (
+                <li key={entity.id}>
+                  <button
+                    type="button"
+                    className="cell fight-order-cell"
+                    title={nameOf(entity)}
+                    aria-label={`${nameOf(entity)}, ${number(hpOf(entity))} / ${number(entity.maxHp)} PV`}
+                    data-kind={entity.ally ? "player" : entity.kind}
+                    aria-current={(fighting && entity.id === player.id) || undefined}
+                    onClick={() => {
+                      setPinned(entity.id)
+                      setPanel("entity")
+                    }}
+                    onMouseEnter={() => setCursor(entity.cell)}
+                    onMouseLeave={() => setCursor(null)}
+                  >
+                    {art ? (
+                      <svg
+                        viewBox={
+                          entity.kind === "player"
+                            ? "-15 -58 30 33"
+                            : entity.kind === "summon"
+                              ? "-14 -28 28 29"
+                              : "-20 -66 40 57"
+                        }
+                        aria-hidden="true"
+                      >
+                        <GameActor
+                          kind={entity.kind}
+                          breedId={build.breedId}
+                          items={input.items}
+                          monsterId={entity.monsterId}
+                          direction={entity.kind === "player" ? 3 : 1}
+                          portrait
+                          placement={!fighting}
+                          pose="idle"
+                        />
+                      </svg>
+                    ) : (
+                      <Portrait entity={entity} breedId={build.breedId} />
+                    )}
+                    <span className="fight-order-hp">
+                      <span style={{ transform: `scaleY(${Math.max(0, Math.min(1, hpOf(entity) / entity.maxHp))})` }} />
+                    </span>
+                  </button>
+                </li>
+              ))}
+          </ol>
+          {state.entities.some((e) => e.kind === "summon") && (
+            <aside className="combat-summons">
+              <h3>{stats.get(26)?.label ?? t("fight.actors")}</h3>
+              {state.entities
+                .filter((e) => e.kind === "summon")
+                .map((e) => (
+                  <button
+                    key={e.id}
+                    onClick={() => {
+                      setPinned(e.id)
+                      setPanel("entity")
+                    }}
+                  >
+                    <svg viewBox="-14 -28 28 29" aria-hidden="true">
+                      <GameActor portrait kind="summon" monsterId={e.monsterId} pose="idle" direction={1} />
+                    </svg>
+                    <span>
+                      <b>{nameOf(e)}</b>
+                      <small>
+                        {number(hpOf(e))} ♥　{view.state.activeId === e.id ? view.ap : (e.stats?.["1"] ?? 0)} PA　
+                        {view.state.activeId === e.id ? view.mp : (e.stats?.["23"] ?? 0)} PM
+                      </small>
+                    </span>
+                  </button>
+                ))}
+            </aside>
+          )}
+          {!fighting && (
+            <div className="combat-placement">
+              <span>{t("fight.placementHint")}</span>
+              {maps?.length ? (
+                <select aria-label={t("fight.arena")} value={mapId} onChange={(event) => changeMap(Number(event.target.value))}>
+                  {maps.map((id) => (
+                    <option key={id} value={id}>
+                      {t(id === 99222029 ? "fight.village" : "fight.astrub")}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <button onClick={() => setPanel("settings")}>{t("fight.import")}</button>
+              )}
+            </div>
+          )}
+          {((showTip && shownSlot) || refused || action.isError) && (
+            <div className="combat-tooltip" role="status">
+              {showTip && shownSlot && <SpellSheet slot={shownSlot} />}
+              {refused && t(`fight.blocked.${refused}` as "fight.blocked.ap")}
+              {action.isError && t("fight.failed")}
+            </div>
+          )}
         </div>
-        <section className="combat-spells" aria-label={t("fight.spells")}>
-          <h3>{t("fight.spells")}</h3>
-          <div className="combat-spellgrid">
-            <div className="combat-weapon">{weapon && button(weapon, -1)}</div>
-            <div className="combat-deck">{deck.map(button)}</div>
+        <footer className="combat-dock">
+          <section className="combat-chat">
+            <h3>
+              {t("fight.chat")}
+              <button title={t("fight.chat.options")} aria-label={t("fight.chat.options")} onClick={() => setPanel("chat")}>
+                ⋮
+              </button>
+            </h3>
+            <ol className="fight-log" ref={chatContent} aria-live="polite">
+              <FightJournal log={log} stats={stats} fold={prefs.foldEffects} />
+              <li ref={logEnd} aria-hidden="true" />
+            </ol>
+          </section>
+          <div className="combat-vitals">
+            <div className="combat-heart" title={t("fight.entity.hp", { hp: number(hpOf(player)), max: number(player.maxHp) })}>
+              {art && (
+                <>
+                  <img src={hud("heart-background")} alt="" />
+                  <img
+                    src={hud("heart-fill")}
+                    alt=""
+                    style={{ clipPath: `inset(${100 - Math.max(0, hpOf(player) / player.maxHp) * 100}% 0 0)` }}
+                  />
+                  <img src={hud("heart-border")} alt="" />
+                </>
+              )}
+              <strong>{hpOf(player)}</strong>
+            </div>
+            <div className="combat-points">
+              <span title={stats.get(1)?.label} style={art ? imageStyle("ap") : undefined}>
+                {view.ap}
+              </span>
+              <span title={stats.get(23)?.label} style={art ? imageStyle("mp") : undefined}>
+                {view.mp}
+              </span>
+            </div>
           </div>
-        </section>
-        <div className="combat-endbox">
-          <button
-            className="combat-end"
-            disabled={action.isPending || start.isPlaceholderData}
-            onClick={endTurn}
-            title={keyLabel(keys[13]!)}
+          <section className="combat-spells" aria-label={t("fight.spells")}>
+            <h3>{t("fight.spells")}</h3>
+            <div className="combat-spellgrid">
+              <div className="combat-weapon">{weapon && button(weapon, -1)}</div>
+              <div className="combat-deck">{deck.map(button)}</div>
+            </div>
+          </section>
+          <div className="combat-endbox">
+            <button
+              className="combat-end"
+              disabled={action.isPending || start.isPlaceholderData}
+              onClick={endTurn}
+              title={keyLabel(keys[13]!)}
+              style={
+                art
+                  ? ({
+                      "--end-mask": `url("${hud("end-idle")}")`,
+                      "--end-bg": `url("${hud("end-background")}")`,
+                    } as React.CSSProperties)
+                  : undefined
+              }
+            >
+              <span>{t(fighting ? "fight.endTurn" : "fight.ready")}</span>
+            </button>
+          </div>
+        </footer>
+        <Dialog
+          open={panel !== null}
+          onOpenChange={(open) => {
+            if (!open) setPanel(null)
+          }}
+        >
+          <DialogBackdrop className={panel === "gear" ? "combat-inventory-backdrop" : undefined} />
+          <DialogContent
+            className={panel === "gear" ? "combat-dialog combat-inventory-window" : "combat-dialog"}
             style={
-              art
+              panel === "gear" && art
                 ? ({
-                    "--end-mask": `url("${hud("end-idle")}")`,
-                    "--end-bg": `url("${hud("end-background")}")`,
+                    "--inventory-header": `url("${hud("inventory-header")}")`,
+                    "--inventory-highlight": `url("${hud("inventory-highlight")}")`,
                   } as React.CSSProperties)
                 : undefined
             }
           >
-            <span>{t(fighting ? "fight.endTurn" : "fight.ready")}</span>
-          </button>
-        </div>
-      </footer>
-      <Dialog
-        open={panel !== null}
-        onOpenChange={(open) => {
-          if (!open) setPanel(null)
-        }}
-      >
-        <DialogBackdrop />
-        <DialogContent className="combat-dialog">
-          <header>
-            <DialogTitle>{menuTitle}</DialogTitle>
-            <button aria-label={t("about.close")} onClick={() => setPanel(null)}>
-              <XIcon />
-            </button>
-          </header>
-          {panel === "settings" && (
-            <FightOptions
-              maps={maps ?? []}
-              map={mapId}
-              onMap={changeMap}
-              keys={keys}
-              onKeys={setKeys}
-              onImported={async () => {
-                await cache.invalidateQueries({ queryKey: ["fight-actors"] })
-                return assetQuery.refetch()
-              }}
-            />
-          )}
-          {panel === "chat" && (
-            <ol className="fight-log">
-              {log.map((line) => (
-                <LogEntry key={line.id} line={line} stats={stats} />
-              ))}
-            </ol>
-          )}
-          {panel === "stats" && (
-            <StatsPanel
-              meta={meta}
-              evaluation={evaluation && view.currentStats ? { ...evaluation, stats: view.currentStats } : evaluation}
-            />
-          )}
-          {panel === "entity" && <EntitySheet entity={shownEntity} name={nameOf(shownEntity)} names={view.names} stats={stats} />}
-          {panel === "gear" && (
-            <div className="combat-inventory">
-              {meta.positions.flatMap((pos) => {
-                const item = evaluation?.items[pos.key]
-                return item
-                  ? [
-                      <div key={pos.key}>
-                        <img src={api.imageUrl(item.image)} alt="" />
-                        {item.name}
-                      </div>,
-                    ]
-                  : []
-              })}
-            </div>
-          )}
-          {panel === "spells" && (
-            <div className="combat-book">
-              {groups.map(([base, slots]) => (
-                <div key={base}>
-                  {slots.map((slot) => (
-                    <button
-                      key={slot.id}
-                      aria-pressed={deck.some((s) => s.id === slot.id)}
-                      onClick={() => {
-                        setVariants({ ...variants, [base]: slot.id })
-                        setPeek(slot.id)
-                        setSpell(null)
-                      }}
-                    >
-                      <SpellIcon slot={slot} />
-                      {slot.name}
-                    </button>
+            <header>
+              <DialogTitle>
+                {panel === "gear" && art && <img src={hud("inventory")} alt="" />}
+                {menuTitle}
+              </DialogTitle>
+              <button aria-label={t("about.close")} onClick={() => setPanel(null)}>
+                <XIcon />
+              </button>
+            </header>
+            {panel === "settings" && (
+              <FightOptions
+                prefs={prefs}
+                update={update}
+                audio={audio}
+                maps={maps ?? []}
+                map={mapId}
+                onMap={changeMap}
+                keys={keys}
+                onKeys={setKeys}
+                onImported={async () => {
+                  await cache.invalidateQueries({ queryKey: ["fight-actors"] })
+                  return assetQuery.refetch()
+                }}
+              />
+            )}
+            {panel === "chat" && (
+              <>
+                <ChatOptions
+                  prefs={prefs}
+                  update={update}
+                  copy={async () => {
+                    const nodes = chatContent.current?.querySelectorAll("summary,li:not(:has(details))")
+                    await navigator.clipboard.writeText(
+                      Array.from(nodes ?? [], (node) => node.textContent?.trim())
+                        .filter(Boolean)
+                        .join("\n")
+                    )
+                  }}
+                />
+                <ol
+                  className="fight-log combat-popup-log"
+                  style={{
+                    fontSize: prefs.chatSize + "px",
+                    lineHeight: prefs.chatSpacing / 100,
+                    backgroundColor: `rgb(25 24 23 / ${prefs.chatOpacity / 100})`,
+                  }}
+                >
+                  <FightJournal log={log} stats={stats} fold={prefs.foldEffects} />
+                </ol>
+              </>
+            )}
+            {panel === "stats" && (
+              <StatsPanel
+                meta={meta}
+                evaluation={evaluation && view.currentStats ? { ...evaluation, stats: view.currentStats } : evaluation}
+              />
+            )}
+            {panel === "entity" && (
+              <EntitySheet entity={shownEntity} name={nameOf(shownEntity)} names={view.names} stats={stats} />
+            )}
+            {panel === "gear" && (
+              <CombatInventory
+                meta={meta}
+                build={build}
+                original={original}
+                active={input}
+                draft={draft}
+                activeEvaluation={evaluation}
+                art={art}
+                busy={action.isPending}
+                onDraft={setDraft}
+                onRestart={() => {
+                  if (pendingAction.current) return
+                  setInput(draft)
+                  setPanel(null)
+                  restart()
+                }}
+              />
+            )}
+            {panel === "spells" &&
+              (player.kind === "summon" ? (
+                <div className="combat-book">
+                  {deck.map((slot) => (
+                    <div key={slot.id}>
+                      <SpellSheet slot={slot} />
+                    </div>
                   ))}
                 </div>
+              ) : (
+                <FightSpellBook
+                  breedId={build.breedId ?? 0}
+                  breedName={breedName ?? t("fight.book.class")}
+                  level={build.level}
+                  slots={view.spells}
+                  selected={new Set(deck.map((s) => s.id))}
+                  pack={assetQuery.data?.pack}
+                  onSelect={(slot) => {
+                    setVariants({ ...variants, [slot.variantOf || slot.id]: slot.id })
+                    setPeek(slot.id)
+                    setSpell(null)
+                  }}
+                  sheet={(slot) => <SpellSheet slot={slot} />}
+                />
               ))}
-              {shownSlot && <SpellSheet slot={shownSlot} />}
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
-    </div>
+          </DialogContent>
+        </Dialog>
+      </div>
+    </LightAnimations.Provider>
   )
 
   function toggleSpell(id: number) {

@@ -219,6 +219,7 @@ type EffectDef struct {
 }
 
 type ItemType struct {
+	RawZone     string
 	ID          int
 	SuperTypeID int
 	Slot        Slot

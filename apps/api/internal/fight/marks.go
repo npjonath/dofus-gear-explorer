@@ -320,6 +320,11 @@ func (s *Sim) crossMarks(st *State, c *casting, id, from, depth int) bool {
 			}
 		}
 	}
+	if !sprung {
+		if target := st.entity(id); target != nil && target.Cell != from {
+			return s.traversePortal(st, c, id, depth)
+		}
+	}
 	return sprung
 }
 

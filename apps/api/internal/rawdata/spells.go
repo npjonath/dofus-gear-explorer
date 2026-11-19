@@ -51,6 +51,10 @@ type rawVariant struct {
 }
 
 type rawZone struct {
+	NativeCells     array[int] `json:"cellIds"`
+	ForcedDirection *int       `json:"forcedDirection"`
+	Sight           int        `json:"onlyAffectIfInSightLine"`
+
 	IncludeCarried *int `json:"includeCarried"`
 	Shape          int  `json:"shape"`
 	Param1         int  `json:"param1"`
@@ -78,12 +82,14 @@ type rawSpellEffect struct {
 
 // Flags of a spell grade: how it is aimed.
 const (
-	castInLine       = 1
-	castInDiagonal   = 2
-	castNeedsSight   = 4
-	castNeedsFree    = 8
-	castNeedsTaken   = 16
-	castRangeBoosted = 64
+	castInLine        = 1
+	castInDiagonal    = 2
+	castNeedsSight    = 4
+	castNeedsFree     = 8
+	castNeedsTaken    = 16
+	castRangeBoosted  = 64
+	castNeedsNoPortal = 2048
+	castNoProjection  = 4096
 )
 
 type rawSpellLevel struct {
@@ -111,6 +117,7 @@ func castRules(level rawSpellLevel) game.CastRules {
 		Line: level.Flags&castInLine != 0, Diagonal: level.Flags&castInDiagonal != 0,
 		Sight: level.Flags&castNeedsSight != 0, FreeCell: level.Flags&castNeedsFree != 0,
 		TakenCell: level.Flags&castNeedsTaken != 0, BoostRange: level.Flags&castRangeBoosted != 0,
+		NoPortal: level.Flags&castNeedsNoPortal != 0, NoProjection: level.Flags&castNoProjection != 0,
 		PerTurn: level.PerTurn, PerTarget: level.PerTarget, Interval: level.Interval,
 		InitialCooldown: level.Initial, MaxStack: level.MaxStack,
 	}
@@ -152,12 +159,20 @@ func fightEffects(effects []rawSpellEffect, defs map[int]rawEffect) []game.Spell
 				stat, sign = def.Characteristic, known
 			}
 		}
+		var cells []int
+		if shape == ";" {
+			cells = e.Zone.NativeCells.Array
+		}
+		direction := 0
+		if e.Zone.ForcedDirection != nil && *e.Zone.ForcedDirection >= 0 && *e.Zone.ForcedDirection < 8 {
+			direction = *e.Zone.ForcedDirection + 1
+		}
 		out = append(out, game.SpellEffect{
 			Stat: stat, Sign: sign, Dispellable: e.Dispellable == 1,
 			Action: e.ActionID, Min: e.DiceNum, Max: e.DiceSide, Value: e.Value, Targets: e.TargetMask,
 			Duration: e.Duration, Delay: e.Delay, Trigger: trigger, Random: e.Random, Group: e.Group,
 			TriggerTurns: e.Lasts,
-			Zone: game.Zone{Shape: shape, Size: e.Zone.Param1, Min: e.Zone.Param2, Decrease: e.Zone.Decrease, Steps: e.Zone.Steps,
+			Zone: game.Zone{NativeCells: cells, Direction: direction, Sight: e.Zone.Sight != 0, Shape: shape, Size: e.Zone.Param1, Min: e.Zone.Param2, Decrease: e.Zone.Decrease, Steps: e.Zone.Steps,
 				ExcludeCarried: e.Zone.IncludeCarried != nil && *e.Zone.IncludeCarried == 0},
 			Shown:     e.Flags&effectVisibleInTooltip != 0,
 			Described: e.Flags&effectDescribedOnly != 0,
@@ -440,9 +455,10 @@ func parseSpells(dir string, spells []rawSpellHead, defs map[int]rawEffect, pass
 		sort.Slice(levels, func(a, b int) bool { return levels[a].Grade < levels[b].Grade })
 		spell := game.Spell{
 			ID: id, IconID: head.IconID, BreedID: at.breed, Order: at.order, VariantOf: at.variantOf,
-			Name: game.Texts{}, Levels: levels,
+			Name: game.Texts{}, Description: game.Texts{}, Levels: levels,
 		}
 		want(spell.Name, head.NameID)
+		want(spell.Description, head.DescriptionID)
 		out = append(out, spell)
 	}
 	sort.Slice(out, func(a, b int) bool { return out[a].ID < out[b].ID })

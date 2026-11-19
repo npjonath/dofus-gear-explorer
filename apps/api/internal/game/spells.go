@@ -1,6 +1,9 @@
 package game
 
-import "strings"
+import (
+	"strconv"
+	"strings"
+)
 
 // Elements of an attack line, numbered as in the game data.
 const (
@@ -182,6 +185,10 @@ func PlacesMark(action int) bool {
 
 // Zone is the cells an effect covers around the cell a spell is aimed at.
 type Zone struct {
+	NativeCells []int `json:"nativeCells,omitempty"`
+	Direction   int   `json:"direction,omitempty"` // Native direction plus one; zero follows the caster.
+	Sight       bool  `json:"sight,omitempty"`
+
 	ExcludeCarried bool `json:"excludeCarried,omitempty"`
 	// Shape is the game's letter for the shape: "P" a single cell, "C" a
 	// circle, "X" a cross, "L" a line, and so on.
@@ -239,9 +246,11 @@ type CastRules struct {
 	Line     bool `json:"line,omitempty"`
 	Diagonal bool `json:"diagonal,omitempty"`
 	// Sight says the caster must see the cell.
-	Sight     bool `json:"sight,omitempty"`
-	FreeCell  bool `json:"freeCell,omitempty"`
-	TakenCell bool `json:"takenCell,omitempty"`
+	Sight        bool `json:"sight,omitempty"`
+	FreeCell     bool `json:"freeCell,omitempty"`
+	TakenCell    bool `json:"takenCell,omitempty"`
+	NoPortal     bool `json:"noPortal,omitempty"`
+	NoProjection bool `json:"noProjection,omitempty"`
 	// BoostRange says the caster's Range adds to the spell's.
 	BoostRange bool `json:"boostRange,omitempty"`
 	// PerTurn and PerTarget cap the casts in a turn; zero is no cap.
@@ -272,8 +281,9 @@ type SpellLevel struct {
 // Spell is a class spell or a common spell. Only the lines the damage panel
 // computes are kept: damage, steals, heals and pushbacks.
 type Spell struct {
-	ID     int
-	IconID int
+	Description Texts
+	ID          int
+	IconID      int
 	// BreedID is the class the spell belongs to; zero for a common spell.
 	BreedID int
 	// Order sorts the spells of a class as the game lists them, each variant
@@ -349,4 +359,31 @@ func SummonsCreature(action int) bool {
 	default:
 		return false
 	}
+}
+
+// WeaponZone reads the area attached to the weapon type. The cross's compact
+// game notation includes an inner radius before its damage falloff fields.
+func (t *ItemType) WeaponZone() Zone {
+	if t == nil || t.RawZone == "" {
+		return Zone{Shape: "P"}
+	}
+	z := Zone{Shape: t.RawZone[:1]}
+	params := strings.Split(t.RawZone[1:], ",")
+	read := func(i int) int {
+		if i >= len(params) {
+			return 0
+		}
+		n, _ := strconv.Atoi(params[i])
+		return n
+	}
+	z.Size = read(0)
+	if z.Shape == "X" {
+		z.Min = read(1)
+		z.Decrease = read(2)
+		z.Steps = read(3)
+	} else {
+		z.Decrease = read(1)
+		z.Steps = read(2)
+	}
+	return z
 }

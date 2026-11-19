@@ -1,6 +1,7 @@
 package fight
 
 import (
+	"maps"
 	"math/rand/v2"
 
 	"dofusdb/api/internal/engine"
@@ -34,10 +35,11 @@ const (
 	BuffRange = "range"
 	// BuffSuffered multiplies the damage the entity takes by Value percent,
 	// and BuffHealed the heals it receives.
-	BuffShield   = "shield"
-	BuffArmor    = "armor"
-	BuffSuffered = "suffered"
-	BuffHealed   = "healed"
+	BuffShield    = "shield"
+	BuffArmor     = "armor"
+	BuffInvisible = "invisible"
+	BuffSuffered  = "suffered"
+	BuffHealed    = "healed"
 	// BuffSpell changes how the spell Ref is cast: Mod is the game's action
 	// (its cost, its range, its casts per turn...) and Value the amount.
 	BuffSpell = "spell"
@@ -89,19 +91,21 @@ type Hook struct {
 
 // Entity is a fighter on the board.
 type Entity struct {
-	CarriedBy int          `json:"carriedBy,omitempty"`
-	InitialHP int          `json:"initialHp,omitempty"`
-	Ally      bool         `json:"ally,omitempty"`
-	Name      string       `json:"name,omitempty"`
-	MonsterID int          `json:"monsterId,omitempty"`
-	Grade     int          `json:"grade,omitempty"`
-	Owner     int          `json:"owner,omitempty"`
-	Uses      map[int]*Use `json:"uses,omitempty"`
-	ID        int          `json:"id"`
-	Kind      string       `json:"kind"`
-	Cell      int          `json:"cell"`
-	HP        int          `json:"hp"`
-	MaxHP     int          `json:"maxHp"`
+	PreviousCells []int        `json:"previousCells,omitempty"`
+	TurnCell      *int         `json:"turnCell,omitempty"`
+	CarriedBy     int          `json:"carriedBy,omitempty"`
+	InitialHP     int          `json:"initialHp,omitempty"`
+	Ally          bool         `json:"ally,omitempty"`
+	Name          string       `json:"name,omitempty"`
+	MonsterID     int          `json:"monsterId,omitempty"`
+	Grade         int          `json:"grade,omitempty"`
+	Owner         int          `json:"owner,omitempty"`
+	Uses          map[int]*Use `json:"uses,omitempty"`
+	ID            int          `json:"id"`
+	Kind          string       `json:"kind"`
+	Cell          int          `json:"cell"`
+	HP            int          `json:"hp"`
+	MaxHP         int          `json:"maxHp"`
 	// Stats holds a dummy's own characteristics: its resistances. The
 	// player's come from the stuff.
 	Stats map[int]int `json:"stats,omitempty"`
@@ -121,6 +125,7 @@ type Use struct {
 // State is a fight as it stands. The interface holds it and sends it back
 // with each action.
 type State struct {
+	Portals      []Portal `json:"portals,omitempty"`
 	ActiveID     int      `json:"activeId,omitempty"`
 	LastEntityID int      `json:"lastEntityId,omitempty"`
 	Marks        []Mark   `json:"marks,omitempty"`
@@ -224,24 +229,35 @@ func (st *State) free(cell int) bool {
 
 func (st *State) clone() *State {
 	out := *st
+	out.Portals = append([]Portal(nil), st.Portals...)
 	out.Marks = append([]Mark(nil), st.Marks...)
 	out.Board.Walls = append([]int(nil), st.Board.Walls...)
 	out.Entities = make([]Entity, len(st.Entities))
 	for i, e := range st.Entities {
+		e.PreviousCells = append([]int(nil), e.PreviousCells...)
 		e.Buffs = append([]Buff(nil), e.Buffs...)
 		e.Hooks = append([]Hook(nil), e.Hooks...)
+		e.Uses = cloneUses(e.Uses)
 		out.Entities[i] = e
 	}
-	out.Uses = make(map[int]*Use, len(st.Uses))
-	for id, use := range st.Uses {
-		copied := *use
-		copied.Targets = make(map[int]int, len(use.Targets))
-		for k, v := range use.Targets {
-			copied.Targets[k] = v
-		}
-		out.Uses[id] = &copied
-	}
+	out.Uses = cloneUses(st.Uses)
 	return &out
+}
+
+func cloneUses(uses map[int]*Use) map[int]*Use {
+	if uses == nil {
+		return nil
+	}
+	out := make(map[int]*Use, len(uses))
+	for id, use := range uses {
+		if use == nil {
+			continue
+		}
+		copied := *use
+		copied.Targets = maps.Clone(use.Targets)
+		out[id] = &copied
+	}
+	return out
 }
 
 // Start sets a fight up: the player on one side, the dummies on the other,
@@ -293,7 +309,7 @@ func (s *Sim) StatOf(e *Entity) func(statID int) int {
 			v += s.Stat(id)
 		}
 		for _, b := range e.Buffs {
-			if b.Kind == BuffStat && b.Ref == id {
+			if b.Kind == BuffStat && b.Ref == id || b.Kind == buffVitality && (id == game.StatVitality || id == game.StatHP) {
 				v += b.Value
 			}
 		}
@@ -309,6 +325,7 @@ func (s *Sim) Points(st *State) (ap, mp int) {
 
 // attack is a weapon or a spell grade, as the simulator casts it.
 type attack struct {
+	portalControl bool
 	pickup, throw bool
 	id            int
 	grade         int
@@ -341,11 +358,12 @@ func (s *Sim) attack(id, grade int) *attack {
 			weapon: true, cost: w.APCost, rangeMin: w.RangeMin, rangeMax: w.RangeMax, crit: w.CritChance,
 			rules: game.CastRules{Sight: true, PerTurn: w.MaxCastPerTurn},
 		}
+		zone := s.Cat.TypeByID[s.Weapon.TypeID].WeaponZone()
 		for _, line := range lines {
 			action := weaponActions[line.Steal][line.Element]
-			a.effects = append(a.effects, game.SpellEffect{Action: action, Min: line.Min, Max: line.Max, Zone: game.Zone{Shape: "P"}})
+			a.effects = append(a.effects, game.SpellEffect{Action: action, Min: line.Min, Max: line.Max, Zone: zone, Targets: "g,A"})
 			if line.CritMax > 0 {
-				a.critEffects = append(a.critEffects, game.SpellEffect{Action: action, Min: line.CritMin, Max: line.CritMax, Zone: game.Zone{Shape: "P"}})
+				a.critEffects = append(a.critEffects, game.SpellEffect{Action: action, Min: line.CritMin, Max: line.CritMax, Zone: zone, Targets: "g,A"})
 			}
 		}
 		return a
@@ -366,8 +384,16 @@ func (s *Sim) attack(id, grade int) *attack {
 	if level == nil {
 		return nil
 	}
+	controlsPortal := false
+	for _, e := range level.Effects {
+		if !e.Described && (portalAction(e.Action) || e.Action == 3026) {
+			controlsPortal = true
+			break
+		}
+	}
 	return &attack{
-		id: id, grade: level.Grade, cost: level.APCost, rangeMin: level.RangeMin, rangeMax: level.RangeMax, crit: level.CritChance,
+		portalControl: controlsPortal,
+		id:            id, grade: level.Grade, cost: level.APCost, rangeMin: level.RangeMin, rangeMax: level.RangeMax, crit: level.CritChance,
 		rules: level.Cast, effects: level.Effects, critEffects: level.CritEffects,
 	}
 }
@@ -384,6 +410,14 @@ func (s *Sim) tuned(caster *Entity, a *attack) *attack {
 			continue
 		}
 		switch b.Mod {
+		case 2908:
+			out.rules.NoPortal = false
+		case 2909:
+			out.rules.NoProjection = false
+		case 2910:
+			out.rules.NoProjection = true
+		case 2911:
+			out.rules.NoPortal = true
 		case modCostLess:
 			out.cost -= b.Value
 		case modCostMore:
@@ -553,7 +587,14 @@ func (s *Sim) aimable(st *State, a *attack, caster *Entity, cell int) string {
 	if (a.rules.Line || a.rules.Diagonal) && !(a.rules.Line && straight) && !(a.rules.Diagonal && diagonal) {
 		return BlockedLine
 	}
-	occupant := st.at(cell)
+	if a.rules.NoPortal && st.portal(cell) != nil {
+		return BlockedCell
+	}
+	projected := st.project(a, caster, cell)
+	if !st.Board.valid(projected.cell) || st.Board.wall(projected.cell) {
+		return BlockedCell
+	}
+	occupant := st.at(projected.cell)
 	if a.pickup && (occupant == nil || !st.canCarry(caster, occupant)) {
 		return BlockedCell
 	}
@@ -614,6 +655,9 @@ func (s *Sim) Begin(st *State) ([]Event, string) {
 		return nil, BlockedPhase
 	}
 	st.Phase, st.Turn = PhaseFight, 1
+	for i := range st.Entities {
+		st.Entities[i].startPosition()
+	}
 	var events []Event
 	player := st.Player()
 	var opening []int
@@ -661,13 +705,29 @@ func (s *Sim) Reach(st *State) []Step {
 		return steps
 	}
 	_, mp := s.Points(st)
-	start := st.Active().Cell
+	return s.reachFrom(st, st.Active().Cell, mp)
+}
+
+// MovementOverlay uses the same walls, occupied cells and portal stops as Move.
+func (s *Sim) MovementOverlay(st *State, e *Entity) []int {
+	if st.Phase != PhaseFight || e.ID == st.Active().ID || e.CarriedBy != 0 {
+		return nil
+	}
+	steps := s.reachFrom(st, e.Cell, s.StatOf(e)(game.StatMP))
+	cells := make([]int, 0, len(steps))
+	for _, step := range steps {
+		cells = append(cells, step.Cell)
+	}
+	return cells
+}
+func (s *Sim) reachFrom(st *State, start, mp int) []Step {
+	steps := []Step{}
 	seen := map[int]bool{start: true}
 	frontier := []Step{{Cell: start}}
 	for len(frontier) > 0 {
 		cur := frontier[0]
 		frontier = frontier[1:]
-		if cur.Cost >= mp {
+		if cur.Cost >= mp || cur.Cost > 0 && len(st.portalRoute(cur.Cell, 0).Cells) > 1 {
 			continue
 		}
 		x, y := st.Board.xy(cur.Cell)
@@ -726,7 +786,7 @@ func (s *Sim) Move(st *State, cell int) ([]Event, string) {
 		} else {
 			c.emit(Event{Type: EventMove, Entity: id, Path: []int{path[i], next}, Value: 1})
 		}
-		if s.crossMarks(st, c, id, path[i], 0) {
+		if s.crossMarks(st, c, id, path[i], 0) || entity.Cell != next {
 			break
 		}
 	}
@@ -752,6 +812,8 @@ func (s *Sim) EndTurn(st *State) ([]Event, string) {
 			continue
 		}
 		st.ActiveID = next.ID
+		next.startPosition()
+		st.startPortalTurn(next.ID)
 		st.APUsed, st.MPUsed = 0, 0
 		s.ageMarks(st, c, next.ID)
 		s.markTurn(st, c, next.ID, true)
@@ -764,6 +826,8 @@ func (s *Sim) EndTurn(st *State) ([]Event, string) {
 	for i := range st.Entities {
 		e := st.Entities[i]
 		if e.ID != player && !s.playable(st, &e) {
+			st.Entities[i].startPosition()
+			st.startPortalTurn(e.ID)
 			s.ageMarks(st, c, e.ID)
 			s.markTurn(st, c, e.ID, true)
 			s.fire(st, c, e.ID, e.ID, 0, "TB")
@@ -803,6 +867,8 @@ func (s *Sim) EndTurn(st *State) ([]Event, string) {
 		s.drop(st, c, at, &st.Entities[i], func(b Buff) bool { return b.Turns == 0 })
 	}
 	c.events = append(c.events, Event{Type: EventTurn, Value: st.Turn})
+	st.Player().startPosition()
+	st.startPortalTurn(player)
 	s.ageMarks(st, c, player)
 	for i := range st.Entities {
 		s.due(st, c, st.Entities[i].ID)
@@ -828,14 +894,20 @@ func (s *Sim) Cast(st *State, spellID, cell int) ([]Event, string) {
 	}
 	crit := s.Rand.IntN(100) < s.critRate(a, s.StatOf(player))
 	c := s.casting(spellID, crit, false)
-	c.events = append(c.events, Event{Type: EventCast, Entity: player.ID, Spell: spellID, Critical: crit, Cell: &cell})
-	s.spend(st, a, cell)
+	c.acting = player.ID
+	projection := st.project(a, player, cell)
+	c.events = append(c.events, Event{Type: EventCast, Entity: player.ID, Spell: spellID, Critical: crit, Cell: &projection.cell, PortalPath: projection.route.Cells})
+	s.spend(st, a, projection.cell)
 	id := player.ID
-	s.resolve(st, c, id, id, a, cell, 0)
+	s.resolveProjected(st, c, id, cell, a, projection)
 	if crit {
 		s.fire(st, c, id, id, 0, "CC")
 	}
 	s.settle(st, c)
+	if c.finishTurn && st.Active().ID == id {
+		next, _ := s.EndTurn(st)
+		c.events = append(c.events, next...)
+	}
 	return c.events, ""
 }
 
@@ -890,6 +962,7 @@ func (s *Sim) settle(st *State, c *casting) {
 		}
 	}
 	s.removeDefeatedSummons(st, c)
+	st.cleanPortals()
 	for _, mark := range append([]Mark(nil), st.Marks...) {
 		if st.entity(mark.Caster) == nil {
 			s.removeMark(st, c, mark, 0)

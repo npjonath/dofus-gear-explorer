@@ -1,4 +1,5 @@
 """Build a self-contained importer for the host that will run it."""
+import hashlib
 import os
 import platform
 import shutil
@@ -25,10 +26,16 @@ with tempfile.TemporaryDirectory() as folder:
          "--collect-data", "UnityPy", "--collect-data", "archspec", "--collect-data", "tpk_ar",
          "--collect-all", "texture2ddecoder", "--collect-all", "etcpak",
          "--collect-all", "astc_encoder", "--exclude-module", "fmod_toolkit", "--exclude-module", "pyfmodex",
+         "--exclude-module", "fsb5.vorbis", "--copy-metadata", "fsb5",
          "--collect-all", "brotli", "--copy-metadata", "UnityPy", str(here/"import_assets.py")])
     with tempfile.TemporaryDirectory(dir=dest.parent) as replacement:
         stage = Path(replacement) / "new"
         shutil.copytree(Path(folder) / "dist" / "fight-import", stage, symlinks=True)
+        fingerprint = hashlib.sha256()
+        sources = [p for p in here.iterdir() if p.suffix == ".py" and not p.name.startswith("test_") or p.name == "requirements.txt"]
+        for path in sorted(sources):
+            fingerprint.update(path.name.encode() + b"\0" + path.read_bytes().replace(b"\r\n", b"\n") + b"\0")
+        (stage / "source.sha256").write_text(fingerprint.hexdigest(), encoding="ascii")
         backup = Path(replacement) / "previous"
         if dest.exists():
             dest.rename(backup)

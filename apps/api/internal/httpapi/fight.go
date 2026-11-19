@@ -42,9 +42,11 @@ type fightSlotDTO struct {
 }
 
 type fightDTO struct {
-	CurrentStats map[int]int   `json:"currentStats"`
-	State        *fight.State  `json:"state"`
-	Events       []fight.Event `json:"events"`
+	EntityReach  map[int][]int             `json:"entityReach,omitempty"`
+	PortalRoutes map[int]fight.PortalRoute `json:"portalRoutes,omitempty"`
+	CurrentStats map[int]int               `json:"currentStats"`
+	State        *fight.State              `json:"state"`
+	Events       []fight.Event             `json:"events"`
 	// Refused says why the action was not done; empty when it was.
 	Refused string `json:"refused,omitempty"`
 	AP      int    `json:"ap"`
@@ -108,7 +110,7 @@ func validState(st *fight.State) bool {
 	if len(st.Board.SightWalls) > cells || len(st.Board.Blue) > cells || len(st.Board.Red) > cells || len(st.Board.Walls) > cells || len(st.Entities) > maxFightEntities || len(st.Uses) > maxFightUses || st.Player() == nil {
 		return false
 	}
-	if !fight.ValidMarks(st) || !fight.ValidPositions(st) || st.ActiveID != 0 && st.Active().ID != st.ActiveID || st.LastEntityID < 0 || st.LastEntityID > 1_000_000 {
+	if !fight.ValidPortals(st) || !fight.ValidMarks(st) || !fight.ValidPositions(st) || st.ActiveID != 0 && st.Active().ID != st.ActiveID || st.LastEntityID < 0 || st.LastEntityID > 1_000_000 {
 		return false
 	}
 	seen := map[int]bool{}
@@ -117,6 +119,14 @@ func validState(st *fight.State) bool {
 	for _, e := range st.Entities {
 		if seen[e.ID] || e.ID < 1 || e.ID > 1_000_000 || len(e.Uses) > maxFightUses || len(e.Stats) > 256 {
 			return false
+		}
+		if len(e.PreviousCells) > 32 || (e.TurnCell != nil && (*e.TurnCell < 0 || *e.TurnCell >= cells)) {
+			return false
+		}
+		for _, previous := range e.PreviousCells {
+			if previous < 0 || previous >= cells {
+				return false
+			}
 		}
 		seen[e.ID] = true
 		if e.Kind != fight.KindPlayer && e.Kind != fight.KindDummy && e.Kind != fight.KindSummon {
@@ -221,6 +231,13 @@ func (s *Server) handleFight(w http.ResponseWriter, r *http.Request, eng *engine
 	}
 	out.MaxAP, out.MaxMP = stat(game.StatAP), stat(game.StatMP)
 	out.Steps = sim.Reach(st)
+	out.EntityReach = map[int][]int{}
+	for i := range st.Entities {
+		if cells := sim.MovementOverlay(st, &st.Entities[i]); len(cells) > 0 {
+			out.EntityReach[st.Entities[i].ID] = cells
+		}
+	}
+	out.PortalRoutes = st.PortalRoutes()
 
 	cat := eng.Catalog
 	name := func(id int) {

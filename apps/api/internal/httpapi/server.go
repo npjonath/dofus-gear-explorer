@@ -65,6 +65,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/solver/results/{id}", s.handleResults)
 	mux.HandleFunc("POST /api/fight", s.withData(s.handleFight))
 	mux.HandleFunc("POST /api/fight/aim", s.withData(s.handleFightAim))
+	mux.HandleFunc("GET /api/fight/book", s.withData(s.handleFightBook))
 	mux.HandleFunc("GET /api/fight/assets", s.handleFightAssets)
 	mux.HandleFunc("GET /fight-assets/{path...}", s.serveFightAsset)
 	mux.HandleFunc("GET /images/items/{file}", s.handleIcon)

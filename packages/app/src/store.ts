@@ -121,6 +121,26 @@ const zeroStats = (): Record<PrimaryKey, number> => ({
   agility: 0,
 })
 
+/** Replacing an item also replaces its forgemagic. Used by saved stuffs and combat trials. */
+export function withEquipment<T extends Pick<Build, "items" | "mods">>(
+  gear: T, position: string, itemId: number | null, forged?: ItemMods,
+): T {
+  const items = { ...gear.items }
+  const mods = { ...gear.mods }
+  if (items[position] !== itemId || forged) delete mods[position]
+  if (itemId === null) delete items[position]
+  else items[position] = itemId
+  if (itemId !== null && forged && !isEmptyMods(forged)) mods[position] = forged
+  return { ...gear, items, mods }
+}
+
+export function withForge<T extends Pick<Build, "mods">>(gear: T, position: string, next: ItemMods | null): T {
+  const mods = { ...gear.mods }
+  if (next === null || isEmptyMods(next)) delete mods[position]
+  else mods[position] = next
+  return { ...gear, mods }
+}
+
 export function newBuild(name: string): Build {
   return {
     id: crypto.randomUUID(),
@@ -309,28 +329,10 @@ export const useStore = create<State>()(
         redo: step("future", "past"),
 
         equip: (id, position, itemId, forged) =>
-          set((state) =>
-            patchItems(state, id, (b) => {
-              const items = { ...b.items }
-              const mods = { ...b.mods }
-              // Forgemagic belongs to the item it was put on.
-              if (items[position] !== itemId || forged) delete mods[position]
-              if (itemId === null) delete items[position]
-              else items[position] = itemId
-              if (itemId !== null && forged && !isEmptyMods(forged)) mods[position] = forged
-              return { ...b, items, mods }
-            })
-          ),
+          set((state) => patchItems(state, id, (b) => withEquipment(b, position, itemId, forged))),
         replaceGear: (id, gear) => set((state) => patchItems(state, id, (b) => ({ ...b, ...gear }))),
         setMods: (id, position, next) =>
-          set((state) =>
-            patchItems(state, id, (b) => {
-              const mods = { ...b.mods }
-              if (next === null || isEmptyMods(next)) delete mods[position]
-              else mods[position] = next
-              return { ...b, mods }
-            })
-          ),
+          set((state) => patchItems(state, id, (b) => withForge(b, position, next))),
       }
     },
     {

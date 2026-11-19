@@ -35,7 +35,7 @@ interface Timing {
 export interface SpellVisualCatalog {
   spells: Record<string, { normal: BoundScript[]; critical?: BoundScript[] }>
   casts: Record<string, Timing>
-  clips: Record<string, Timing & { animation: string; directions: Direction[]; idle?: string; trigger?: Timing & { animation: string } }>
+  clips: Record<string, Timing & { animation: string; directions: Direction[]; idle?: string; trigger?: Timing & { animation: string }; portalAnimations?: Record<string, number> }>
 }
 
 export interface GraphicCue extends Graphic {

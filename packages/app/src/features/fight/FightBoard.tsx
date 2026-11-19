@@ -18,6 +18,7 @@ import { sceneAt, type Actor, type Facing, type Scene } from "../../lib/fightTim
 import { toneOfElement } from "../../lib/stats"
 import { GameGroundMarks, GameSpellEffects } from "./GameSpellEffects"
 import { FightMarks } from "./FightMarks"
+import { FightPortals } from "./FightPortals"
 import { GameActor } from "./GameActor"
 import { useApi } from "../../platform"
 import { Figure, FIGURE_TOP, SILHOUETTE } from "./FightFigures"
@@ -26,6 +27,8 @@ import { defaultFacing, type Playback, type Run } from "./useFightPlayback"
 interface Props {
   breedId: number | null
   items: Record<string, number>
+  showReach?: boolean
+  leaving?: boolean
   highlightMarks: boolean
   view: FightView
   aim: FightAim | undefined
@@ -190,6 +193,7 @@ function stance(actor: Actor, kind: FightEntity["kind"], at: Point) {
 }
 
 interface StageProps {
+  leaving?: boolean
   placement: boolean
   activeId: number
   breedId: number | null
@@ -209,6 +213,7 @@ interface StageProps {
 
 // Everything that stands or flies on the arena. It follows the clock of the action being played.
 function Stage({
+  leaving,
   board,
   entities,
   marks,
@@ -229,13 +234,23 @@ function Stage({
   const { run, playing } = playback
   const elapsed = useElapsed(run, playing, playback.finish)
   const scene: Scene | null = run && playing ? sceneAt(run.timeline, elapsed, run.facing, run.directions) : null
+  // PortalSprite owns the portal's spawn, open/close and traversal clips.
+  const graphics = scene?.graphics.filter(
+    ({ cue }) => cue.kind !== "mark" || !playback.visualCatalog?.clips[cue.bone]?.portalAnimations
+  )
 
   const cast = entities.map((entity) => {
     const still = cellXY(board, entity.cell)
     const facing: Facing = playback.facing[entity.id] ?? defaultFacing(entity.kind)
     const actor: Actor = scene?.actors[entity.id] ?? {
-      ...still, facing, pose: "idle", phase: 0, dir: 1, stride: 0,
-      carriedBy: entity.carriedBy, lift: entity.carriedBy ? 1 : 0,
+      ...still,
+      facing,
+      pose: "idle",
+      phase: 0,
+      dir: 1,
+      stride: 0,
+      carriedBy: entity.carriedBy,
+      lift: entity.carriedBy ? 1 : 0,
     }
     const at = gridPoint(actor.x, actor.y)
     at.y -= CARRY_HEIGHT * (actor.lift ?? 0)
@@ -268,8 +283,8 @@ function Stage({
           animating={animatingMarks}
         />
       )}
-      {board.id && scene && (
-        <GameSpellEffects assetRoot={assetRoot} board={board} graphics={scene.graphics} layer="ground" scale={SPRITE_SCALE} />
+      {board.id && graphics && (
+        <GameSpellEffects assetRoot={assetRoot} board={board} graphics={graphics} layer="ground" scale={SPRITE_SCALE} />
       )}
       {scene?.impacts.map(({ cue, progress }) => {
         const center = cellCenter(board, cue.center)
@@ -315,6 +330,7 @@ function Stage({
             className="fight-entity"
             transform={`translate(${at.x} ${at.y})`}
             data-kind={entity.ally ? "player" : entity.kind}
+            opacity={(scene ? actor.invisible : entity.buffs.some((buff) => buff.kind === "invisible")) ? 0.4 : undefined}
             data-pose={actor.pose}
             data-picked={picked === entity.id || undefined}
             style={{ "--beat": `${(entity.id * 610) % 1900}ms` } as React.CSSProperties}
@@ -328,12 +344,12 @@ function Stage({
                 monsterId={entity.monsterId}
                 placement={placement}
                 carrying={cast.some((other) => other.actor.carriedBy === entity.id)}
-                pose={actor.pose}
+                pose={leaving && entity.kind === "player" ? "down" : actor.pose}
                 scale={SPRITE_SCALE}
                 direction={actor.direction ?? playback.directions[entity.id] ?? (entity.kind === "player" ? 7 : 1)}
-                animation={actor.animation}
+                animation={leaving && entity.kind === "player" ? undefined : actor.animation}
                 spellId={actor.spell}
-                phase={actor.pose === "idle" ? undefined : actor.phase}
+                phase={(leaving && entity.kind === "player") || actor.pose === "idle" ? undefined : actor.phase}
                 fallback={<Figure kind={entity.kind} pose="idle" phase={0} stride={0} />}
               />
             ) : (
@@ -348,8 +364,8 @@ function Stage({
         )
       })}
 
-      {board.id && scene && (
-        <GameSpellEffects assetRoot={assetRoot} board={board} graphics={scene.graphics} layer="front" scale={SPRITE_SCALE} />
+      {board.id && graphics && (
+        <GameSpellEffects assetRoot={assetRoot} board={board} graphics={graphics} layer="front" scale={SPRITE_SCALE} />
       )}
       {scene?.bolts.map(({ cue, progress }) => {
         const from = cellCenter(board, cue.from)
@@ -414,7 +430,14 @@ function Stage({
               textAnchor="middle"
               transform={`translate(${at.x} ${at.y - FIGURE_TOP[entity.kind] - 4}) scale(${unit})`}
             >
-              <rect className="combat-target-bg" x={-width / 2} y={loss ? -48 : -34} width={width} height={loss ? 48 : 34} rx={3} />
+              <rect
+                className="combat-target-bg"
+                x={-width / 2}
+                y={loss ? -48 : -34}
+                width={width}
+                height={loss ? 48 : 34}
+                rx={3}
+              />
               <text className="combat-target-name" y={loss ? -35 : -21}>
                 {name}
               </text>
@@ -485,6 +508,8 @@ function Stage({
 }
 
 export function FightBoardView({
+  showReach,
+  leaving,
   highlightMarks,
   view,
   aim,
@@ -539,9 +564,13 @@ export function FightBoardView({
         const ratio = prev.zoom / next
         return {
           zoom: next,
-          x: anchor.x - frame.x - frame.width / (2 * next) + (frame.x + prev.x + frame.width / (2 * prev.zoom) - anchor.x) * ratio,
+          x:
+            anchor.x - frame.x - frame.width / (2 * next) + (frame.x + prev.x + frame.width / (2 * prev.zoom) - anchor.x) * ratio,
           y:
-            anchor.y - frame.y - frame.height / (2 * next) + (frame.y + prev.y + frame.height / (2 * prev.zoom) - anchor.y) * ratio,
+            anchor.y -
+            frame.y -
+            frame.height / (2 * next) +
+            (frame.y + prev.y + frame.height / (2 * prev.zoom) - anchor.y) * ratio,
         }
       })
     }
@@ -566,6 +595,14 @@ export function FightBoardView({
   const occupied = new Map(state.entities.map((entity) => [entity.cell, entity]))
   const kinds = new Map(state.entities.map((entity) => [entity.id, entity.kind]))
 
+  const pointedEntity = state.entities.find((e) => e.id === pointed)
+  const hoveredReach = new Set(
+    showReach && pointedEntity
+      ? pointedEntity.id === (state.activeId || state.entities.find((e) => e.kind === "player")?.id)
+        ? reach.keys()
+        : view.entityReach?.[pointedEntity.id]
+      : undefined
+  )
   function zoneOf(cell: number): string | undefined {
     if (walls.has(cell)) return undefined
     if (!fighting && board.id) {
@@ -577,6 +614,7 @@ export function FightBoardView({
     if (targets.has(cell)) return "range"
     if (inRange.has(cell)) return "blocked"
     if (onPath.has(cell)) return "path"
+    if (!aiming && settled && fighting && hoveredReach.has(cell)) return "reach"
     if (!board.id && !aiming && fighting && settled && reach.has(cell)) return "reach"
     if (!fighting && picked !== null && !occupied.has(cell)) return "reach"
     return undefined
@@ -628,7 +666,9 @@ export function FightBoardView({
       ref={root}
       className="fight-board"
       data-room={board.id}
-      style={{ "--board-ratio": String(frame.width / frame.height), "--room-width": board.imageWidth ?? 0 } as React.CSSProperties}
+      style={
+        { "--board-ratio": String(frame.width / frame.height), "--room-width": board.imageWidth ?? 0 } as React.CSSProperties
+      }
       role="application"
       tabIndex={0}
       aria-label={t("fight.board")}
@@ -707,6 +747,16 @@ export function FightBoardView({
           />
         )}
         <Ground board={board} />
+        <FightPortals
+          board={board}
+          portals={state.portals}
+          routes={view.portalRoutes}
+          cursor={cursor}
+          catalog={playback.visualCatalog}
+          events={view.events}
+          assetRoot={api.imageUrl("/fight-assets")}
+          scale={SPRITE_SCALE}
+        />
         <FightMarks
           board={board}
           marks={state.marks}
@@ -752,6 +802,7 @@ export function FightBoardView({
           )
         })}
         <Stage
+          leaving={leaving}
           activeId={state.activeId || state.entities.find((e) => e.kind === "player")!.id}
           placement={!fighting}
           breedId={breedId}

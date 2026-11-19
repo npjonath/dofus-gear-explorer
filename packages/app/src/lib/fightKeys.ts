@@ -17,12 +17,19 @@ export const combatCodes = [
   "KeyS",
   "KeyI",
   "KeyH",
+  "KeyY",
 ]
 const storageKey = "dde.fight.keys.v1"
 
 export function loadFightKeys(): string[] {
   try {
-    const saved: unknown = JSON.parse(localStorage.getItem(storageKey) ?? "null")
+    let saved: unknown = JSON.parse(localStorage.getItem(storageKey) ?? "null")
+    // Append the terrain binding to previously saved layouts without taking an occupied key.
+    if (Array.isArray(saved) && saved.length === combatCodes.length - 1) {
+      const occupied = new Set(saved)
+      const free = ["KeyY", ...combatCodes, "KeyJ"].find((code) => !occupied.has(code))
+      saved = [...saved, free]
+    }
     if (
       Array.isArray(saved) &&
       saved.length === combatCodes.length &&

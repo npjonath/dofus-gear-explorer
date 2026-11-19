@@ -541,7 +541,7 @@ export interface FightBoard {
   walls: number[]
 }
 
-export type FightBuffKind = "shield" | "armor" | "stat" | "state" | "base" | "range" | "suffered" | "healed"
+export type FightBuffKind = "vitality" | "minimum" | "maximum" | "stateDisabled" | "healBase" | "invisible" | "shield" | "armor" | "stat" | "state" | "base" | "range" | "suffered" | "healed" | "finalHeal"
 
 export interface FightBuff {
   kind: FightBuffKind
@@ -586,6 +586,7 @@ export interface FightMark {
 }
 
 export interface FightState {
+  portals?: FightPortal[]
   activeId?:number
   board: FightBoard
   phase: "placement" | "fight"
@@ -600,7 +601,8 @@ export interface FightState {
 }
 
 export interface FightEvent {
-  type: "armor" | "shield" | "summon" | "turn" | "cast" | "move" | "damage" | "heal" | "buff" | "ap" | "defeat" | "skipped" | "mark" | "dodge" | "release" | "rune"
+  portalPath?: number[]
+  type: "eliminated" | "invisible" | "reveal" | "armor" | "shield" | "summon" | "turn" | "cast" | "move" | "damage" | "heal" | "buff" | "ap" | "defeat" | "skipped" | "mark" | "dodge" | "release" | "rune"
   carrier?: number
   entity?: number
   spell?: number
@@ -632,6 +634,8 @@ export type FightBlocked =
   | "unknown"
 
 export interface FightCastRules {
+  noPortal?: boolean
+  noProjection?: boolean
   line?: boolean
   diagonal?: boolean
   sight?: boolean
@@ -673,6 +677,8 @@ export interface FightStep {
 }
 
 export interface FightView {
+  entityReach?:Record<number,number[]>
+  portalRoutes?: Record<number, FightPortalRoute>
   currentStats?:Record<string,number>
   state: FightState
   events: FightEvent[]
@@ -711,10 +717,26 @@ export interface FightLoss {
 }
 
 export interface FightTarget {
+  projected?: number
   cell: number
   zone: number[]
   losses: FightLoss[]
   shifts: { entity: number; cell: number }[]
+}
+
+export interface FightPortal {
+  cell: number
+  caster: number
+  spell: number
+  grade: number
+  used?: boolean
+  closedFor?: number
+}
+
+export interface FightPortalRoute {
+  cells: number[]
+  distance: number
+  bonus: number
 }
 
 export interface FightAim {
@@ -722,4 +744,15 @@ export interface FightAim {
   range: number[]
   targets: FightTarget[]
   canCrit: boolean
+}
+
+export interface FightBookSpell {
+  id: number
+  breedId: number
+  variantOf: number
+  iconId: number
+  name: string
+  description: string
+  levels: number[]
+  tags: string[]
 }

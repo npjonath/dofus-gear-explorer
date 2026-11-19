@@ -202,7 +202,7 @@ def _grid(data, image, left, top):
     first_x, first_y = min(xs), min(ys)
     width, height = max(xs) - first_x + 1, max(ys) - first_y + 1
     spec = {
-        "id": data["id"], "width": width, "height": height,
+        "id": data["id"], "width": width, "height": height, "nativeOrigin": [first_x, first_y],
         "imageWidth": image.width, "imageHeight": image.height,
         "originX": HALF_W * (first_x - first_y - 13.5) - left,
         "originY": HALF_H * (first_x + first_y - 22.5) - top,

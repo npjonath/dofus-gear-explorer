@@ -14,6 +14,7 @@ import (
 // Board is the arena: a grid of cells numbered row by row, some of them
 // walls that block movement and sight.
 type Board struct {
+	NativeOrigin   *[2]int `json:"nativeOrigin,omitempty"`
 	Width          int     `json:"width"`
 	Height         int     `json:"height"`
 	Walls          []int   `json:"walls"`
@@ -183,9 +184,23 @@ func (b Board) zone(z game.Zone, caster, target int) []int {
 		}
 	}
 	hx, hy := b.heading(caster, target)
+	if z.Direction >= 1 && z.Direction <= 8 {
+		directions := [8][2]int{{1, -1}, {1, 0}, {1, 1}, {0, 1}, {-1, 1}, {-1, 0}, {-1, -1}, {0, -1}}
+		dir := directions[z.Direction-1]
+		hx, hy = dir[0], dir[1]
+	}
 	// No shape reaches further than the board is wide.
 	size, least := min(z.Size, b.Width+b.Height), z.Min
 	switch z.Shape {
+	case ";":
+		if b.NativeOrigin != nil {
+			for _, native := range z.NativeCells {
+				if native >= 0 && native < 560 {
+					row, col := native/14, native%14
+					add(col+(row+1)/2-b.NativeOrigin[0], row/2-col-b.NativeOrigin[1])
+				}
+			}
+		}
 	case "C":
 		around(size, func(dx, dy int) bool { d := abs(dx) + abs(dy); return d <= size && d >= least })
 	case "O":
@@ -206,7 +221,35 @@ func (b Board) zone(z game.Zone, caster, target int) []int {
 		})
 	case "G":
 		around(size, func(dx, dy int) bool { return max(abs(dx), abs(dy)) <= size })
-	case "L":
+	case "U", "F":
+		// Martelo opens back towards the caster. A fork has a third ray
+		// continuing through the target. A diagonal ray still advances by one cell.
+		forwardX, forwardY := hx, hy
+		if z.Shape != "F" {
+			forwardX, forwardY = -hx, -hy
+		}
+		if least == 0 {
+			add(tx, ty)
+		}
+		leftX, leftY := sign(forwardX+forwardY), sign(forwardY-forwardX)
+		rightX, rightY := sign(forwardX-forwardY), sign(forwardY+forwardX)
+		for i := max(1, least); i <= size; i++ {
+			add(tx+leftX*i, ty+leftY*i)
+			if z.Shape == "F" {
+				add(tx+hx*i, ty+hy*i)
+			}
+			add(tx+rightX*i, ty+rightY*i)
+		}
+	case "R":
+		// Param1 is half the width; param2 is the length beyond the aimed row.
+		for row := 0; row <= min(max(1, z.Min), b.Width+b.Height); row++ {
+			for side := -max(1, size); side <= max(1, size); side++ {
+				add(tx+hx*row-hy*side, ty+hy*row+hx*side)
+			}
+		}
+	case "D":
+		around(size, func(dx, dy int) bool { d := abs(dx) + abs(dy); return d <= size && d >= least && d%2 == size%2 })
+	case "L", "/":
 		for i := least; i <= size; i++ {
 			add(tx+hx*i, ty+hy*i)
 		}

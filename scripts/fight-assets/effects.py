@@ -229,11 +229,19 @@ def export_effects(content: Path, output: Path, spell_ids=None) -> None:
             export_bone(bundle, directory)
         bone = json.loads((directory / "bone.json").read_bytes())
         animation = next((anim for anim in bone["animations"] if anim["name"].startswith("FX_")), None)
+        portal_clips = [anim["name"] for anim in bone["animations"] if anim["name"].endswith("_1")]
+        if "AnimStatiqueActif_1" in portal_clips:
+            animation = next((anim for anim in bone["animations"] if anim["name"] == "AnimSpawn_1"), animation)
         if animation is None and bone["animations"]:
             animation = bone["animations"][0]
         if animation:
             name = animation["name"]
             clips[bone_id] = timing((directory / (name + ".dat")).read_bytes(), bone.get("defaultFrameRate") or 30)
+            if "AnimStatiqueActif_1" in portal_clips:
+                clips[bone_id]["portalAnimations"] = {
+                    clip: timing((directory / (clip + ".dat")).read_bytes(), bone.get("defaultFrameRate") or 30)["duration"]
+                    for clip in portal_clips
+                }
             clips[bone_id]["animation"] = re.sub(r"_[0-7]$", "", name)
             clips[bone_id]["directions"] = [int(a["name"][-1]) for a in bone["animations"]
                                              if a["name"][:-1] == name[:-1] and a["name"][-1] in "01234567"]

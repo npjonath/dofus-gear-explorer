@@ -35,6 +35,23 @@ TEXTURES = {
     },
 }
 
+# Optional on older clients: the inventory is still usable without its ornamentation.
+INVENTORY = {
+    "figs_assets_.bundle": {
+        "bgOrnamentTop": "inventory-top", "bgOrnamentBottom": "inventory-bottom",
+    },
+    "uiassets_assets_.bundle": {
+        "ornamentBrakmar": "inventory-header", "headerHighlight": "inventory-highlight",
+        **{f"socle_{breed}": f"inventory-pedestal-{breed}" for breed in [*range(1, 19), 20]},
+    },
+    "uidarkstone_assets_all.bundle": {
+        "inventoryEmptySlot": "inventory-slot",
+        **{f"icon_slot_{game}_inventory": f"slot-{slot}" for slot, game in (
+            ("hat", "helmet"), ("cloak", "cape"), ("weapon", "weapon"), ("shield", "shield"), ("pet", "pet"),
+            ("amulet", "collar"), ("ring", "ring"), ("belt", "belt"), ("boots", "shoe"), ("dofus", "dofus"))},
+    },
+}
+
 FONTS = {
     "Lexend-Regular": "lexend-regular",
     "Lexend-Bold": "lexend-bold",
@@ -59,8 +76,13 @@ def export_hud(content: Path, output: Path) -> None:
     bundles = addressables_directory(content)
     destination = output / "hud"
     destination.mkdir(parents=True, exist_ok=True)
-    for filename, textures in TEXTURES.items():
-        environment = UnityPy.load(str(bundles / filename))
+    for filename in sorted(TEXTURES.keys() | INVENTORY.keys()):
+        textures = TEXTURES.get(filename, {})
+        optional = INVENTORY.get(filename, {})
+        bundle = bundles / filename
+        if not textures and not bundle.is_file():
+            continue
+        environment = UnityPy.load(str(bundle))
         required = set(textures.values())
         if filename == "uielements_assets_all.bundle":
             required.update(FONTS.values())
@@ -68,9 +90,14 @@ def export_hud(content: Path, output: Path) -> None:
             if obj.type.name not in {"Texture2D", "Font"}:
                 continue
             name = obj.peek_name()
-            if obj.type.name == "Texture2D" and name in textures:
-                stem = textures[name]
-                obj.read().image.save(destination / f"{stem}.png")
+            if obj.type.name == "Texture2D" and (name in textures or name in optional):
+                stem = textures.get(name) or optional[name]
+                image = obj.read().image
+                if stem.startswith("inventory-pedestal-"):
+                    bounds = image.convert("RGBA").getchannel("A").getbbox()
+                    if bounds:
+                        image = image.crop(bounds)
+                image.save(destination / f"{stem}.png")
             elif obj.type.name == "Font" and name in FONTS:
                 stem = FONTS[name]
                 (destination / f"{stem}.ttf").write_bytes(bytes(obj.read().m_FontData))

@@ -1,3 +1,4 @@
+import { LightAnimations } from "./combatPreferences"
 import * as React from "react"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 import type { DofusSprite } from "d3-ts-renderer"
@@ -23,6 +24,7 @@ export interface GameSpriteProps {
   animation: string
   direction: GameDirection
   scale?: number
+  resolution?: number
   phase?: number
   effectColors?: boolean
   portrait?: boolean
@@ -50,7 +52,7 @@ function resolveClip(sprite: DofusSprite, animation: string, direction: GameDire
   const directions = sprite.availableDirections()[animation] ?? []
   // Some casts only have diagonal drawings. An axial target still plays the same cast.
   for (const offset of [0, 1, -1, 2, -2, 3, -3, 4]) {
-    const candidate = (direction + offset + 8) % 8 as GameDirection
+    const candidate = ((direction + offset + 8) % 8) as GameDirection
     if (directions.includes(candidate)) return sprite.getAnimName(candidate, animation)
   }
   return sprite.getAnimName(direction, animation, false)
@@ -84,8 +86,13 @@ function StillPortrait({ assetRoot, pack = "", look, bone, animation, direction,
           const [name, flip] = resolveClip(sprite, animation, direction)
           await sprite.prepareAnimation(name, 2, true, flip)
           sprite.renderFrame(0)
-          return { href: canvas.toDataURL(), x: -sprite.openGl.offset.x / 2, y: -sprite.openGl.offset.y / 2,
-            width: canvas.width / 2, height: canvas.height / 2 }
+          return {
+            href: canvas.toDataURL(),
+            x: -sprite.openGl.offset.x / 2,
+            y: -sprite.openGl.offset.y / 2,
+            width: canvas.width / 2,
+            height: canvas.height / 2,
+          }
         } finally {
           freeSprite(sprite)
         }
@@ -97,8 +104,17 @@ function StillPortrait({ assetRoot, pack = "", look, bone, animation, direction,
     retry: false,
   })
   if (!data) return fallback
-  return <image href={data.href} x={scale * data.x} y={scale * data.y}
-    width={scale * data.width} height={scale * data.height} aria-hidden="true" pointerEvents="none" />
+  return (
+    <image
+      href={data.href}
+      x={scale * data.x}
+      y={scale * data.y}
+      width={scale * data.width}
+      height={scale * data.height}
+      aria-hidden="true"
+      pointerEvents="none"
+    />
+  )
 }
 
 export function GameSprite(props: GameSpriteProps) {
@@ -108,7 +124,20 @@ export function GameSprite(props: GameSpriteProps) {
   return <SpriteSurface key={[props.assetRoot, pack, props.effectColors].join("#")} {...props} pack={pack} />
 }
 
-function SpriteSurface({ assetRoot, pack = "", look, bone, animation, direction, scale = 0.58, phase, effectColors, fallback }: GameSpriteProps) {
+function SpriteSurface({
+  assetRoot,
+  pack = "",
+  look,
+  bone,
+  animation,
+  direction,
+  scale = 0.58,
+  resolution = 1,
+  phase,
+  effectColors,
+  fallback,
+}: GameSpriteProps) {
+  const light = React.useContext(LightAnimations)
   const holder = React.useRef<SVGForeignObjectElement>(null)
   const surface = React.useRef<Surface | null>(null)
   const progress = React.useRef(phase)
@@ -141,80 +170,85 @@ function SpriteSurface({ assetRoot, pack = "", look, bone, animation, direction,
     let cancelled = false
     cancelAnimationFrame(target.frame)
     // Changing attachments and bones mutates a sprite. Finish the previous operation first.
-    target.queue = target.queue.then(async () => {
-      if (cancelled || target.closed) return
-      const { gameSpriteRenderer } = await import("./gameSpriteRenderer")
-      if (cancelled || target.closed) return
-      const engine = gameSpriteRenderer(assetRoot, pack)
-      if (!target.sprite || target.look !== look || target.bone !== bone) {
-        const appearance = engine.Look.fromString(look)
-        await appearance.injectColor()
+    target.queue = target.queue
+      .then(async () => {
         if (cancelled || target.closed) return
-        if (!target.sprite) {
-          target.sprite = await engine.DofusSprite.create(appearance, target.canvas, { boneName: bone })
-          if (effectColors) {
-            // Spell FX encode additive colour in BGRA order.
-            const context = target.sprite.openGl
-            const apply = context.setRenderUniforms.bind(context)
-            context.setRenderUniforms = (mul, add, custom, matrix) =>
-              apply(mul, [add[2], add[1], add[0], add[3]], custom, matrix)
+        const { gameSpriteRenderer } = await import("./gameSpriteRenderer")
+        if (cancelled || target.closed) return
+        const engine = gameSpriteRenderer(assetRoot, pack)
+        if (!target.sprite || target.look !== look || target.bone !== bone) {
+          const appearance = engine.Look.fromString(look)
+          await appearance.injectColor()
+          if (cancelled || target.closed) return
+          if (!target.sprite) {
+            target.sprite = await engine.DofusSprite.create(appearance, target.canvas, { boneName: bone })
+            if (effectColors) {
+              // Spell FX encode additive colour in BGRA order.
+              const context = target.sprite.openGl
+              const apply = context.setRenderUniforms.bind(context)
+              context.setRenderUniforms = (mul, add, custom, matrix) =>
+                apply(mul, [add[2], add[1], add[0], add[3]], custom, matrix)
+            }
+          } else {
+            await target.sprite.changeLook(appearance, bone)
           }
-        } else {
-          await target.sprite.changeLook(appearance, bone)
+          target.look = look
+          target.bone = bone
         }
-        target.look = look
-        target.bone = bone
-      }
-      if (cancelled || target.closed) return
-      const sprite = target.sprite
-      const [name, flip] = resolveClip(sprite, animation, direction)
-      const density = Math.min(3, Math.max(1, window.devicePixelRatio || 1))
-      const frames = await sprite.prepareAnimation(name, density, true, flip)
-      if (cancelled || target.closed) return
-
-      // The renderer crops every clip differently. Its pivot is the floor contact point.
-      const factor = scale / density
-      target.wrapper.setAttribute("x", String(-sprite.openGl.offset.x * factor))
-      target.wrapper.setAttribute("y", String(-sprite.openGl.offset.y * factor))
-      target.wrapper.setAttribute("width", String(target.canvas.width * factor))
-      target.wrapper.setAttribute("height", String(target.canvas.height * factor))
-      let drawn = -1
-      const start = performance.now()
-      const fps = sprite.data.defaultFrameRate || 24
-      const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches
-      const paint = (now: number) => {
         if (cancelled || target.closed) return
-        let current = 0
-        if (!reduced) {
-          current = progress.current === undefined
-            ? Math.floor((now - start) * fps / 1000) % Math.max(1, frames)
-            : Math.round(Math.max(0, Math.min(1, progress.current)) * Math.max(0, frames - 1))
+        const sprite = target.sprite
+        const [name, flip] = resolveClip(sprite, animation, direction)
+        const density = Math.min(8, Math.max(0.5, (window.devicePixelRatio || 1) * resolution * (light ? 0.5 : 1)))
+        const frames = await sprite.prepareAnimation(name, density, true, flip)
+        if (cancelled || target.closed) return
+
+        // The renderer crops every clip differently. Its pivot is the floor contact point.
+        const factor = scale / density
+        target.wrapper.setAttribute("x", String(-sprite.openGl.offset.x * factor))
+        target.wrapper.setAttribute("y", String(-sprite.openGl.offset.y * factor))
+        target.wrapper.setAttribute("width", String(target.canvas.width * factor))
+        target.wrapper.setAttribute("height", String(target.canvas.height * factor))
+        let drawn = -1
+        const start = performance.now()
+        const fps = sprite.data.defaultFrameRate || 24
+        const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches
+        const paint = (now: number) => {
+          if (cancelled || target.closed) return
+          let current = 0
+          if (!reduced) {
+            current =
+              progress.current === undefined
+                ? Math.floor(((now - start) * fps) / 1000) % Math.max(1, frames)
+                : Math.round(Math.max(0, Math.min(1, progress.current)) * Math.max(0, frames - 1))
+          }
+          if (current !== drawn) {
+            sprite.renderFrame(current)
+            drawn = current
+          }
+          if (!reduced) target.frame = requestAnimationFrame(paint)
         }
-        if (current !== drawn) {
-          sprite.renderFrame(current)
-          drawn = current
+        paint(start)
+        setReady(true)
+      })
+      .catch((error: unknown) => {
+        if (!cancelled && !target.closed) {
+          if (import.meta.env.DEV) console.warn("Game sprite could not be displayed", bone, animation, error)
+          setReady(false)
         }
-        if (!reduced) target.frame = requestAnimationFrame(paint)
-      }
-      paint(start)
-      setReady(true)
-    }).catch((error: unknown) => {
-      if (!cancelled && !target.closed) {
-        if (import.meta.env.DEV) console.warn("Game sprite could not be displayed", bone, animation, error)
-        setReady(false)
-      }
-    })
+      })
     return () => {
       cancelled = true
       cancelAnimationFrame(target.frame)
     }
-  }, [assetRoot, pack, look, bone, animation, direction, scale, effectColors])
+  }, [assetRoot, pack, look, bone, animation, direction, scale, resolution, effectColors, light])
 
   return (
     <>
       {!ready && fallback}
       <foreignObject
-        ref={holder} aria-hidden="true" pointerEvents="none"
+        ref={holder}
+        aria-hidden="true"
+        pointerEvents="none"
         style={{ opacity: ready ? 1 : 0, overflow: "visible" }}
       />
     </>
@@ -236,11 +270,12 @@ export interface GameActorProps {
   spellId?: number
   phase?: number
   scale?: number
+  resolution?: number
   fallback?: React.ReactNode
 }
 
 function attachmentLook(base: string, items: Record<string, number> | undefined, catalog: ActorCatalog) {
-  const skins = ["cloak", "hat", "shield"].map(slot => catalog.equipment[items?.[slot] ?? 0]).filter(Boolean)
+  const skins = ["cloak", "hat", "shield"].map((slot) => catalog.equipment[items?.[slot] ?? 0]).filter(Boolean)
   if (!skins.length) return base
   const fields = base.slice(1, -1).split("|")
   fields[1] = [fields[1], ...skins].filter(Boolean).join(",")
@@ -256,12 +291,13 @@ function findClip(catalog: ActorCatalog, bones: string[], names: string[]) {
   return null
 }
 
-export function GameActor(props: GameActorProps) {
+export function useGameActorCatalog(enabled: boolean, version?: string) {
   const api = useApi()
   const root = api.imageUrl("/fight-assets/actors/")
   const current = usePack()
-  const pack = props.pack ?? current
+  const pack = version ?? current
   const { data } = useQuery<ActorCatalog>({
+    enabled,
     queryKey: ["fight-actors", root, pack],
     queryFn: async ({ signal }) => {
       const url = new URL("index.json", new URL(root, document.baseURI))
@@ -273,6 +309,11 @@ export function GameActor(props: GameActorProps) {
     staleTime: Infinity,
     retry: false,
   })
+  return { root, pack, data }
+}
+
+export function GameActor(props: GameActorProps) {
+  const { root, pack, data } = useGameActorCatalog(true, props.pack)
   if (!data) return props.fallback
   const breed = props.breedId || 1
   const player = props.kind === "player"
@@ -311,9 +352,16 @@ export function GameActor(props: GameActorProps) {
   if (!clip) return props.fallback
   return (
     <GameSprite
-      assetRoot={root} pack={pack} portrait={props.portrait} look={look} {...clip}
-      direction={props.direction ?? (player ? 3 : 1)} scale={props.scale}
-      phase={props.pose === "idle" || props.pose === "walk" ? undefined : props.phase} fallback={props.fallback}
+      assetRoot={root}
+      pack={pack}
+      portrait={props.portrait}
+      look={look}
+      {...clip}
+      direction={props.direction ?? (player ? 3 : 1)}
+      scale={props.scale}
+      resolution={props.resolution}
+      phase={props.pose === "idle" || props.pose === "walk" ? undefined : props.phase}
+      fallback={props.fallback}
     />
   )
 }
