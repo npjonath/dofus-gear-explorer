@@ -2664,3 +2664,8 @@ th[aria-sort="descending"] .th-sort svg { opacity: 1; }
     top: 3.4rem;
   }
 }
+.combat-target-bg { fill: #1b1916; fill-opacity: .95; stroke: #554a3d; stroke-width: .8; }
+.combat-target-name, .combat-target-health { fill: #fff; font-weight: 700; }
+.combat-target-name { font-size: 12px; }
+.combat-target-health, .combat-target-loss { font-size: 10px; font-weight: 700; }
+.combat-target-loss { fill: #d9a769; }

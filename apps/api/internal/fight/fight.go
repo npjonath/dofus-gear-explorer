@@ -87,6 +87,7 @@ type Hook struct {
 
 // Entity is a fighter on the board.
 type Entity struct {
+	InitialHP int          `json:"initialHp,omitempty"`
 	Ally      bool         `json:"ally,omitempty"`
 	Name      string       `json:"name,omitempty"`
 	MonsterID int          `json:"monsterId,omitempty"`
@@ -854,7 +855,10 @@ func (s *Sim) settle(st *State, c *casting) {
 		}
 		if e.Kind == KindDummy {
 			c.events = append(c.events, Event{Type: EventDefeat, Entity: e.ID})
-			e.HP, e.Buffs = e.MaxHP, []Buff{}
+			if e.InitialHP > 0 {
+				e.MaxHP = e.InitialHP
+			}
+			e.HP, e.Buffs, e.Hooks = e.MaxHP, []Buff{}, nil
 		} else {
 			e.HP = 0
 		}

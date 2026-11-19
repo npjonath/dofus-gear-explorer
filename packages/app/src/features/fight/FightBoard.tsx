@@ -395,6 +395,36 @@ function Stage({
         const named = pointed === entity.id
         if (board.id && !named && !loss) return null
         const name = nameOf(entity)
+        if (board.id && named) {
+          const width = Math.max(100, name.length * 7 + 12)
+          const bar = width - 7
+          const desired = loss ? span(loss.min, loss.max, number) : ""
+          const critical = loss && canCrit ? ` (${span(loss.critMin, loss.critMax, number)})` : ""
+          return (
+            <g
+              key={entity.id}
+              className="fight-label combat-target"
+              textAnchor="middle"
+              transform={`translate(${at.x} ${at.y - FIGURE_TOP[entity.kind] - 4}) scale(${unit})`}
+            >
+              <rect className="combat-target-bg" x={-width / 2} y={loss ? -48 : -34} width={width} height={loss ? 48 : 34} rx={3} />
+              <text className="combat-target-name" y={loss ? -35 : -21}>
+                {name}
+              </text>
+              <rect x={-bar / 2} y={loss ? -30 : -16} width={bar} height={12} fill="#3c2021" />
+              <rect x={-bar / 2} y={loss ? -30 : -16} width={bar * health} height={12} fill="#d91836" />
+              <text className="combat-target-health" y={loss ? -21 : -7}>
+                {number(hp)} ({Math.round(health * 100)}%)
+              </text>
+              {loss && (
+                <text className="combat-target-loss" y={-5}>
+                  {desired}
+                  {critical}
+                </text>
+              )}
+            </g>
+          )
+        }
         const figures = t("fight.entity.hp", { hp: number(hp), max: number(entity.maxHp) })
         const width = named ? Math.max(76, Math.max(name.length * 6.6, figures.length * 5.9) + 16) : BAR
         const bar = named ? width - 12 : BAR

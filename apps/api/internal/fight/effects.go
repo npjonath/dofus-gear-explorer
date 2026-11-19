@@ -980,7 +980,7 @@ func (s *Sim) hit(st *State, c *casting, at place, caster, target *Entity, a *at
 	}
 	damage = max(0, damage-fixed) * max(0, 100-resist(percentResist[element])-resist(statResistGlobal)) / 100
 	damage = s.absorb(c, target, damage)
-	target.HP -= damage
+	s.loseHealth(target, damage)
 	c.emit(Event{Type: EventDamage, Entity: target.ID, Value: damage, Element: element, Critical: c.crit})
 	casterID, targetID := caster.ID, target.ID
 	if steal && casterID != targetID {
@@ -1039,7 +1039,7 @@ func (s *Sim) shove(st *State, c *casting, caster, moved *Entity, from, cells in
 		}
 		taken := max(0, damage/(i+1)-s.StatOf(hurt)(statPushResist))
 		taken = s.absorb(c, hurt, taken)
-		hurt.HP -= taken
+		s.loseHealth(hurt, taken)
 		c.emit(Event{Type: EventDamage, Entity: hurt.ID, Value: taken, Push: true})
 	}
 }
@@ -1059,4 +1059,18 @@ func (s *Sim) absorb(c *casting, target *Entity, damage int) int {
 		c.emit(Event{Type: "shield", Entity: target.ID, Spell: c.root, Value: remaining - damage})
 	}
 	return remaining
+}
+
+// Erosion lowers the ceiling for heals. A training dummy regains its initial
+// pool on revival, including after several hits in one cast.
+func (s *Sim) loseHealth(target *Entity, damage int) {
+	if damage <= 0 {
+		return
+	}
+	if target.InitialHP == 0 {
+		target.InitialHP = target.MaxHP
+	}
+	target.HP -= damage
+	erosion := min(50, max(0, 10+s.StatOf(target)(75)))
+	target.MaxHP = max(1, target.MaxHP-damage*erosion/100)
 }

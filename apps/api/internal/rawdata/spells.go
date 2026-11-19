@@ -117,7 +117,7 @@ func castRules(level rawSpellLevel) game.CastRules {
 // unsignedBoosts gives the sign of the boosts the game data does not sign:
 // final damage and resistance in percent, and the Power kept for spells or
 // for weapons.
-var unsignedBoosts = map[int]int{1171: 1, 1172: -1, 1076: 1, 1077: -1, 1054: 1, 1144: 1}
+var unsignedBoosts = map[int]int{1171: 1, 1172: -1, 1076: 1, 1077: -1, 1054: 1, 1144: 1, 776: 1, 3804: -1}
 
 // startSpellAdmin is how the game data labels the spells a fight starts
 // with: those that set a class's states and passive effects.

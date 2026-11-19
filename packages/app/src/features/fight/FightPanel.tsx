@@ -884,7 +884,7 @@ export function FightPanel({
         </ol>
         {state.entities.some((e) => e.kind === "summon") && (
           <aside className="combat-summons">
-            <h3>{t("fight.actors")}</h3>
+            <h3>{stats.get(26)?.label ?? t("fight.actors")}</h3>
             {state.entities
               .filter((e) => e.kind === "summon")
               .map((e) => (
@@ -895,7 +895,7 @@ export function FightPanel({
                     setPanel("entity")
                   }}
                 >
-                  <svg viewBox="-25 -49 50 50" aria-hidden="true">
+                  <svg viewBox="-14 -28 28 29" aria-hidden="true">
                     <GameActor portrait kind="summon" monsterId={e.monsterId} pose="idle" direction={1} />
                   </svg>
                   <span>

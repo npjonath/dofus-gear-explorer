@@ -66,3 +66,18 @@ func TestTrainingMapUsesSeparateSightAndPlacementMasks(t *testing.T) {
 		t.Fatal("allied dummy outside its camp")
 	}
 }
+
+func TestTrainingDummyRecoversErodedHealthOnRevival(t *testing.T) {
+	sim := newSim(map[int]int{})
+	st := fightAt(sim, Dummies{HP: 1200}, [2]int{4, 6})
+	dummy := &st.Entities[1]
+	sim.loseHealth(dummy, 338)
+	if dummy.HP != 862 || dummy.MaxHP != 1167 {
+		t.Fatalf("after critical: %d / %d", dummy.HP, dummy.MaxHP)
+	}
+	sim.loseHealth(dummy, 900)
+	sim.settle(st, sim.casting(0, false, false))
+	if dummy.HP != 1200 || dummy.MaxHP != 1200 {
+		t.Fatalf("after revival: %d / %d", dummy.HP, dummy.MaxHP)
+	}
+}

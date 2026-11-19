@@ -14,6 +14,11 @@ on:
         type: boolean
         default: false
 
+# The renderer builds its declarations during install. Its bundler treats any
+# source under node_modules (including pnpm/action-setup's default store) as external.
+env:
+  npm_config_store_dir: ${{ github.workspace }}/../dde-pnpm-store
+
 permissions:
   contents: read
 

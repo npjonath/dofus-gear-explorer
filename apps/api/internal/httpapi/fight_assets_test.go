@@ -3,6 +3,7 @@ package httpapi
 import (
 	"bytes"
 	"compress/gzip"
+	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
@@ -43,6 +44,26 @@ func TestImportedAtlasServesBothEncodings(t *testing.T) {
 		}
 		if out.Code != 200 || out.Header().Get("Content-Encoding") != accept || !bytes.Equal(out.Body.Bytes(), want) {
 			t.Fatalf("encoding %q: %d %q", accept, out.Code, out.Body.String())
+		}
+	}
+}
+
+func TestDesktopCanUseImportedFontsAndMasks(t *testing.T) {
+	called := false
+	s := &Server{access: Access{LocalOnly: true}}
+	next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { called = true })
+	for _, path := range []string{"/fight-assets/hud/end-idle.png", "/api/fight"} {
+		called = false
+		q := httptest.NewRequest("GET", "http://127.0.0.1"+path, nil)
+		q.Header.Set("Origin", "null")
+		w := httptest.NewRecorder()
+		s.guard(next).ServeHTTP(w, q)
+		if path == "/api/fight" {
+			if called || w.Code != 403 {
+				t.Fatal("unexpected private API access")
+			}
+		} else if !called || w.Header().Get("Access-Control-Allow-Origin") != "*" {
+			t.Fatal("opaque origin cannot load HUD")
 		}
 	}
 }
