@@ -20,8 +20,11 @@ import { AP_STAT, HP_STAT, MP_STAT, statIndex, toneOf } from "../../lib/stats"
 import { useApi } from "../../platform"
 import type { Build } from "../../store"
 import { NumberField } from "../../ui/NumberField"
+import type { FloatCue } from "../../lib/fightTimeline"
 import { HitCells, LineLabel } from "../build/DamagePanel"
-import { elementTone, FightBoardView, type Float } from "./FightBoard"
+import { elementTone, FightBoardView } from "./FightBoard"
+import { FigurePortrait } from "./FightFigures"
+import { useFightPlayback } from "./useFightPlayback"
 
 interface LogLine {
   id: number
@@ -42,6 +45,13 @@ const elements = ["neutral", "earth", "fire", "water", "air"] as const
 const percentStats = [37, 33, 34, 35, 36]
 const fixedStats = [58, 54, 55, 56, 57]
 const CRITICAL_RESIST = 87
+// Characteristics the effects of a fight raise or lower, which no item carries.
+const fightStats = [
+  { id: 107, unit: "%" },
+  { id: 101, unit: "%" },
+  { id: 98, unit: "" },
+  { id: 103, unit: "" },
+] as const
 
 let sequence = 0
 const nextId = () => ++sequence
@@ -62,6 +72,10 @@ function SpellIcon({ slot }: { slot: FightSlot }) {
   return <img src={api.imageUrl(path)} alt="" loading="lazy" draggable={false} onError={() => setFailed(true)} />
 }
 
+type SpellGroup = "class" | "common"
+
+// Two rows whatever the class: a spell and its variant share a column, as in
+// the game's own spell list, and the common spells wait behind their tab.
 function SpellBar({
   slots,
   selected,
@@ -74,44 +88,92 @@ function SpellBar({
   onPeek(id: number | null): void
 }) {
   const { t } = useI18n()
-  const groups = [
-    { title: t("fight.classSpells"), slots: slots.filter((slot) => slot.weapon || slot.breedId !== 0) },
-    { title: t("fight.commonSpells"), slots: slots.filter((slot) => !slot.weapon && slot.breedId === 0) },
-  ].filter((group) => group.slots.length > 0)
+  const [wanted, setWanted] = React.useState<SpellGroup>("class")
+  const groups: Record<SpellGroup, FightSlot[]> = {
+    class: slots.filter((slot) => slot.weapon || slot.breedId !== 0),
+    common: slots.filter((slot) => !slot.weapon && slot.breedId === 0),
+  }
+  const names: Record<SpellGroup, { short: string; full: string }> = {
+    class: { short: t("fight.spells.class"), full: t("fight.classSpells") },
+    common: { short: t("fight.spells.common"), full: t("fight.commonSpells") },
+  }
+  const tabs = (["class", "common"] as const).filter((name) => groups[name].length > 0)
+  const tab = tabs.includes(wanted) ? wanted : (tabs[0] ?? wanted)
+  const columns = new Map<string, FightSlot[]>()
+  for (const slot of groups[tab]) {
+    const column = slot.weapon ? "weapon" : String(slot.variantOf || slot.id)
+    columns.set(column, [...(columns.get(column) ?? []), slot])
+  }
   return (
-    <div className="fight-bar grid min-w-0 flex-1 gap-2">
-      {groups.map((group) => (
-        <div key={group.title} role="group" aria-label={group.title} className="flex flex-wrap gap-1">
-          {group.slots.map((slot) => {
-            // Before the fight starts nothing can be cast, and nothing is wrong with any spell.
-            const blocked = slot.blocked && slot.blocked !== "phase" ? slot.blocked : null
-            const state = blocked ? t(`fight.blocked.${blocked}`) : ""
-            return (
-              <button
-                key={slot.id}
-                type="button"
-                className="cell fight-spell"
-                aria-pressed={selected === slot.id}
-                aria-disabled={Boolean(blocked)}
-                aria-label={[slot.name, t("item.apCost", { n: slot.apCost }), state].filter(Boolean).join(", ")}
-                onClick={() => onSelect(slot.id)}
-                onMouseEnter={() => onPeek(slot.id)}
-                onMouseLeave={() => onPeek(null)}
-                onFocus={() => onPeek(slot.id)}
-                onBlur={() => onPeek(null)}
-              >
-                <SpellIcon slot={slot} />
-                <span className="fight-spell-cost" data-tone="ap">
-                  {slot.apCost}
-                </span>
-                {slot.cooldown > 0 && <span className="fight-spell-wait">{slot.cooldown}</span>}
-              </button>
-            )
-          })}
+    <div className="flex min-w-0 flex-1 items-start gap-2">
+      {tabs.length > 1 && (
+        <div className="grid flex-none gap-1" role="group" aria-label={t("fight.spells")}>
+          {tabs.map((name) => (
+            <button
+              key={name}
+              type="button"
+              className="chip fight-tab"
+              aria-pressed={tab === name}
+              aria-label={names[name].full}
+              title={names[name].full}
+              onClick={() => setWanted(name)}
+            >
+              {names[name].short}
+            </button>
+          ))}
         </div>
-      ))}
+      )}
+      <div
+        className="fight-bar"
+        role="group"
+        aria-label={names[tab].full}
+        style={{ "--cols": String(columns.size) } as React.CSSProperties}
+      >
+        <div className="fight-bar-row">
+          {[...columns].map(([column, pair]) => (
+            <div key={column} className="fight-pair">
+              {pair.map((slot) => {
+                // Before the fight starts nothing can be cast, and nothing is wrong with any spell.
+                const blocked = slot.blocked && slot.blocked !== "phase" ? slot.blocked : null
+                const state = blocked ? t(`fight.blocked.${blocked}`) : ""
+                return (
+                  <button
+                    key={slot.id}
+                    type="button"
+                    className="cell fight-spell"
+                    aria-pressed={selected === slot.id}
+                    aria-disabled={Boolean(blocked)}
+                    aria-label={[slot.name, t("item.apCost", { n: slot.apCost }), state].filter(Boolean).join(", ")}
+                    onClick={() => onSelect(slot.id)}
+                    onMouseEnter={() => onPeek(slot.id)}
+                    onMouseLeave={() => onPeek(null)}
+                    onFocus={() => onPeek(slot.id)}
+                    onBlur={() => onPeek(null)}
+                  >
+                    <SpellIcon slot={slot} />
+                    <span className="fight-spell-cost" data-tone="ap">
+                      {slot.apCost}
+                    </span>
+                    {slot.cooldown > 0 && <span className="fight-spell-wait">{slot.cooldown}</span>}
+                  </button>
+                )
+              })}
+            </div>
+          ))}
+        </div>
+      </div>
     </div>
   )
+}
+
+// The class portrait when the app has it, the board's own figure otherwise.
+function Portrait({ entity, breedId }: { entity: FightEntity; breedId: number | null }) {
+  const api = useApi()
+  const [failed, setFailed] = React.useState<number | null>(null)
+  if (entity.kind === "player" && breedId !== null && failed !== breedId) {
+    return <img src={api.imageUrl(`/images/breeds/${breedId}.png`)} alt="" draggable={false} onError={() => setFailed(breedId)} />
+  }
+  return <FigurePortrait kind={entity.kind} />
 }
 
 function SpellSheet({ slot }: { slot: FightSlot }) {
@@ -373,7 +435,14 @@ function DummySettings({ dummies, onChange }: { dummies: FightDummies; onChange(
 
 export function FightPanel({ meta, build, input }: { meta: Meta; build: Build; input: BuildInput }) {
   const { t, number } = useI18n()
-  const stats = React.useMemo(() => statIndex(meta), [meta])
+  const stats = React.useMemo(() => {
+    // What only a fight changes has no line in a stuff's sheet: it is named here.
+    const index = statIndex(meta)
+    for (const { id, unit } of fightStats) {
+      if (!index.has(id)) index.set(id, { id, key: `fight.${id}`, label: t(`fight.stat.${id}`), unit, categoryId: 0, forgeMax: 0 })
+    }
+    return index
+  }, [meta, t])
   const [dummies, setDummies] = React.useState<FightDummies>({ count: 1, hp: 50_000, stats: {} })
   const [round, setRound] = React.useState(0)
   const start = useFightStart(input, build.breedId, dummies, round)
@@ -391,8 +460,10 @@ export function FightPanel({ meta, build, input }: { meta: Meta; build: Build; i
   const [peek, setPeek] = React.useState<number | null>(null)
   const [cursor, setCursor] = React.useState<number | null>(null)
   const [picked, setPicked] = React.useState<number | null>(null)
-  const [floats, setFloats] = React.useState<Float[]>([])
+  // The entity the player clicked in the turn order: it stays pointed until another is.
+  const [pinned, setPinned] = React.useState<number | null>(null)
   const [refused, setRefused] = React.useState<string | null>(null)
+  const playback = useFightPlayback(key)
   const logEnd = React.useRef<HTMLLIElement>(null)
 
   const aim = useFightAim(input, build.breedId, view?.state, spell).data
@@ -407,14 +478,23 @@ export function FightPanel({ meta, build, input }: { meta: Meta; build: Build; i
     setRound(round + 1)
     setSpell(null)
     setPicked(null)
-    setFloats([])
+    setPinned(null)
     setRefused(null)
+    playback.reset()
   }
 
-  function act(next: FightAction) {
+  // What a number rising from an entity says.
+  function floatText(cue: FloatCue): string {
+    if (cue.kind === "ap") return `+${number(cue.amount)} ${stats.get(AP_STAT)?.label ?? ""}`.trim()
+    return cue.amount < 0 ? `−${number(-cue.amount)}` : `+${number(cue.amount)}`
+  }
+
+  // `zone` is what the cast was shown to cover when it was aimed: the events do not say it.
+  function act(next: FightAction, zone?: number[]) {
     if (!view || action.isPending) return
+    const before = view.state
     action.mutate(
-      { state: view.state, action: next },
+      { state: before, action: next },
       {
         onSuccess: (result) => {
           const byId = new Map(result.state.entities.map((entity) => [entity.id, entity]))
@@ -422,17 +502,15 @@ export function FightPanel({ meta, build, input }: { meta: Meta; build: Build; i
             const entity = byId.get(event.entity ?? 0)
             return { id: nextId(), event, who: entity ? nameOf(entity) : "", spell: result.names[event.spell ?? -1] ?? "" }
           })
-          const risen: Float[] = result.events.flatMap((event) => {
-            const entity = byId.get(event.entity ?? 0)
-            if (!entity || !event.value) return []
-            if (event.type === "damage") {
-              return [{ id: nextId(), cell: entity.cell, text: `−${number(event.value)}`, tone: event.push ? "plain" : elementTone(event.element) }]
-            }
-            if (event.type === "heal") return [{ id: nextId(), cell: entity.cell, text: `+${number(event.value)}`, tone: "vitality" }]
-            return []
-          })
           setPlayed({ key, view: result, log: [...log, ...lines].slice(-400) })
-          setFloats((current) => [...current, ...risen])
+          // Placing an entity is not an event of the fight: it is carried to its cell all the same.
+          const carried = before.entities.find((entity) => next.type === "place" && entity.id === next.entity)
+          const moved = result.state.entities.find((entity) => entity.id === carried?.id)
+          const events: FightEvent[] =
+            carried && moved && moved.cell !== carried.cell
+              ? [{ type: "move", entity: carried.id, path: [carried.cell, moved.cell] }]
+              : result.events
+          playback.play(before, events, floatText, zone)
           setRefused(result.refused ?? null)
           if (result.spells.find((slot) => slot.id === spell)?.blocked) setSpell(null)
           requestAnimationFrame(() => logEnd.current?.scrollIntoView({ block: "nearest" }))
@@ -443,6 +521,8 @@ export function FightPanel({ meta, build, input }: { meta: Meta; build: Build; i
 
   function onCell(cell: number) {
     if (!view) return
+    // A click does not wait for the board: what was playing jumps to its end.
+    playback.skip()
     const occupant = view.state.entities.find((entity) => entity.cell === cell)
     if (view.state.phase === "placement") {
       if (occupant) setPicked(picked === occupant.id ? null : occupant.id)
@@ -450,7 +530,8 @@ export function FightPanel({ meta, build, input }: { meta: Meta; build: Build; i
       return
     }
     if (spell !== null) {
-      if (aim?.targets.some((target) => target.cell === cell)) act({ type: "cast", spell, cell })
+      const target = aim?.targets.find((candidate) => candidate.cell === cell)
+      if (target) act({ type: "cast", spell, cell }, target.zone)
       return
     }
     if (view.steps.some((step) => step.cell === cell)) act({ type: "move", cell })
@@ -471,9 +552,11 @@ export function FightPanel({ meta, build, input }: { meta: Meta; build: Build; i
   const player = state.entities.find((entity) => entity.kind === "player")!
   const shownSlot = view.spells.find((slot) => slot.id === (peek ?? spell))
   const hovered = cursor !== null ? state.entities.find((entity) => entity.cell === cursor) : undefined
-  const shownEntity = hovered ?? player
+  const shownEntity = hovered ?? state.entities.find((entity) => entity.id === pinned) ?? player
+  // Health follows the board: a loss shows when the blow lands.
+  const hpOf = (entity: FightEntity) => playback.hp?.[entity.id] ?? entity.hp
   const vitals = [
-    { stat: stats.get(HP_STAT), tone: "vitality", value: number(player.hp) },
+    { stat: stats.get(HP_STAT), tone: "vitality", value: number(hpOf(player)) },
     { stat: stats.get(AP_STAT), tone: "ap", value: number(view.ap) },
     { stat: stats.get(MP_STAT), tone: "mp", value: number(view.mp) },
   ]
@@ -481,9 +564,9 @@ export function FightPanel({ meta, build, input }: { meta: Meta; build: Build; i
   return (
     <div className="fight flex min-h-0 flex-1 flex-col lg:flex-row">
       <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 border-b border-line bg-panel px-4 py-2">
-          <strong>{fighting ? t("fight.turn", { turn: state.turn }) : t("fight.placement")}</strong>
-          <span className="min-w-0 flex-1 text-ink-2">
+        <div className="flex items-center gap-x-4 border-b border-line bg-panel px-4 py-2">
+          <strong className="flex-none">{fighting ? t("fight.turn", { turn: state.turn }) : t("fight.placement")}</strong>
+          <span className="min-w-0 flex-1 truncate text-ink-2" title={fighting ? undefined : t("fight.placementHint")}>
             {fighting
               ? t("fight.damage", { turn: number(state.turnDamage), total: number(state.totalDamage) })
               : t("fight.placementHint")}
@@ -495,15 +578,15 @@ export function FightPanel({ meta, build, input }: { meta: Meta; build: Build; i
           </Button>
         </div>
 
-        <div className="board fight-stage min-h-0 flex-1">
+        <div className="fight-stage min-h-0 flex-1">
           <FightBoardView
             view={view}
             aim={aim}
             spell={spell}
             cursor={cursor}
             picked={picked}
-            floats={floats}
-            breedId={build.breedId}
+            pointed={hovered?.id ?? pinned}
+            playback={playback}
             busy={action.isPending}
             nameOf={nameOf}
             onCursor={setCursor}
@@ -512,12 +595,42 @@ export function FightPanel({ meta, build, input }: { meta: Meta; build: Build; i
               setSpell(null)
               setPicked(null)
             }}
-            onFloatEnd={(id) => setFloats((current) => current.filter((float) => float.id !== id))}
           />
-        </div>
 
-        <div className="flex flex-wrap items-start gap-3 border-t border-line bg-panel px-4 py-3">
-          <div className="grid flex-none gap-1.5">
+          <ol className="fight-order" aria-label={t("fight.order")}>
+            {state.entities.map((entity) => {
+              const name = nameOf(entity)
+              const active = fighting && entity.kind === "player"
+              const hp = hpOf(entity)
+              return (
+                <li key={entity.id}>
+                  <button
+                    type="button"
+                    className="cell fight-order-cell"
+                    title={name}
+                    aria-label={[name, t("fight.entity.hp", { hp: number(hp), max: number(entity.maxHp) }), active ? t("fight.order.playing") : ""]
+                      .filter(Boolean)
+                      .join(", ")}
+                    aria-pressed={pinned === entity.id}
+                    aria-current={active || undefined}
+                    data-pointed={shownEntity.id === entity.id || undefined}
+                    onClick={() => setPinned(pinned === entity.id ? null : entity.id)}
+                    onMouseEnter={() => setCursor(entity.cell)}
+                    onMouseLeave={() => setCursor(null)}
+                    onFocus={() => setCursor(entity.cell)}
+                    onBlur={() => setCursor(null)}
+                  >
+                    <Portrait entity={entity} breedId={build.breedId} />
+                    <span className="fight-order-hp">
+                      <span style={{ transform: `scaleX(${Math.max(0, Math.min(1, hp / entity.maxHp))})` }} />
+                    </span>
+                  </button>
+                </li>
+              )
+            })}
+          </ol>
+
+          <div className="fight-vitals">
             {vitals.map(({ stat, tone, value }) => (
               <div key={tone} className="vital fight-vital" data-tone={tone}>
                 <span className="label">{stat?.label}</span>
@@ -525,19 +638,13 @@ export function FightPanel({ meta, build, input }: { meta: Meta; build: Build; i
               </div>
             ))}
           </div>
-          {build.breedId === null && view.spells.every((slot) => slot.weapon || slot.breedId === 0) ? (
-            <div className="grid min-w-0 flex-1 gap-2">
-              <p className="m-0 text-ink-2">{t("fight.noBreed")}</p>
-              <SpellBar slots={view.spells} selected={spell} onSelect={toggleSpell} onPeek={setPeek} />
-            </div>
-          ) : (
-            <SpellBar slots={view.spells} selected={spell} onSelect={toggleSpell} onPeek={setPeek} />
-          )}
+
           <Button
             data-variant="solid"
-            className="h-10! flex-none"
+            className="fight-end h-10!"
             disabled={action.isPending}
             onClick={() => {
+              playback.skip()
               setSpell(null)
               setPicked(null)
               act({ type: fighting ? "end" : "begin" })
@@ -545,6 +652,13 @@ export function FightPanel({ meta, build, input }: { meta: Meta; build: Build; i
           >
             {fighting ? t("fight.endTurn") : t("fight.ready")}
           </Button>
+        </div>
+
+        <div className="fight-dock flex items-start gap-3 border-t border-line bg-panel px-4 py-2">
+          {build.breedId === null && view.spells.every((slot) => slot.weapon || slot.breedId === 0) && (
+            <p className="m-0 max-w-56 flex-none text-ink-2">{t("fight.noBreed")}</p>
+          )}
+          <SpellBar slots={view.spells} selected={spell} onSelect={toggleSpell} onPeek={setPeek} />
         </div>
       </div>
 
@@ -579,6 +693,7 @@ export function FightPanel({ meta, build, input }: { meta: Meta; build: Build; i
   function toggleSpell(id: number) {
     if (!view) return
     const slot = view.spells.find((candidate) => candidate.id === id)
+    playback.skip()
     setRefused(null)
     if (!slot || slot.blocked) {
       setSpell(null)

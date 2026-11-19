@@ -31,6 +31,10 @@
   --ink-3: oklch(0.5 0.022 260);
   --cell-bg: var(--tile);
   --slot-bg: var(--panel);
+  /* The fight arena as a block: the top of a pillar, and the two faces the eye sees. */
+  --slab-top: oklch(0.875 0.012 258);
+  --slab-side: oklch(0.8 0.015 260);
+  --slab-shade: oklch(0.71 0.018 260);
 
   --accent: oklch(0.5 0.17 258);
   --accent-ink: oklch(0.99 0.005 258);
@@ -74,6 +78,9 @@
   --cell-bg: oklch(0.47 0.02 264);
   --slot-bg: var(--panel);
   --slot-filled-bg: oklch(0.47 0.02 264);
+  --slab-top: oklch(0.36 0.02 264);
+  --slab-side: oklch(0.15 0.012 264);
+  --slab-shade: oklch(0.115 0.01 264);
   --ink: oklch(0.95 0.005 258);
   --ink-2: oklch(0.82 0.012 260);
   --ink-3: oklch(0.7 0.016 262);
@@ -1561,11 +1568,12 @@ th[aria-sort="descending"] .th-sort svg { opacity: 1; }
 .damage-mean strong { color: var(--ink); font-variant-numeric: tabular-nums; }
 
 /* ───── Fight simulator ───── */
-/* The arena is drawn on the plain ground: its cells are the checker. */
+/* The arena is a slab resting on the plain ground: its cells are the checker. */
 .fight-stage {
+  position: relative;
   display: grid;
   place-items: center;
-  padding: 1rem;
+  padding: 0.75rem;
   overflow: hidden;
   background: var(--ground);
   container-type: size;
@@ -1592,74 +1600,232 @@ th[aria-sort="descending"] .th-sort svg { opacity: 1; }
   fill: var(--tile);
   stroke: var(--line);
   stroke-width: 1;
-  cursor: pointer;
-  transition: fill 120ms var(--ease-out);
 }
 
 .fight-cell[data-tone="b"] { fill: var(--ground); }
-.fight-cell[data-wall] { fill: var(--line); cursor: default; }
+.fight-cell[data-wall] { fill: var(--slab-side); }
+.fight-board[data-act] .fight-cell { cursor: pointer; }
 
-/* The three zone colours: green where the player can walk, blue where the
-   spell in hand can be aimed, red where it lands. */
-.fight-cell[data-zone="reach"] { fill: var(--ok-soft); }
-.fight-cell[data-zone="path"] { fill: var(--ok-soft); stroke: var(--ok); stroke-width: 1.5; }
-.fight-cell[data-zone="range"] { fill: var(--accent-soft); stroke: var(--accent); }
-.fight-cell[data-zone="blocked"] {
-  fill: color-mix(in oklab, var(--accent-soft) 40%, var(--ground));
-  stroke: var(--line-strong);
-  stroke-dasharray: 3 3;
-  cursor: default;
+/* The slab's two front faces and its rim; a pillar is the same block, raised. */
+.fight-slab[data-face="left"],
+.fight-pillar [data-face="left"] { fill: var(--slab-side); }
+.fight-slab[data-face="right"],
+.fight-pillar [data-face="right"] { fill: var(--slab-shade); }
+.fight-pillar [data-face="top"] { fill: var(--slab-top); }
+.fight-pillar polygon { stroke: var(--line-strong); stroke-width: 1; stroke-linejoin: round; }
+.fight-rim { fill: none; stroke: var(--line-strong); stroke-width: 1.2; stroke-linejoin: round; }
+
+.fight-rim,
+.fight-pillar,
+.fight-zone,
+.fight-cursor,
+.fight-ghost,
+.fight-entity,
+.fight-label,
+.fight-impact,
+.fight-bolt,
+.fight-burst,
+.fight-float,
+.fight-cost { pointer-events: none; }
+
+/* The three zone colours, as tiles laid on the cells: green where the player
+   can walk, blue where the spell in hand can be aimed, red where it lands. */
+.fight-zone { stroke-width: 1.2; stroke-linejoin: round; }
+.fight-zone[data-zone="reach"] { fill: var(--ok-soft); stroke: color-mix(in oklab, var(--ok) 50%, var(--ok-soft)); }
+.fight-zone[data-zone="path"] { fill: var(--ok-soft); stroke: var(--ok); stroke-width: 2; }
+.fight-zone[data-zone="range"] { fill: var(--accent-soft); stroke: color-mix(in oklab, var(--accent) 65%, var(--accent-soft)); }
+.fight-zone[data-zone="blocked"] {
+  fill: color-mix(in oklab, var(--accent-soft) 30%, transparent);
+  stroke: color-mix(in oklab, var(--accent) 55%, var(--line-strong));
+  stroke-dasharray: 4 3;
 }
-.fight-cell[data-zone="impact"] { fill: var(--bad-soft); stroke: var(--bad); stroke-width: 1.5; }
+.fight-zone[data-zone="impact"] { fill: var(--bad-soft); stroke: var(--bad); stroke-width: 2; }
+.fight-zone[data-zone="picked"] { fill: var(--accent-soft); stroke: var(--accent); stroke-width: 2; }
 
-.fight-pillar { fill: var(--line-strong); stroke: var(--ink-3); pointer-events: none; }
-.fight-cursor { fill: none; stroke: var(--ink); stroke-width: 2; pointer-events: none; }
-.fight-ghost { fill: none; stroke: var(--ink-3); stroke-width: 1.5; stroke-dasharray: 3 3; pointer-events: none; }
+.fight-cursor {
+  fill: color-mix(in oklab, var(--ink) 12%, transparent);
+  stroke: var(--ink);
+  stroke-width: 2;
+  stroke-linejoin: round;
+}
 
-.fight-entity { pointer-events: none; }
-.fight-token { fill: var(--cell-bg); stroke: var(--line-strong); }
-.fight-entity[data-picked] .fight-token { stroke: var(--accent); stroke-width: 2; }
-.fight-glyph { fill: none; stroke: var(--ink-2); stroke-width: 1.6; stroke-linecap: round; }
-.fight-hp-track { fill: var(--line); }
-.fight-hp { fill: var(--st-vitality); }
+.fight-ghost {
+  fill: color-mix(in oklab, var(--panel) 45%, transparent);
+  stroke: var(--ink-2);
+  stroke-width: 1.4;
+  stroke-dasharray: 3.5 3;
+  stroke-linejoin: round;
+}
+
+/* The pieces: flat shapes in ink, standing on a plain patch of ground. */
+.fight-foot { fill: var(--line-strong); opacity: 0.55; }
+.fight-hit { fill: transparent; pointer-events: all; cursor: pointer; }
+
+.fight-entity[data-picked] .fight-foot { fill: var(--accent-soft); stroke: var(--accent); stroke-width: 2; opacity: 1; }
+
+.fight-fig .fig-ink { fill: var(--ink); }
+.fight-fig .fig-body { fill: var(--ink-2); }
+.fight-fig .fig-trim { fill: var(--cell-bg); }
+.fight-fig .fig-face { fill: var(--cell-bg); stroke: var(--ink); stroke-width: 1; }
+.fight-fig .fig-wood { fill: var(--ink-3); }
+.fight-fig .fig-arm { fill: none; stroke: var(--ink-3); stroke-width: 4.4; stroke-linecap: round; }
+.fight-fig .fig-pip { fill: var(--cell-bg); stroke: var(--ink); stroke-width: 1; }
+.fight-fig .fig-pip[data-tone] { fill: var(--tone); }
+.fight-fig .fig-pad { fill: var(--cell-bg); stroke: var(--ink-3); stroke-width: 1.1; }
+.fight-fig .fig-stitch { fill: none; stroke: var(--ink-3); stroke-width: 1; stroke-dasharray: 2 2; }
+.fight-fig .fig-ring { fill: none; stroke: var(--ink-2); stroke-width: 1.7; }
+
+.fight-entity[data-pose="idle"] :is(.fig-breath, .fig-sway) {
+  transform-box: fill-box;
+  transform-origin: 50% 100%;
+  animation: fight-breathe 3.4s ease-in-out infinite;
+  animation-delay: calc(var(--beat, 0ms) * -1);
+}
+.fight-entity[data-pose="idle"] .fig-sway { animation-name: fight-sway; animation-duration: 4.6s; }
+
+@keyframes fight-breathe {
+  50% { scale: 1.012 1.034; }
+}
+
+@keyframes fight-sway {
+  from, to { rotate: -0.9deg; }
+  50% { rotate: 0.9deg; }
+}
+
+.fight-hp-track { fill: var(--panel); stroke: var(--line-strong); stroke-width: 0.8; }
+.fight-hp {
+  fill: var(--st-vitality);
+  transform-box: fill-box;
+  transform-origin: 0 50%;
+  transition: transform 380ms var(--ease-out);
+}
 .fight-hp-loss { fill: var(--ink-3); }
 
+.fight-readout { fill: var(--panel); stroke: var(--line-strong); stroke-width: 1; }
+.fight-readout-name { font-size: 11.5px; font-weight: 700; fill: var(--ink); }
+.fight-readout-hp { font-size: 10.5px; font-weight: 700; fill: var(--tone); }
+
 .fight-preview,
-.fight-float,
+.fight-float text,
 .fight-cost {
   text-anchor: middle;
   font-weight: 800;
   paint-order: stroke;
   stroke: var(--panel);
-  stroke-width: 3px;
+  stroke-width: 3.5px;
   stroke-linejoin: round;
-  pointer-events: none;
 }
 
-.fight-preview { font-size: 11px; fill: var(--ink); }
+.fight-preview { font-size: 12px; fill: var(--ink); }
 .fight-preview-crit { fill: var(--st-critical); }
-.fight-cost { font-size: 11px; fill: var(--tone, var(--ink)); }
+.fight-cost { font-size: 12px; fill: var(--tone, var(--ink)); }
 
-.fight-float {
-  font-size: 13px;
-  fill: var(--tone, var(--ink));
-  animation: fight-rise 1100ms var(--ease-out) both;
+/* What flies and what lands. The projectile is a pip in the tone of its element. */
+.fight-bolt line { stroke: var(--tone, var(--ink-2)); stroke-linecap: round; opacity: 0.5; }
+.fight-bolt rect { fill: var(--tone, var(--ink-2)); stroke: var(--panel); stroke-width: 1.2; }
+.fight-impact polygon { fill: var(--bad); fill-opacity: 0.6; }
+.fight-impact .fight-impact-ring { fill: none; stroke: var(--bad); stroke-width: 2.5; vector-effect: non-scaling-stroke; }
+.fight-burst,
+.fight-float-mark {
+  fill: var(--st-critical);
+  stroke: var(--panel);
+  stroke-width: 1.4;
+  stroke-linejoin: round;
+  paint-order: stroke;
+  vector-effect: non-scaling-stroke;
 }
+
+.fight-float { animation: fight-rise 1500ms var(--ease-out) both; }
+.fight-float text { text-anchor: start; font-size: 15px; fill: var(--tone, var(--ink)); }
 
 @keyframes fight-rise {
-  from { opacity: 0; translate: 0 4px; }
-  15% { opacity: 1; translate: 0 0; }
-  70% { opacity: 1; }
-  to { opacity: 0; translate: 0 -22px; }
+  from { opacity: 0; translate: 0 8px; }
+  12% { opacity: 1; translate: 0 0; }
+  72% { opacity: 1; }
+  to { opacity: 0; translate: 0 -24px; }
 }
 
 @keyframes fight-fade {
-  from { opacity: 1; }
+  from, 70% { opacity: 1; }
   to { opacity: 0; }
 }
 
-.fight-spell {
+/* Around the arena, in the corners its diamond leaves free. */
+.fight-order {
+  position: absolute;
+  top: 0.75rem;
+  left: 0.75rem;
+  display: flex;
+  gap: 0.3rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.fight-order-cell {
   --cell: 2.6rem;
+  padding: 0 0 4px;
+  overflow: hidden;
+  border-color: var(--line-strong);
+  cursor: pointer;
+  transition: border-color 160ms var(--ease-out), box-shadow 160ms var(--ease-out);
+}
+
+.fight-order-cell .fight-portrait { width: 84%; height: 84%; }
+.fight-order-cell:hover,
+.fight-order-cell[data-pointed] { border-color: var(--ink); }
+.fight-order-cell[aria-pressed="true"] { background: var(--accent-soft); }
+.fight-order-cell[aria-current] { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent); }
+
+.fight-order-hp {
+  position: absolute;
+  inset: auto 0 0;
+  height: 4px;
+  background: var(--panel);
+}
+
+.fight-order-hp span {
+  display: block;
+  height: 100%;
+  background: var(--st-vitality);
+  transform-origin: 0 50%;
+  transition: transform 380ms var(--ease-out);
+}
+
+.fight-vitals {
+  position: absolute;
+  left: 0.75rem;
+  bottom: 0.75rem;
+  display: grid;
+  gap: 0.3rem;
+}
+
+.fight-vital { min-width: 6.6rem; padding: 0.15rem 0.6rem; background: var(--panel); }
+.fight-vital .value { font-size: 1.1rem; }
+
+.fight-stage > .fight-end {
+  position: absolute;
+  right: 0.75rem;
+  bottom: 0.75rem;
+}
+
+/* The spell bar: two rows, a spell over its variant, cells as wide as the room allows. */
+.fight-bar { flex: 1; min-width: 0; container-type: inline-size; }
+
+.fight-bar-row {
+  --gap: 3px;
+  --cell: clamp(1.85rem, calc((100cqw - 4px - (var(--cols) - 1) * var(--gap)) / var(--cols)), 2.6rem);
+  display: flex;
+  gap: var(--gap);
+  padding: 2px;
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+
+.fight-pair { display: grid; flex: none; align-content: start; gap: var(--gap); }
+.fight-tab { justify-content: center; min-width: 5.2rem; padding: 0 0.4rem; }
+
+.fight-spell {
   padding: 0;
   border-color: var(--line-strong);
   cursor: pointer;
@@ -1701,22 +1867,21 @@ th[aria-sort="descending"] .th-sort svg { opacity: 1; }
   font-size: 1.1rem;
 }
 
-/* A character has more spells than a row holds: the bar keeps three rows and scrolls. */
-.fight-bar { max-height: 9.4rem; overflow-y: auto; padding: 2px; }
-
-.fight-vital { min-width: 7rem; padding: 0.2rem 0.6rem; }
-.fight-vital .value { font-size: 1.1rem; }
-
 .fight-lines { grid-template-columns: minmax(0, 1fr) 4.9rem 4.9rem; gap: 0.5rem; }
 
 .fight-log li { padding: 0.1rem 0; color: var(--ink-2); font-size: 0.93rem; }
 .fight-log .fight-log-turn { margin-top: 0.5rem; color: var(--ink); font-weight: 700; }
 .fight-log .fight-log-turn:first-child { margin-top: 0; }
 
+/* Stacked under the lg breakpoint, the stage has no column to fill: it takes
+   a height of its own, which its container units need to be definite. */
 @media (max-width: 64rem) {
-  .fight-stage { min-height: 22rem; }
+  .fight-stage { flex: none; height: clamp(24rem, 70svh, 44rem); }
 }
 
+/* Without motion nothing travels or loops: the board shows where things end,
+   and the numbers stay long enough to be read. */
 @media (prefers-reduced-motion: reduce) {
-  .fight-float { animation: fight-fade 900ms linear both; animation-duration: 900ms !important; }
+  .fight-float { animation: fight-fade 1400ms linear both; animation-duration: 1400ms !important; }
+  .fight-entity :is(.fig-breath, .fig-sway) { animation: none !important; }
 }

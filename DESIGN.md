@@ -13,6 +13,9 @@ colors:
   ink-3: "oklch(0.5 0.022 260)"
   cell-bg: "oklch(0.925 0.011 258)"
   slot-bg: "oklch(0.992 0.002 258)"
+  slab-top: "oklch(0.875 0.012 258)"
+  slab-side: "oklch(0.8 0.015 260)"
+  slab-shade: "oklch(0.71 0.018 260)"
   accent: "oklch(0.5 0.17 258)"
   accent-ink: "oklch(0.99 0.005 258)"
   accent-soft: "oklch(0.93 0.04 256)"
@@ -324,7 +327,7 @@ Spacing follows a 0.25rem step. Panel padding is 1rem (1.25rem for the search fo
 
 ## Elevation & Depth
 
-Flat. Panels are told apart by a one-pixel `line` and by small tonal steps between `ground`, `panel` and `panel-2`, not by shadow. The board's depth is its checker.
+Flat. Panels are told apart by a one-pixel `line` and by small tonal steps between `ground`, `panel` and `panel-2`, not by shadow. The board's depth is its checker. The fight arena alone is drawn as a block, with a rim and two darker front faces (`slab-top`, `slab-side`, `slab-shade`); it still casts nothing.
 
 ### Shadow Vocabulary
 
@@ -465,9 +468,23 @@ The desktop icon is the brand mark at scale: the four cells (accent blue, ok gre
 
 ### Fight board
 
-The Fight view of a stuff is the one place where the board is played on. The arena sits on plain `ground`; its cells are squares seen at an angle, filled alternately with `tile` and `ground` and edged with `line`, so the arena is its own checker. The three zone colours keep their meaning and nothing else on the arena has hue: `ok-soft` where the player can walk (the way to the pointed cell edged in `ok`, with its cost in MP), `accent-soft` edged in `accent` where the spell in hand can be aimed (a dashed edge on a cell in range but out of sight), `bad-soft` edged in `bad` where it lands. Entities are square cells on `cell-bg`: the class portrait for the player, an authored target glyph for a dummy, a health bar in the Vitality tone above. What a cast would cost a target is written above it, the critical figure in the Critical tone; numbers that rise after a cast take the tone of their element. Pillars are flat `line-strong` blocks: nothing on the arena casts a shadow.
+The Fight view of a stuff is the one place where the board is played on. The arena is a slab resting on plain `ground`. Its cells are squares seen at an angle, filled alternately with `tile` and `ground` and edged with `line`, so the arena is its own checker; a `line-strong` rim goes round it, and its two front sides are thin faces in `slab-side` and `slab-shade`, darker than the cells in both themes. A pillar is the same block, raised: a `slab-top` top over the same two faces. Depth is drawn, never cast: what stands nearer the viewer is drawn over what stands behind it, and nothing on the arena has a shadow.
 
-Under the arena, the vitals are vital tiles, the spells are item cells that press like slot chips (blue ring and wash when in hand, dimmed when they cannot be cast, the AP cost in a corner tag in the AP tone, the turns to wait written over the icon), and "End turn" is the panel's one solid button. The right column reads top to bottom: the spell in hand or under the pointer, the lasting effects of the pointed entity, the log.
+The three zone colours keep their meaning and nothing else on the ground has hue. A zone is a tile laid on a cell, a little smaller than it, so the checker's lines still show between tiles: `ok-soft` where the player can walk (the way to the pointed cell edged in `ok`, with its cost in MP), `accent-soft` edged in `accent` where the spell in hand can be aimed (a dashed edge and next to no fill on a cell in range but out of sight), `bad-soft` edged in `bad` where it lands. The pointed cell takes a two-pixel `ink` edge and a faint ink wash, and the pointer is a hand only over a cell where a click does something.
+
+The pieces are the app's own drawings (`features/fight/FightFigures.tsx`), flat shapes in the ink and cell tokens: a hooded adventurer with a staff for the player, whatever the class, and a padded post with a target for a training dummy. Nothing of the game's art stands on the board; the class portrait only appears as a cell of the turn order. A piece stands on its cell, feet at the centre, on a small `line-strong` patch of ground, and is mirrored to look left or right. A piece has no hue of its own: the one colour it may carry is the pip at the top of the staff, which takes an element's tone while a spell of that element is cast. Above each piece, a health bar in the Vitality tone. The pointed piece gets a readout instead: a small `panel` with the strong line, its name in bold, its health in figures in the Vitality tone and the bar. While a cast is previewed, what it would cost the target takes the readout's place, the critical figure in the Critical tone, and a dashed outline of the piece marks the cell a shove would leave it on.
+
+**Motion on the arena says what happened, in the order it happened.** One action plays as one sequence, laid out by `lib/fightTimeline.ts` from the events the engine returns, and the board always ends on the state the engine gave.
+
+- **Idle:** the adventurer breathes, a dummy sways a degree on its post. Nothing else loops.
+- **Walk:** cell by cell along the path, 125ms a cell, eased in and out, looking the way it goes, with a small step.
+- **Shove:** a pushed or pulled piece slides along its path at 55ms a cell, leaning back, without the walk; everything one effect shoves moves at once. A piece carried to a cell that is not next to it fades out and back in.
+- **Cast:** the staff is drawn back and thrust; a pip in the element's tone (ink when the spell deals nothing) flies to the aimed cell with a short streak. Next to its target, the caster strikes it and nothing flies. The cells the cast covers then flash in `bad`, with a ring spreading from the aimed cell.
+- **Hit:** the target recoils (a dummy springs on its post), its bar slides to the new value, and the numbers rise one after the other in the tone of their element. A critical hit is never told by colour alone: an eight-pointed burst in the Critical tone opens where it lands and leads each of its numbers, which are set larger. A defeated dummy topples, then stands back up.
+
+A click never waits for the board: whatever was playing jumps to its end, and the zones come back as soon as the blow has landed, while the target still recoils. With reduced motion nothing travels or loops: pieces appear on their final cell, and the numbers show at once and hold before they fade. What is written on the board (numbers, readout, cost) keeps its size on screen when the board is drawn small.
+
+Around the arena, in the corners its diamond leaves free: the turn order at the top left (one item cell per entity with its portrait or its piece, a health bar along the bottom edge, the name on hover, a two-pixel `accent` ring on the one whose turn it is; pointing or clicking a cell points the entity, as pointing it on the board does), the vitals as vital tiles at the bottom left, and "End turn", the view's one solid button, at the bottom right. Under the arena, the spell bar holds two rows whatever the class: a spell and its variant share a column, as in the game's spell list, the cells shrink from 2.6rem to 1.85rem to fit the width and then scroll sideways, and two chips switch between the class's spells and the common ones. Spells are item cells that press like slot chips (blue ring and wash when in hand, dimmed when they cannot be cast, the AP cost in a corner tag in the AP tone, the turns to wait written over the icon). The right column reads top to bottom: the spell in hand or under the pointer, the lasting effects of the pointed entity, the log.
 
 ### Banner, stage and popups
 

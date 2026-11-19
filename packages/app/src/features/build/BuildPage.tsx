@@ -677,7 +677,8 @@ export function BuildPage({ meta }: { meta: Meta }) {
         leftSize={20}
         right={showSlot ? slotPanel : undefined}
       >
-        {breakpoint === "xl" ? (
+        {/* A fight needs the height: under xl the characteristics stay with the Equipment view. */}
+        {breakpoint === "xl" || view === "fight" ? (
           board
         ) : (
           <div className="flex h-full min-h-0 flex-col">
