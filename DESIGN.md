@@ -35,7 +35,14 @@ colors:
   st-range: "oklch(0.5 0.1 200)"
   st-critical: "oklch(0.56 0.15 55)"
   st-prospecting: "oklch(0.55 0.12 88)"
+  combat-ping: "#ffcc52"
+  combat-ping-fill: "#ffcc5266"
 typography:
+  combat-body:
+    fontFamily: "CombatLexend, system-ui, sans-serif"
+    fontSize: "calc(15 * var(--hud-unit))"
+  combat-display:
+    fontFamily: "CombatRowdies, CombatLexend, sans-serif"
   headline:
     fontFamily: "Figtree Variable, ui-sans-serif, system-ui, sans-serif"
     fontSize: "1.25rem"
@@ -207,7 +214,7 @@ It is a working tool, dense on purpose. The root size is small (14px), rows are 
 
 It refuses two looks by construction: the dark neon gamer dashboard (no glow, no gradients on controls, the dark theme is the same slate board at night, not black) and the white SaaS admin table (the ground is tinted, state is carried by game colours, item cells and slots are the recurring shape instead of cards).
 
-Tokens live in one place, `packages/app/src/styles.css`: the light theme on `:root`, the dark theme on `:root[data-theme="dark"]`. That file is normative. The frontmatter above is the light theme as it stood when this was written; if a value there and the stylesheet disagree, the stylesheet is right and the role described here still holds.
+The Items and Stuff themes live in `packages/app/src/styles.css`, with light tokens on `:root` and dark tokens on `:root[data-theme="dark"]`. The combat viewport uses the local client’s fonts and its own targeting indicators. The frontmatter records the light theme and the combat roles shared across themes.
 
 **Key Characteristics:**
 
@@ -215,7 +222,7 @@ Tokens live in one place, `packages/app/src/styles.css`: the light theme on `:ro
 - Square cells for every item image and every equipment slot, in three sizes of the same shape.
 - Three zone colours used only as state: blue selected, green valid, red failing.
 - Twelve stat tones, resolved from the stat itself, shown as a cell-shaped pip or as the colour of the number.
-- One typeface, four weights, tabular numerals everywhere.
+- Figtree with tabular numerals on Items and Stuff. The combat HUD uses the fonts imported from DOFUS.
 - Flat panels separated by one-pixel lines; shadow only under things that float.
 - Light and dark themes with the same roles; both are first-class.
 
@@ -249,6 +256,10 @@ Stat tones. Each characteristic resolves to one tone through `toneOf` in `packag
 - **Critical Amber** (`st-critical`): critical hit.
 - **Prospecting Gold** (`st-prospecting`): prospecting.
 
+### Combat targeting
+
+Alt-click marks a cell for 1.2 seconds. The `combat-ping` outline and its 40% fill, `combat-ping-fill`, keep the position visible over the room artwork. The pointer keeps its white outline as it moves to another cell.
+
 ### Neutral
 
 - **Board Slate** (`ground`) and **Checker Slate** (`tile`): the board. `ground` is the page and the fill of the filter rail; `tile` is the second tone of the checker, the table header, and the fill of loading skeletons.
@@ -271,11 +282,9 @@ In the dark theme the roles are identical and the board stays slate: the neutral
 
 ## Typography
 
-**Display Font:** none; the system has no display face.
-**Body Font:** Figtree Variable, self-hosted (with ui-sans-serif, system-ui, sans-serif)
-**Label/Mono Font:** the same family; alignment of figures comes from tabular numerals, not from a mono face.
+Items and Stuff use the self-hosted Figtree Variable family with a system sans-serif fallback. Weight and ink level distinguish labels from values. Tabular numerals align the stat columns.
 
-**Character:** one friendly geometric sans doing all the work, kept small and set heavy where it counts. Hierarchy comes from weight and ink level before it comes from size.
+The combat HUD loads Lexend Regular and Bold under the CSS name `CombatLexend` for labels, menus and the combat log. It loads Rowdies Regular as `CombatRowdies` for the stuff name, gauge values and turn button. Both families come from the installed DOFUS client.
 
 ### Hierarchy
 
@@ -297,7 +306,7 @@ Controls from the component library sit at 0.875rem with the same family; button
 
 **The Tabular Rule.** Tabular numerals are on for the whole document. Numeric columns are right-aligned; names are left-aligned and truncate with an ellipsis rather than wrap.
 
-**The Four Weights Rule.** 400 for prose, 600 for labels and controls, 700 for values and titles, 800 for vitals. No italics, no tracked uppercase labels, no letter-spacing other than a slight tightening on the product name.
+**The Four Weights Rule.** On Items and Stuff, use 400 for prose, 600 for labels and controls, 700 for values and titles, 800 for vitals. No italics, no tracked uppercase labels, no letter-spacing other than a slight tightening on the product name.
 
 ## Layout
 
@@ -534,4 +543,4 @@ Resting the pointer on an item (a board slot, a search result cell, a set piece)
 - **Don't** add glow, gradient fills on buttons, panels or text, or a black neon dark theme; the dark ground is the same slate, at night.
 - **Don't** lay data tables, lists or sheets on the ground or the checker, or box result rows into cards.
 - **Don't** show a stuff as valid before its evaluation says so, or hide a failing condition behind colour alone.
-- **Don't** introduce a second typeface, tracked uppercase labels, or weights outside the four in use (a quiet zero at 500 is the one exception).
+- **Don't** introduce another typeface or tracked uppercase labels on Items and Stuff. Use the four documented weights there, with 500 for a quiet zero.
