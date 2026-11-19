@@ -2475,10 +2475,10 @@ th[aria-sort="descending"] .th-sort svg { opacity: 1; }
 .combat-stage .fight-board[data-room] {
   width: min(calc(var(--room-width) * 0.84 * var(--scene-unit)), 125cqw);
   max-width: none;
-  transform: translateY(calc(-36 * var(--hud-unit)));
+  transform: translateY(calc(-36 * var(--scene-unit)));
 }
 .combat-stage .fight-board[data-room="192419850"] {
-  transform: translate(calc(32 * var(--hud-unit)), calc(-42 * var(--hud-unit)));
+  transform: translate(calc(32 * var(--scene-unit)), calc(-42 * var(--scene-unit)));
 }
 .combat-top nav button:has(> svg:only-child):not([aria-label]) {
   width: auto;
@@ -2753,3 +2753,59 @@ th[aria-sort="descending"] .th-sort svg { opacity: 1; }
 @media (max-width:700px) {.fight-screen{--scene-unit:.8px}.fight-screen[data-rows="2"] .combat-deck{max-height:4.2rem}.fight-screen[data-rows="2"] .combat-spells{min-height:0}}
 .combat-dialog .combat-popup-log {padding:.65em .8em;max-height:48dvh;overflow:auto}
 .combat-dialog .combat-popup-log li {font-size:inherit;line-height:inherit}
+
+/* Frame the imported Astrub backdrop without moving its interactive grid. */
+.fight-board[data-room="192419850"] .combat-room-art {
+  clip-path: inset(0 8.3% 0 2.3%);
+  transform-box: fill-box;
+}
+
+@media (min-width: 701px) {
+  .combat-dock {
+    --dock-size: var(--dock-preference, clamp(.45px, round(nearest, min(.05556vw, .1dvh), .05px), 1.35px));
+    /* Leave room to open the chat at the largest manual interface size. */
+    --dock-unit: min(var(--dock-size), calc((100vw - 126px) / 1100));
+    left: 0;
+    right: 0;
+    bottom: calc(8 * var(--dock-unit));
+    justify-content: center;
+    gap: calc(10 * var(--dock-unit));
+  }
+  .combat-dock .combat-chat {
+    position: absolute;
+    bottom: 0;
+    left: calc(8 * var(--dock-unit));
+    width: min(calc(300 * var(--dock-unit)), max(0px, calc(50% - 565 * var(--dock-unit))));
+    height: calc(220 * var(--dock-unit));
+  }
+  .combat-chat .fight-log li {font-size:calc(var(--chat-size,14) * 1.2 * var(--dock-unit))}
+  .combat-dock .combat-vitals {
+    box-sizing: border-box;
+    padding: 0;
+    width: calc(164 * var(--dock-unit));
+    height: calc(144 * var(--dock-unit));
+    margin-bottom: calc(34 * var(--dock-unit));
+    align-content: center;
+  }
+  .combat-points span {width:calc(50 * var(--dock-unit));height:calc(50 * var(--dock-unit))}
+  .combat-heart {width:calc(96 * var(--dock-unit));height:calc(96 * var(--dock-unit))}
+  .combat-dock .combat-spells {
+    --cell: calc(49 * var(--dock-unit));
+    width: calc(685 * var(--dock-unit));
+    min-height: calc(186 * var(--dock-unit));
+    padding: calc(4 * var(--dock-unit)) calc(8 * var(--dock-unit));
+  }
+  .combat-deck {grid-template-columns:repeat(12,minmax(0,1fr));max-height:calc(156 * var(--dock-unit))}
+  .fight-screen[data-rows="2"] .combat-dock .combat-spells {min-height:calc(134 * var(--dock-unit))}
+  .fight-screen[data-rows="2"] .combat-deck {max-height:calc(104 * var(--dock-unit))}
+  .combat-endbox {
+    box-sizing: border-box;
+    width: calc(227 * var(--dock-unit));
+    min-width: 0;
+    height: calc(94 * var(--dock-unit));
+    padding: calc(24 * var(--dock-unit)) calc(10 * var(--dock-unit)) 0;
+  }
+}
+
+.combat-chat h3 {position:relative;justify-content:center}
+.combat-chat h3 button {position:absolute;right:0}

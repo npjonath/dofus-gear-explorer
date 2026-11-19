@@ -740,6 +740,7 @@ export function FightBoardView({
         </defs>
         {room && (
           <image
+            className="combat-room-art"
             href={api.imageUrl(`/fight-assets/maps/${board.id}.webp`)}
             {...room}
             preserveAspectRatio="none"

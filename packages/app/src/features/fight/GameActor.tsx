@@ -27,6 +27,7 @@ export interface GameSpriteProps {
   resolution?: number
   phase?: number
   effectColors?: boolean
+  headshot?: "player" | "dummy"
   portrait?: boolean
   fallback?: React.ReactNode
 }
@@ -68,9 +69,63 @@ function freeSprite(sprite: DofusSprite | undefined) {
 
 let nextPortrait: Promise<unknown> = Promise.resolve()
 
-function StillPortrait({ assetRoot, pack = "", look, bone, animation, direction, scale = 0.58, fallback }: GameSpriteProps) {
+// World sprites include transparent space around their animated attachments.
+// Frame the visible upper body in the timeline independently of the floor pivot.
+function portraitCanvas(source: HTMLCanvasElement, kind: "player" | "dummy") {
+  const canvas = document.createElement("canvas")
+  canvas.width = source.width
+  canvas.height = source.height
+  const context = canvas.getContext("2d")
+  if (!context) return source
+  context.drawImage(source, 0, 0)
+  const { data } = context.getImageData(0, 0, canvas.width, canvas.height)
+  let top = canvas.height,
+    bottom = -1
+  for (let y = 0; y < canvas.height; y++) {
+    for (let x = 0; x < canvas.width; x++) {
+      if (data[(y * canvas.width + x) * 4 + 3]! < 32) continue
+      top = Math.min(top, y)
+      bottom = y
+      break
+    }
+  }
+  if (bottom < top) return source
+  const height = bottom - top + 1
+  // The straw dummy's pole extends above its face.
+  const start = top + Math.floor(height * (kind === "dummy" ? 0.18 : 0))
+  const side = Math.max(1, Math.ceil(height * (kind === "dummy" ? 0.7 : 0.66)))
+  let left = canvas.width,
+    right = 0
+  for (let y = start; y < Math.min(start + side, canvas.height); y++) {
+    for (let x = 0; x < canvas.width; x++) {
+      if (data[(y * canvas.width + x) * 4 + 3]! >= 32) {
+        left = Math.min(left, x)
+        right = Math.max(right, x)
+      }
+    }
+  }
+  const crop = document.createElement("canvas")
+  crop.width = side
+  crop.height = side
+  const cropped = crop.getContext("2d")
+  if (!cropped) return source
+  cropped.drawImage(canvas, Math.floor((side - left - right) / 2), -start)
+  return crop
+}
+
+function StillPortrait({
+  assetRoot,
+  pack = "",
+  look,
+  bone,
+  animation,
+  direction,
+  scale = 0.58,
+  headshot,
+  fallback,
+}: GameSpriteProps) {
   const { data } = useQuery({
-    queryKey: ["fight-portraits", assetRoot, pack, look, bone, animation, direction],
+    queryKey: ["fight-portraits", assetRoot, pack, look, bone, animation, direction, headshot],
     queryFn: ({ signal }) => {
       const render = nextPortrait.then(async () => {
         signal.throwIfAborted()
@@ -87,7 +142,7 @@ function StillPortrait({ assetRoot, pack = "", look, bone, animation, direction,
           await sprite.prepareAnimation(name, 2, true, flip)
           sprite.renderFrame(0)
           return {
-            href: canvas.toDataURL(),
+            href: (headshot ? portraitCanvas(canvas, headshot) : canvas).toDataURL(),
             x: -sprite.openGl.offset.x / 2,
             y: -sprite.openGl.offset.y / 2,
             width: canvas.width / 2,
@@ -104,6 +159,7 @@ function StillPortrait({ assetRoot, pack = "", look, bone, animation, direction,
     retry: false,
   })
   if (!data) return fallback
+  if (headshot) return <image href={data.href} x={0} y={0} width={100} height={100} aria-hidden="true" />
   return (
     <image
       href={data.href}
@@ -259,6 +315,7 @@ export interface GameActorProps {
   kind: "player" | "dummy" | "summon"
   placement?: boolean
   carrying?: boolean
+  headshot?: "player" | "dummy"
   portrait?: boolean
   pack?: string
   monsterId?: number
@@ -326,7 +383,7 @@ export function GameActor(props: GameActorProps) {
   const bones = player
     ? [`1-${breed}-combat`, "1-combat-armes", "1-combat", `1-${breed}-static`, "1-movement", "1-static"]
     : [creatureBone]
-  const candidates: string[] = []
+  const candidates: string[] = props.headshot === "player" ? ["AnimStatique", "AnimStatiqueCombat0"] : []
   switch (props.pose) {
     case "walk":
       if (props.carrying) candidates.push("AnimCourseCarrying", "AnimMarcheCarrying")
@@ -355,6 +412,7 @@ export function GameActor(props: GameActorProps) {
       assetRoot={root}
       pack={pack}
       portrait={props.portrait}
+      headshot={props.headshot}
       look={look}
       {...clip}
       direction={props.direction ?? (player ? 3 : 1)}

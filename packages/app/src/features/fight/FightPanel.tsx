@@ -964,7 +964,7 @@ export function FightPanel({
         data-rows={prefs.rows}
         style={
           {
-            ...(!prefs.autoScale && { "--hud-unit": prefs.scale / 100 + "px" }),
+            ...(!prefs.autoScale && { "--hud-unit": prefs.scale / 100 + "px", "--dock-preference": prefs.scale / 100 + "px" }),
             "--chat-size": prefs.chatSize,
             "--chat-leading": prefs.chatSpacing / 100,
             "--chat-opacity": prefs.chatOpacity / 100,
@@ -1073,16 +1073,7 @@ export function FightPanel({
                     onMouseLeave={() => setCursor(null)}
                   >
                     {art ? (
-                      <svg
-                        viewBox={
-                          entity.kind === "player"
-                            ? "-15 -58 30 33"
-                            : entity.kind === "summon"
-                              ? "-14 -28 28 29"
-                              : "-20 -66 40 57"
-                        }
-                        aria-hidden="true"
-                      >
+                      <svg viewBox={entity.kind === "summon" ? "-14 -28 28 29" : "0 0 100 100"} aria-hidden="true">
                         <GameActor
                           kind={entity.kind}
                           breedId={build.breedId}
@@ -1090,6 +1081,7 @@ export function FightPanel({
                           monsterId={entity.monsterId}
                           direction={entity.kind === "player" ? 3 : 1}
                           portrait
+                          headshot={entity.kind === "summon" ? undefined : entity.kind}
                           placement={!fighting}
                           pose="idle"
                         />
