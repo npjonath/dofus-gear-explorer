@@ -556,6 +556,7 @@ export interface FightBuff {
 }
 
 export interface FightEntity {
+  carriedBy?: number
   ally?:boolean
   monsterId?:number
   name?:string
@@ -599,10 +600,12 @@ export interface FightState {
 }
 
 export interface FightEvent {
-  type: "armor" | "shield" | "summon" | "turn" | "cast" | "move" | "damage" | "heal" | "buff" | "ap" | "defeat" | "skipped" | "mark" | "dodge"
+  type: "armor" | "shield" | "summon" | "turn" | "cast" | "move" | "damage" | "heal" | "buff" | "ap" | "defeat" | "skipped" | "mark" | "dodge" | "release" | "rune"
+  carrier?: number
   entity?: number
   spell?: number
   triggerSpell?: number
+  casterStates?: number[]
   value?: number
   element?: number
   critical?: boolean

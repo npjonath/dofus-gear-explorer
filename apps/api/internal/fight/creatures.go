@@ -85,6 +85,7 @@ func (s *Sim) summon(st *State, c *casting, at place, a *attack, e game.SpellEff
 			return
 		}
 		victim.HP = 0
+		s.releaseDefeated(st, c, victim)
 		s.removeDefeatedSummons(st, c)
 		caster = st.entity(at.caster)
 	}

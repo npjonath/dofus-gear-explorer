@@ -515,7 +515,7 @@ export function BuildPage({ meta }: { meta: Meta }) {
           <SegmentedControlIndicator />
           <SegmentedControlItem value="gear">{t("build.view.gear")}</SegmentedControlItem>
           <SegmentedControlItem value="damage">{t("build.view.damage")}</SegmentedControlItem>
-          <SegmentedControlItem value="fight">{t("build.view.fight")}</SegmentedControlItem>
+          <SegmentedControlItem value="fight" id="build-open-fight">{t("build.view.fight")}</SegmentedControlItem>
         </SegmentedControl>
         <Button onClick={() => setComparing(true)}>
           <ArrowRightLeftIcon aria-hidden="true" className="size-4" />
@@ -652,7 +652,10 @@ export function BuildPage({ meta }: { meta: Meta }) {
   const showSlot = selected !== null && view === "gear"
   let workspace: React.ReactNode
   if (visible && view === "fight" && stuffTab !== "list" && stuffTab !== "search") {
-    return <FightPanel key={build.id} meta={meta} build={build} input={input} evaluation={evaluation} onExit={() => setView("gear")} />
+    return <FightPanel key={build.id} meta={meta} build={build} input={input} evaluation={evaluation} onExit={() => {
+      setView("gear")
+      requestAnimationFrame(() => document.getElementById("build-open-fight")?.focus())
+    }} />
   }
   if (stuffTab === "list") {
     workspace = <BuildList meta={meta} onNew={() => setCreating(true)} />

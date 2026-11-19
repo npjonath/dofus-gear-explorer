@@ -2,11 +2,29 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from effects import old_sequences, timing
+from effects import bindings, old_sequences, self_delegate, timing
 from hud import addressables_directory
 
 
 class CombatAssetsTest(unittest.TestCase):
+    def test_parameterless_carry_scripts_select_named_skeletal_clips(self):
+        scripts = {11: {"type": 1, "rawParams": ""}}
+        entries = [
+            {"order": 1, "scriptId": 11, "casterMask":"C,*e3"},
+            {"order": 2, "scriptId": 11, "casterMask":"C,*E3"},
+        ]
+        self.assertEqual([r["cast"] for r in bindings(entries, scripts, {50, 51})], ["AnimPickup", "AnimThrow"])
+        self.assertEqual(bindings(entries, scripts, set()), [])
+
+    def test_wrapper_inherits_only_an_immediate_guaranteed_self_cast(self):
+        effect = {"actionId":1160, "targetMask":"C", "triggers":"I", "delay":0, "random":0,
+                  "duration":0, "m_flags":64, "diceNum":24}
+        levels = {1: {"effects":[effect], "criticalEffect":[]}, 2: {"effects":[dict(effect)], "criticalEffect":[]}}
+        spell, animations = {"spellLevels":[1,2]}, {24:{"normal":[{"cast":"AnimAttaque2000"}]}}
+        self.assertEqual(self_delegate(spell, levels, animations), [{"cast":"AnimAttaque2000", "atCaster":True}])
+        levels[2]["effects"][0]["delay"] = 1
+        self.assertEqual(self_delegate(spell, levels, animations), [])
+
     def test_hud_in_macos_app_and_in_standalone_players(self):
         layouts = (
             ("DofusContent/Content", "Dofus.app/Contents/Resources/Data/StreamingAssets/aa/StandaloneOSX"),

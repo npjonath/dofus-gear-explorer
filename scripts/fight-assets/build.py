@@ -24,7 +24,7 @@ with tempfile.TemporaryDirectory() as folder:
          "--add-data", f"{archspec_root / 'cpu' / 'schema.py'}:archspec/cpu",
          "--collect-data", "UnityPy", "--collect-data", "archspec", "--collect-data", "tpk_ar",
          "--collect-all", "texture2ddecoder", "--collect-all", "etcpak",
-         "--collect-all", "astc_encoder", "--collect-all", "fmod_toolkit",
+         "--collect-all", "astc_encoder", "--exclude-module", "fmod_toolkit", "--exclude-module", "pyfmodex",
          "--collect-all", "brotli", "--copy-metadata", "UnityPy", str(here/"import_assets.py")])
     with tempfile.TemporaryDirectory(dir=dest.parent) as replacement:
         stage = Path(replacement) / "new"
@@ -44,6 +44,8 @@ python_license = Path(os.__file__).parent / "LICENSE.txt"
 if python_license.is_file():
     notices.append(python_license.read_text(encoding="utf-8"))
 for dist in sorted(distributions(), key=lambda d: d.metadata["Name"].lower()):
+    if dist.metadata["Name"].lower().replace("_", "-") in {"fmod-toolkit", "pyfmodex"}:
+        continue
     for file in dist.files or ():
         if any(word in file.name.lower() for word in ("license", "licence", "copying", "notice")):
             try:

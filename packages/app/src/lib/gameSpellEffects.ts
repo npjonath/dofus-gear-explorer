@@ -17,6 +17,7 @@ interface Graphic {
 
 interface BoundScript {
   cast?: string
+  atCaster?: boolean
   targetMask?: string
   casterMask?: string
   activationMask?: string
@@ -47,7 +48,7 @@ export interface GraphicCue extends Graphic {
 }
 
 export function groundGraphics(catalog: SpellVisualCatalog | undefined, mark: FightMark) {
-  const entry = catalog?.spells[mark.from]
+  const entry = catalog?.spells[mark.action === 2022 ? mark.spell : mark.from]
   if (!entry || !catalog) return []
   const seen = new Set<number>()
   return (mark.critical ? entry.critical ?? entry.normal : entry.normal).flatMap((binding) =>
@@ -140,8 +141,8 @@ export function castVisual(
   if (!catalog || !entry) return undefined
   const bindings = (critical ? entry.critical ?? entry.normal : entry.normal).filter((binding) =>
     !binding.criterion && !binding.spellLevels?.length && !binding.random &&
-    maskMatches(binding.casterMask, caster, caster) && maskMatches(binding.targetMask, caster, target) &&
-    maskMatches(binding.activationMask, caster, target),
+    maskMatches(binding.casterMask, caster, caster) && maskMatches(binding.targetMask, caster, binding.atCaster ? caster : target) &&
+    maskMatches(binding.activationMask, caster, binding.atCaster ? caster : target),
   )
   if (!bindings.length) return undefined
   const animation = bindings.find((binding) => binding.cast)?.cast
@@ -161,7 +162,7 @@ export function castVisual(
         if (!clip) continue
         const direction = gfx.isOriented === false || clip.directions.length === 1 ? clip.directions[0] ?? 0 : facing
         const endTime = time + clip.duration
-        graphics.push({ ...gfx, from, to, direction, animation: clip.animation, start: time, end: endTime })
+        graphics.push({ ...gfx, from, to: binding.atCaster ? from : to, direction, animation: clip.animation, start: time, end: endTime })
         end = Math.max(end, endTime)
         if (gfx.kind === "target") hit = time + (clip.shot ?? 0)
         advances.push(clip.shot ?? clip.duration)

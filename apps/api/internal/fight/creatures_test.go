@@ -81,3 +81,24 @@ func TestTrainingDummyRecoversErodedHealthOnRevival(t *testing.T) {
 		t.Fatalf("after revival: %d / %d", dummy.HP, dummy.MaxHP)
 	}
 }
+
+func TestSymmetricTeleportUsesThePivotAndTheRealTerrain(t *testing.T) {
+	s := newSim(map[int]int{})
+	st := fightAt(s, Dummies{}, [2]int{4, 6})
+	player, enemy := st.Player(), &st.Entities[1]
+	from := player.Cell
+	at := place{stood: map[int]int{player.ID: from, enemy.ID: enemy.Cell}, cell: enemy.Cell}
+	a := attack{}
+	c := s.casting(1, false, false)
+	stop := st.Board.cell(5, 6)
+	st.Board.Walls = []int{stop}
+	s.reflect(st, c, at, &a, 1104, player, enemy)
+	if player.Cell != from {
+		t.Fatal("crossed a wall")
+	}
+	st.Board.Walls = nil
+	s.reflect(st, c, at, &a, 1104, player, enemy)
+	if player.Cell != stop || len(c.events) != 1 {
+		t.Fatalf("player=%d events=%v", player.Cell, c.events)
+	}
+}

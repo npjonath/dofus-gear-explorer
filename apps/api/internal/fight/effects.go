@@ -25,11 +25,13 @@ const (
 
 // Event is one thing that happened in a fight.
 type Event struct {
-	Type   string `json:"type"`
-	Entity int    `json:"entity,omitempty"`
+	Carrier int    `json:"carrier,omitempty"`
+	Type    string `json:"type"`
+	Entity  int    `json:"entity,omitempty"`
 	// Spell is the spell cast, or the one a lasting effect comes from.
-	Spell        int `json:"spell"`
-	TriggerSpell int `json:"triggerSpell,omitempty"`
+	Spell        int   `json:"spell"`
+	TriggerSpell int   `json:"triggerSpell,omitempty"`
+	CasterStates []int `json:"casterStates,omitempty"`
 	// Value is the turn started, the points lost or gained, or the amount
 	// of the lasting effect.
 	Value    int  `json:"value,omitempty"`
@@ -52,6 +54,7 @@ type Event struct {
 // casting is one cast being resolved, the spells it casts in turn and the
 // waiting effects it sets off included.
 type casting struct {
+	telefrag map[int]bool
 	// root is the spell the player cast: lasting effects are filed under it.
 	root       int
 	aura       int
@@ -177,15 +180,16 @@ const (
 // it names (allies, enemies, the caster), then conditions each of which
 // must hold.
 type mask struct {
-	allySummon, enemySummon bool
-	allyPlayer, ownerOnly   bool
-	anyone                  bool
-	ally                    bool
-	allyOther               bool
-	enemy                   bool
-	caster                  bool
-	casterToo               bool
-	conds                   []cond
+	telefrag, withoutTelefrag bool
+	allySummon, enemySummon   bool
+	allyPlayer, ownerOnly     bool
+	anyone                    bool
+	ally                      bool
+	allyOther                 bool
+	enemy                     bool
+	caster                    bool
+	casterToo                 bool
+	conds                     []cond
 }
 
 // cond is one condition of a mask, on the target or, starred, on the caster.
@@ -207,6 +211,12 @@ func readMask(raw string) mask {
 		switch token {
 		case "h", "l":
 			m.allyPlayer, named = true, true
+			continue
+		case "T":
+			m.telefrag = true
+			continue
+		case "t":
+			m.withoutTelefrag = true
 			continue
 		case "P":
 			m.ownerOnly = true
@@ -332,11 +342,14 @@ func (s *Sim) met(m mask, caster, target *Entity, had map[int]map[int]bool) bool
 // wherever it stands when the mask names it. Who stands in the zone is read
 // from where everyone stood as the spell was cast: an effect that pushes its
 // target away does not make the next one miss.
-func (s *Sim) targets(st *State, caster *Entity, e game.SpellEffect, m mask, cell int, stood map[int]int) []int {
+func (s *Sim) targets(st *State, caster *Entity, e game.SpellEffect, m mask, cell int, stood map[int]int, had map[int]map[int]bool) []int {
 	var ids []int
 	for _, c := range st.Board.zone(e.Zone, stood[caster.ID], cell) {
 		for i := range st.Entities {
 			target := &st.Entities[i]
+			if e.Zone.ExcludeCarried && had[target.ID][carriedState] {
+				continue
+			}
 			if stood[target.ID] == c && m.names(caster, target) {
 				ids = append(ids, target.ID)
 			}
@@ -382,6 +395,7 @@ func outcomes(effects []game.SpellEffect) (groups [][]int, weights []float64) {
 
 // place is where an effect is applied from.
 type place struct {
+	dispellable bool
 	// caster casts; source is who set the effect off: the caster, or for an
 	// effect that waited, whoever triggered it.
 	caster, source int
@@ -408,6 +422,9 @@ func (s *Sim) resolveOn(st *State, c *casting, casterID, sourceID int, a *attack
 	real := false
 	for _, e := range effects {
 		real = real || (isHit(e) && !e.Described && e.Delay == 0 && e.Trigger == "" && e.Duration == 0)
+		// Rune detonators describe one damage line per possible element,
+		// while the runes actually present supply the real hits.
+		real = real || (e.Action == 2023 && !e.Described && e.Delay == 0 && e.Trigger == "")
 	}
 	drawn := map[int]bool{}
 	if groups, weights := outcomes(effects); len(groups) > 0 {
@@ -433,6 +450,7 @@ func (s *Sim) resolveOn(st *State, c *casting, casterID, sourceID int, a *attack
 	}
 	at := place{caster: casterID, source: sourceID, cell: cell, depth: depth, stood: stood}
 	for i, e := range effects {
+		at.dispellable = e.Dispellable
 		if e.Random > 0 && !drawn[i] {
 			continue
 		}
@@ -450,9 +468,29 @@ func (s *Sim) resolveOn(st *State, c *casting, casterID, sourceID int, a *attack
 			return
 		}
 		m := readMask(e.Targets)
+		if e.Action == actionTeleport && st.free(cell) && e.Trigger == "" && e.Delay == 0 {
+			// Teleportation targets the tile. There is no occupant to test
+			// against an unstarred condition on the recipient.
+			allowed := true
+			for _, cond := range m.conds {
+				allowed = allowed && cond.onCaster && s.holds(cond, caster, had)
+			}
+			if allowed {
+				s.apply(st, c, at, caster.ID, a, e)
+			}
+			continue
+		}
+		if e.Action == 2023 && e.Trigger == "" && e.Delay == 0 {
+			s.actOnRunes(st, c, at, e, had)
+			continue
+		}
+		if e.Action == throwAction && !at.fired && e.Trigger == "" && e.Delay == 0 {
+			s.throw(st, c, at, caster, e, had)
+			continue
+		}
 		if e.Action == 310 && e.Trigger == "" && e.Delay == 0 {
 			for _, mark := range append([]Mark(nil), st.Marks...) {
-				if mark.Cell == cell {
+				if mark.Action != runeMark && mark.Cell == cell {
 					s.removeMark(st, c, mark, depth)
 				}
 			}
@@ -478,11 +516,14 @@ func (s *Sim) resolveOn(st *State, c *casting, casterID, sourceID int, a *attack
 			}
 			continue
 		}
-		for _, id := range s.targets(st, caster, e, m, cell, stood) {
+		for _, id := range s.targets(st, caster, e, m, cell, stood, had) {
 			if onlyTarget != 0 && id != onlyTarget && !(m.caster && id == casterID) {
 				continue
 			}
 			target := st.entity(id)
+			if m.telefrag && !c.telefrag[id] || m.withoutTelefrag && c.telefrag[id] {
+				continue
+			}
 			if target == nil {
 				continue
 			}
@@ -506,6 +547,7 @@ func (s *Sim) resolveOn(st *State, c *casting, casterID, sourceID int, a *attack
 // hook leaves an effect waiting on an entity until one of its triggers
 // happens.
 func (s *Sim) hook(st *State, target *Entity, a *attack, e game.SpellEffect, h Hook) {
+	h.Dispellable = e.Dispellable
 	h.Turns = e.Duration
 	if h.Turns == 0 {
 		h.Turns = e.TriggerTurns
@@ -670,6 +712,7 @@ func span(e game.SpellEffect) (lo, hi int) {
 
 // apply applies one effect to one target.
 func (s *Sim) apply(st *State, c *casting, at place, targetID int, a *attack, e game.SpellEffect) {
+	at.dispellable = e.Dispellable
 	caster, target := st.entity(at.caster), st.entity(targetID)
 	if caster == nil || target == nil {
 		return
@@ -701,6 +744,10 @@ func (s *Sim) apply(st *State, c *casting, at place, targetID int, a *attack, e 
 		return
 	}
 	switch e.Action {
+	case pickupAction:
+		s.pickup(st, c, at, caster, target, a)
+	case throwAction:
+		s.throw(st, c, at, caster, e, nil)
 	case 1020, 1039, 1040:
 		value := c.roll(lo, hi)
 		if e.Action == 1020 {
@@ -714,16 +761,17 @@ func (s *Sim) apply(st *State, c *casting, at place, targetID int, a *attack, e 
 
 	case 1079, 1080:
 		s.drainGlyphPoints(st, c, at, a, e, caster, target)
-	case 1025, 1026, 2018, 2019:
+	case 1025, 1026, 2018, 2019, 2024:
 		for _, mark := range append([]Mark(nil), st.Marks...) {
 			isTrap := mark.Action == trapMark
 			switch e.Action {
 			case 1025, 1026:
-				if isTrap == (e.Action == 1025) && (e.Value == 0 || mark.From == e.Value) {
+				if mark.Action != runeMark && isTrap == (e.Action == 1025) && (e.Value == 0 || mark.From == e.Value) {
 					s.triggerMark(st, c, mark, targetID, at.depth+1)
 				}
-			case 2018, 2019:
-				if isTrap == (e.Action == 2019) && mark.Caster == targetID && (e.Min == 0 || mark.From == e.Min) {
+			case 2018, 2019, 2024:
+				if isTrap == (e.Action == 2019) && (mark.Action == runeMark) == (e.Action == 2024) &&
+					mark.Caster == targetID && (e.Min == 0 || mark.From == e.Min) {
 					s.removeMark(st, c, mark, at.depth+1)
 				}
 			}
@@ -742,19 +790,44 @@ func (s *Sim) apply(st *State, c *casting, at place, targetID int, a *attack, e 
 		if st.free(at.cell) {
 			from := caster.Cell
 			c.emit(Event{Type: EventMove, Entity: caster.ID, Path: []int{caster.Cell, at.cell}})
-			caster.Cell = at.cell
+			s.relocate(st, c, caster, at.cell, at.depth)
 			s.crossMarks(st, c, caster.ID, from, at.depth)
 		}
 	case actionSwap:
-		if target.ID != caster.ID {
+		if target.Cell != caster.Cell && target.CarriedBy == 0 && caster.CarriedBy == 0 {
 			c.emit(Event{Type: EventMove, Entity: caster.ID, Path: []int{caster.Cell, target.Cell}})
 			c.emit(Event{Type: EventMove, Entity: target.ID, Path: []int{target.Cell, caster.Cell}})
 			casterFrom, targetFrom := caster.Cell, target.Cell
 			casterID, targetID := caster.ID, target.ID
-			caster.Cell, target.Cell = target.Cell, caster.Cell
+			s.relocate(st, c, caster, targetFrom, at.depth)
+			if target := st.entity(targetID); target != nil {
+				s.relocate(st, c, target, casterFrom, at.depth)
+			}
 			s.crossMarks(st, c, casterID, casterFrom, at.depth)
 			s.crossMarks(st, c, targetID, targetFrom, at.depth)
 		}
+	case 1104, 1105, 1106:
+		s.reflect(st, c, at, a, e.Action, caster, target)
+	case 1075:
+		turns := max(0, c.roll(lo, hi))
+		for i := range target.Buffs {
+			b := &target.Buffs[i]
+			if b.Dispellable && b.Turns > 0 {
+				b.Turns = max(0, b.Turns-turns)
+			}
+		}
+		s.drop(st, c, at, target, func(b Buff) bool { return b.Dispellable && b.Turns == 0 })
+		kept := target.Hooks[:0]
+		for _, h := range target.Hooks {
+			if h.Dispellable && h.Turns > 0 {
+				h.Turns -= turns
+				if h.Turns <= 0 {
+					continue
+				}
+			}
+			kept = append(kept, h)
+		}
+		target.Hooks = kept
 	case actionRefundAP:
 		if target.ID == st.Active().ID {
 			gain := c.roll(lo, hi)
@@ -820,8 +893,8 @@ func (s *Sim) castOn(st *State, c *casting, at place, caster, target *Entity, e 
 		by, cell = target, source.Cell
 	case game.ActionSourceCasts:
 		by = source
-	case game.ActionSourceCastsOnSelf:
-		by, cell = source, source.Cell
+	case game.ActionTargetCastsOnCell:
+		by, cell = target, at.cell
 	}
 	s.resolve(st, c, by.ID, at.source, sub, cell, at.depth+1)
 }
@@ -859,6 +932,7 @@ func (s *Sim) drop(st *State, c *casting, at place, target *Entity, match func(B
 // buff puts a lasting effect on a target, unless the spell's effects have
 // piled up on it as much as they can.
 func (s *Sim) buff(st *State, c *casting, at place, target *Entity, a *attack, b Buff, report bool) {
+	b.Dispellable = at.dispellable
 	b.Spell, b.From, b.Mark = a.id, c.root, c.aura
 	if b.Turns == 0 {
 		b.Turns = 1
@@ -951,6 +1025,8 @@ func (s *Sim) hit(st *State, c *casting, at place, caster, target *Entity, a *at
 			}
 			return baseStat(id)
 		}
+	} else if c.markAction == runeMark {
+		spec.Power += stat(110) // runePower
 	} else if c.markAction != 0 {
 		spec.Power += stat(106) // glyphPower
 	}
@@ -1022,7 +1098,7 @@ func (s *Sim) shove(st *State, c *casting, caster, moved *Entity, from, cells in
 			blocker = st.at(next)
 			break
 		}
-		moved.Cell = next
+		s.relocate(st, c, moved, next, depth)
 		path = append(path, next)
 	}
 	if len(path) > 1 {
@@ -1073,4 +1149,52 @@ func (s *Sim) loseHealth(target *Entity, damage int) {
 	target.HP -= damage
 	erosion := min(50, max(0, 10+s.StatOf(target)(75)))
 	target.MaxHP = max(1, target.MaxHP-damage*erosion/100)
+}
+
+// Reflect a fighter through the indicated pivot. The spells that react to a
+// telefrag identify its participants with the T mask in their following effects.
+func (s *Sim) reflect(st *State, c *casting, at place, a *attack, action int, caster, target *Entity) {
+	moved, pivot := target, at.cell
+	switch action {
+	case 1104:
+		moved, pivot = caster, at.stood[target.ID]
+	case 1105:
+		pivot = at.stood[caster.ID]
+	}
+	x, y := st.Board.xy(at.stood[moved.ID])
+	px, py := st.Board.xy(pivot)
+	x, y = 2*px-x, 2*py-y
+	if !st.Board.inside(x, y) {
+		return
+	}
+	to := st.Board.cell(x, y)
+	if to == moved.Cell || st.Board.wall(to) {
+		return
+	}
+	from, id := moved.Cell, moved.ID
+	blocker := st.at(to)
+	if blocker != nil {
+		swap := false
+		for _, e := range a.effects {
+			if readMask(e.Targets).telefrag {
+				swap = true
+				break
+			}
+		}
+		if !swap {
+			return
+		}
+		if c.telefrag == nil {
+			c.telefrag = map[int]bool{}
+		}
+		c.telefrag[id], c.telefrag[blocker.ID] = true, true
+		blocker.Cell = from
+		c.emit(Event{Type: EventMove, Entity: blocker.ID, Path: []int{to, from}})
+	}
+	moved.Cell = to
+	c.emit(Event{Type: EventMove, Entity: id, Path: []int{from, to}})
+	if blocker != nil {
+		s.crossMarks(st, c, blocker.ID, to, at.depth)
+	}
+	s.crossMarks(st, c, id, from, at.depth)
 }

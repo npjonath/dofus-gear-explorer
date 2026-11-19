@@ -21,7 +21,7 @@ def castable_spells(content):
     return result
 
 
-def fight_spells(content, output, spells):
+def fight_spells(content, output, spells, levels):
     from creatures import CAST_ACTIONS
 
     playable = castable_spells(content)
@@ -32,8 +32,6 @@ def fight_spells(content, output, spells):
                 playable.update(s["id"] for s in grade["spells"])
                 if grade["startingSpellId"]:
                     playable.add(grade["startingSpellId"])
-    levels = read_data(content, "spelllevels")
-    casts = CAST_ACTIONS | {1091, 1165}
     pending = list(playable)
     while pending:
         spell = spells.get(pending.pop())
@@ -44,7 +42,7 @@ def fight_spells(content, output, spells):
             if level:
                 for effect in (*level["effects"], *level["criticalEffect"]):
                     child = effect["diceNum"]
-                    if effect["actionId"] in casts and child in spells and child not in playable:
+                    if effect["actionId"] in CAST_ACTIONS and child in spells and child not in playable:
                         playable.add(child)
                         pending.append(child)
     return playable
@@ -82,13 +80,21 @@ def read_script(parameters):
         return []
 
 
-def bindings(entries, scripts):
+def bindings(entries, scripts, carry_actions=frozenset()):
     result = []
     for entry in sorted(entries, key=lambda item: item["order"]):
         script = scripts.get(entry["scriptId"])
         if not script:
             continue
         cast = {}
+        # The carry scripts have empty parameters: the movement actions choose
+        # the Pandawa skeleton's named pickup/throw clips.
+        if script["type"] == 1 and not script["rawParams"]:
+            condition = entry.get("casterMask", "").split(",")
+            if 50 in carry_actions and "*e3" in condition:
+                cast["cast"] = "AnimPickup"
+            elif 51 in carry_actions and "*E3" in condition:
+                cast["cast"] = "AnimThrow"
         steps = []
         for step in read_script(script["rawParams"]):
             graphics = []
@@ -157,18 +163,41 @@ def casting_times(content, animations):
     return result
 
 
+def self_delegate(spell, levels, catalog, critical=False):
+    """A wrapper can perform its visible cast through an immediate self-targeted spell."""
+    candidates = []
+    for grade in spell["spellLevels"]:
+        level = levels[grade]
+        effects = (level["criticalEffect"] or level["effects"]) if critical else level["effects"]
+        children = [e["diceNum"] for e in effects if e["actionId"] == 1160 and e["targetMask"] == "C"
+                    and e["triggers"] in ("", "I") and not e["delay"] and not e["random"]
+                    and not e["duration"] and not e["m_flags"] & 16 and e["diceNum"] in catalog]
+        if len(children) != 1:
+            return []
+        candidates.append(children[0])
+    if not candidates or len(set(candidates)) != 1:
+        return []
+    child = catalog[candidates[0]]
+    scripts = child.get("critical", child["normal"]) if critical else child["normal"]
+    return [dict(binding, atCaster=True) for binding in scripts]
+
+
 def export_effects(content: Path, output: Path, spell_ids=None) -> None:
     spells = read_data(content, "spells")
+    levels = read_data(content, "spelllevels")
     scripts = read_data(content, "spellscripts")
     catalog = {}
     bone_ids = set()
     animations = set()
-    for spell_id in sorted(fight_spells(content, output, spells) if spell_ids is None else spell_ids):
+    ids = fight_spells(content, output, spells, levels) if spell_ids is None else spell_ids
+    for spell_id in sorted(ids):
         if spell_id not in spells:
             continue
         spell = spells[spell_id]
-        normal = bindings(spell["boundScriptUsageData"], scripts)
-        critical = bindings(spell["criticalHitBoundScriptUsageData"], scripts)
+        first = levels.get(spell["spellLevels"][0]) if spell["spellLevels"] else None
+        carry_actions = {e["actionId"] for e in first["effects"] if not e["m_flags"] & 16} if first else set()
+        normal = bindings(spell["boundScriptUsageData"], scripts, carry_actions)
+        critical = bindings(spell["criticalHitBoundScriptUsageData"], scripts, carry_actions)
         if not normal and not critical:
             continue
         catalog[spell_id] = {"normal": normal}
@@ -179,6 +208,16 @@ def export_effects(content: Path, output: Path, spell_ids=None) -> None:
                 animations.add(cast["cast"])
             for step in cast.get("sequences", []):
                 bone_ids.update(g["bone"] for g in step["gfx"])
+
+    for spell_id in sorted(ids - catalog.keys()):
+        if spell_id not in spells:
+            continue
+        normal = self_delegate(spells[spell_id], levels, catalog)
+        if normal:
+            catalog[spell_id] = {"normal": normal}
+            critical = self_delegate(spells[spell_id], levels, catalog, critical=True)
+            if critical != normal:
+                catalog[spell_id]["critical"] = critical
 
     clips = {}
     for bone_id in sorted(bone_ids):

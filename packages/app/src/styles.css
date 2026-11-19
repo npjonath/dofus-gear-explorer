@@ -2669,3 +2669,6 @@ th[aria-sort="descending"] .th-sort svg { opacity: 1; }
 .combat-target-name { font-size: 12px; }
 .combat-target-health, .combat-target-loss { font-size: 10px; font-weight: 700; }
 .combat-target-loss { fill: #d9a769; }
+
+/* The combat viewport has its own navigation and exit control. */
+#root:has(.fight-screen) .topbar { display: none; }

@@ -6,7 +6,21 @@ import os
 import shutil
 import sys
 import tempfile
+import types
 from pathlib import Path
+
+
+def configure_graphics_import():
+    # UnityPy imports its audio converter even when only reading textures,
+    # fonts and skeletal assets. Desktop builds omit the unused FMOD runtime.
+    if getattr(sys, "frozen", False):
+        audio = types.ModuleType("fmod_toolkit")
+
+        def unsupported_audio(*args, **kwargs):
+            raise NotImplementedError("The combat importer only extracts graphics.")
+
+        audio.raw_to_wav = unsupported_audio
+        sys.modules["fmod_toolkit"] = audio
 
 
 def locate(source):
@@ -31,7 +45,7 @@ def import_pack(source, target):
     content = locate(source.resolve())
     target.mkdir(parents=True, exist_ok=True)
     # Both the extraction format and the source catalogs determine cache validity.
-    identity = hashlib.sha256(b"dge-fight-assets-1")
+    identity = hashlib.sha256(b"dge-fight-assets-2")
     identity.update(prepare_equipment_catalog(target).encode())
     builtins = addressables_directory(content)
     # Content and the UI that ships in the executable have independent update catalogs.
@@ -85,6 +99,7 @@ def import_pack(source, target):
 
 
 if __name__ == "__main__":
+    configure_graphics_import()
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--source", required=True, type=Path)
     parser.add_argument("--output", required=True, type=Path)

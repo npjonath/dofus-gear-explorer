@@ -7,7 +7,7 @@ from effects import castable_spells
 
 
 SUMMON_ACTIONS = {181, 405, 1008, 1011, 2796}
-CAST_ACTIONS = {400, 401, 402, 792, 1017, 1018, 1019, 1091, 1160, 1165, 2160, 2794, 2960}
+CAST_ACTIONS = {400, 401, 402, 792, 1017, 1018, 1019, 1091, 1160, 1165, 2022, 2160, 2794, 2960}
 CHARACTERISTICS = {
     "lifePoints": 0, "actionPoints": 1, "strength": 10, "vitality": 11,
     "wisdom": 12, "chance": 13, "agility": 14, "intelligence": 15,

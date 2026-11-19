@@ -224,6 +224,7 @@ function SpriteSurface({ assetRoot, pack = "", look, bone, animation, direction,
 export interface GameActorProps {
   kind: "player" | "dummy" | "summon"
   placement?: boolean
+  carrying?: boolean
   portrait?: boolean
   pack?: string
   monsterId?: number
@@ -287,6 +288,7 @@ export function GameActor(props: GameActorProps) {
   const candidates: string[] = []
   switch (props.pose) {
     case "walk":
+      if (props.carrying) candidates.push("AnimCourseCarrying", "AnimMarcheCarrying")
       candidates.push("AnimCourse", "AnimMarche")
       break
     case "down":
@@ -302,6 +304,7 @@ export function GameActor(props: GameActorProps) {
       candidates.push("AnimAttaque0", "AnimAttaque1")
       break
   }
+  if (props.carrying) candidates.push("AnimStatiqueCarrying")
   if (player && !props.placement) candidates.push(`AnimStatiqueCombat${breed}a`)
   candidates.push(idle)
   const clip = findClip(data, bones, candidates)

@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { loadFightKeys, keyLabel } from "../../lib/fightKeys"
 import { GameActor } from "./GameActor"
 import { useGameSpellCatalog } from "./GameSpellEffects"
+import { entityAt } from "../../lib/fightBoard"
 import { FightOptions } from "./FightOptions"
 import { StatsPanel } from "../build/StatsPanel"
 import { Popover, PopoverContent, PopoverDescription, PopoverTitle, PopoverTrigger } from "@ui-sdk/react/popover"
@@ -235,6 +236,10 @@ function EntitySheet({
   const { t, number } = useI18n()
   function describe(buff: FightBuff): { label: string; tone: string } | null {
     switch (buff.kind) {
+      case "state":
+        if (buff.ref === 3) return { label: t("fight.state.carrier"), tone: "plain" }
+        if (buff.ref === 8) return { label: t("fight.state.carried"), tone: "plain" }
+        return null
       case "armor":
       case "shield":
         return { label: t(buff.kind === "armor" ? "fight.armor" : "fight.shield", { n: number(buff.value) }), tone: "plain" }
@@ -301,8 +306,10 @@ function LogEntry({ line, stats }: { line: LogLine; stats: Map<number, Stat> }) 
       )
     case "summon":
       return <li>{t("fight.log.summon", { who, spell })}</li>
+    case "rune":
+      return <li>{t("fight.log.rune", { who, spell })}</li>
     case "mark":
-      return <li>{t("fight.log.mark", { who, spell })}</li>
+      return <li>{who ? t("fight.log.mark", { who, spell }) : t("fight.log.emptyMark", { spell })}</li>
     case "dodge": {
       const stat = event.stat === undefined ? "" : (stats.get(event.stat)?.label ?? "")
       return <li>{t("fight.log.dodge", { who, value: number(value), stat })}</li>
@@ -366,6 +373,9 @@ function LogEntry({ line, stats }: { line: LogLine; stats: Map<number, Stat> }) 
     case "ap":
       return <li className="pl-3">{t("fight.log.ap", { who, count: value })}</li>
     case "move": {
+      if (event.carrier && (event.action === 50 || event.action === 51)) {
+        return <li>{t(event.action === 50 ? "fight.log.pickup" : "fight.log.throw", { who })}</li>
+      }
       const cells = (event.path?.length ?? 1) - 1
       return (
         <li className="pl-3">{t(value > 0 ? "fight.log.walk" : "fight.log.moved", { who, count: value > 0 ? value : cells })}</li>
@@ -493,9 +503,13 @@ export function FightPanel({
   const [showTip, setShowTip] = React.useState(false)
   const gameRef = React.useRef<HTMLDivElement>(null)
   const [fullscreen, setFullscreen] = React.useState(false)
+  function returnToBuild() {
+    if (document.fullscreenElement) void document.exitFullscreen().catch(() => {})
+    onExit()
+  }
   const toggleFullscreen = async () => {
     if (document.fullscreenElement) await document.exitFullscreen()
-    else await gameRef.current?.requestFullscreen()
+    else await document.documentElement.requestFullscreen()
   }
   const { t, number } = useI18n()
   const stats = React.useMemo(() => {
@@ -615,7 +629,7 @@ export function FightPanel({
     if (!view) return
     // A click does not wait for the board: what was playing jumps to its end.
     playback.skip()
-    const occupant = view.state.entities.find((entity) => entity.cell === cell)
+    const occupant = entityAt(view.state.entities, cell)
     if (view.state.phase === "placement") {
       if (occupant) setPicked(picked === occupant.id ? null : occupant.id)
       else {
@@ -713,15 +727,16 @@ export function FightPanel({
     return (
       <div className="fight-screen combat-loading" ref={gameRef}>
         <p role={start.isError ? "alert" : "status"}>{t(start.isError ? "fight.failed" : "fight.loading")}</p>
-        <button onClick={onExit}>{t("fight.back")}</button>
+        <button onClick={returnToBuild}>{t("fight.back")}</button>
       </div>
     )
   const { state } = view
   const fighting = state.phase === "fight"
   const player = state.entities.find((e) => e.id === state.activeId) ?? state.entities.find((e) => e.kind === "player")!
   const shownSlot = view.spells.find((slot) => slot.id === (peek ?? spell))
-  const hovered = state.entities.find((e) => e.cell === cursor)
-  const shownEntity = hovered ?? state.entities.find((e) => e.id === pinned) ?? player
+  const hovered = entityAt(state.entities, cursor)
+  const pinnedEntity = state.entities.find((e) => e.id === pinned)
+  const shownEntity = (panel === "entity" ? pinnedEntity : hovered) ?? hovered ?? pinnedEntity ?? player
   const hpOf = (entity: FightEntity) => playback.hp?.[entity.id] ?? entity.hp
   const art = Boolean(state.board.id)
   const hud = (id: string) => api.imageUrl(`/fight-assets/hud/${id}.png`)
@@ -790,7 +805,7 @@ export function FightPanel({
             <RotateCcwIcon />
             <span>{t("fight.restart")}</span>
           </button>
-          <button title={t("fight.back")} onClick={onExit}>
+          <button title={t("fight.back")} onClick={returnToBuild}>
             <ArrowLeftIcon />
             <span>{t("fight.back")}</span>
           </button>

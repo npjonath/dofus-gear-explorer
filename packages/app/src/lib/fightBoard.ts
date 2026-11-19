@@ -1,4 +1,8 @@
-import type { FightBoard, FightStep } from "../api/types"
+import type { FightBoard, FightEntity, FightStep } from "../api/types"
+
+export function entityAt(entities: FightEntity[], cell: number | null) {
+  return entities.find((entity) => entity.carriedBy && entity.cell === cell) ?? entities.find((entity) => entity.cell === cell)
+}
 
 /** Half the width and half the height of a cell as drawn: a square seen from above, at an angle. */
 export const HALF_W = 30

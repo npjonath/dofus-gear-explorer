@@ -51,8 +51,9 @@ const (
 
 // Buff is a lasting effect on an entity.
 type Buff struct {
-	Mark int    `json:"mark,omitempty"`
-	Kind string `json:"kind"`
+	Dispellable bool   `json:"dispellable,omitempty"`
+	Mark        int    `json:"mark,omitempty"`
+	Kind        string `json:"kind"`
 	// Spell is the spell that applied it, which may be one another spell
 	// cast in turn, and From the spell the player cast.
 	Spell int `json:"spell"`
@@ -69,11 +70,12 @@ type Buff struct {
 // or the end of a turn, a state gained or lost, a hit taken. It names the
 // effect by where it is in the game data rather than carrying it.
 type Hook struct {
-	Mark     int  `json:"mark,omitempty"`
-	Spell    int  `json:"spell"`
-	Grade    int  `json:"grade"`
-	Critical bool `json:"critical,omitempty"`
-	Index    int  `json:"index"`
+	Dispellable bool `json:"dispellable,omitempty"`
+	Mark        int  `json:"mark,omitempty"`
+	Spell       int  `json:"spell"`
+	Grade       int  `json:"grade"`
+	Critical    bool `json:"critical,omitempty"`
+	Index       int  `json:"index"`
 	// From is the spell the player cast and Caster who cast it.
 	From   int `json:"from"`
 	Caster int `json:"caster"`
@@ -87,6 +89,7 @@ type Hook struct {
 
 // Entity is a fighter on the board.
 type Entity struct {
+	CarriedBy int          `json:"carriedBy,omitempty"`
 	InitialHP int          `json:"initialHp,omitempty"`
 	Ally      bool         `json:"ally,omitempty"`
 	Name      string       `json:"name,omitempty"`
@@ -193,12 +196,16 @@ func (st *State) entity(id int) *Entity {
 }
 
 func (st *State) at(cell int) *Entity {
+	var occupant *Entity
 	for i := range st.Entities {
 		if st.Entities[i].Cell == cell {
-			return &st.Entities[i]
+			occupant = &st.Entities[i]
+			if occupant.CarriedBy != 0 {
+				return occupant
+			}
 		}
 	}
-	return nil
+	return occupant
 }
 
 // Player returns the player's entity.
@@ -302,16 +309,17 @@ func (s *Sim) Points(st *State) (ap, mp int) {
 
 // attack is a weapon or a spell grade, as the simulator casts it.
 type attack struct {
-	id          int
-	grade       int
-	weapon      bool
-	cost        int
-	rangeMin    int
-	rangeMax    int
-	crit        int
-	rules       game.CastRules
-	effects     []game.SpellEffect
-	critEffects []game.SpellEffect
+	pickup, throw bool
+	id            int
+	grade         int
+	weapon        bool
+	cost          int
+	rangeMin      int
+	rangeMax      int
+	crit          int
+	rules         game.CastRules
+	effects       []game.SpellEffect
+	critEffects   []game.SpellEffect
 }
 
 // weaponActions gives the game's action of a weapon line, per element.
@@ -433,7 +441,7 @@ func (s *Sim) spell(st *State, id int) *attack {
 		if g != nil {
 			for _, sp := range g.Spells {
 				if sp.ID == id {
-					return s.tuned(active, s.attack(id, sp.Grade))
+					return st.carryRules(active, s.tuned(active, s.attack(id, sp.Grade)))
 				}
 			}
 		}
@@ -443,7 +451,7 @@ func (s *Sim) spell(st *State, id int) *attack {
 	if id != WeaponID && (sp == nil || sp.BreedID != 0 && sp.BreedID != s.Breed) {
 		return nil
 	}
-	return s.tuned(active, s.attack(id, 0))
+	return st.carryRules(active, s.tuned(active, s.attack(id, 0)))
 }
 
 // critRate is the chance of a critical hit, from 0 to 100.
@@ -483,6 +491,9 @@ func (st *State) cooldown(a *attack) int {
 func (s *Sim) blocked(st *State, a *attack) string {
 	if st.Phase != PhaseFight {
 		return BlockedPhase
+	}
+	if a.throw && st.passenger(st.Active().ID) == nil {
+		return BlockedCell
 	}
 	if st.cooldown(a) > 0 {
 		return BlockedCooldown
@@ -536,6 +547,12 @@ func (s *Sim) aimable(st *State, a *attack, caster *Entity, cell int) string {
 		return BlockedLine
 	}
 	occupant := st.at(cell)
+	if a.pickup && (occupant == nil || !st.canCarry(caster, occupant)) {
+		return BlockedCell
+	}
+	if a.throw && st.passenger(caster.ID) == nil {
+		return BlockedCell
+	}
 	if (a.rules.FreeCell && occupant != nil) || (a.rules.TakenCell && occupant == nil) {
 		return BlockedCell
 	}
@@ -693,7 +710,7 @@ func (s *Sim) Move(st *State, cell int) ([]Event, string) {
 		if entity == nil || entity.HP <= 0 || remaining <= 0 || entity.Cell != path[i] || !st.free(next) {
 			break
 		}
-		entity.Cell = next
+		s.relocate(st, c, entity, next, 0)
 		st.MPUsed++
 		last := len(c.events) - 1
 		if last >= 0 && c.events[last].Type == EventMove && c.events[last].Entity == id && c.events[last].Value > 0 {
@@ -853,6 +870,8 @@ func (s *Sim) settle(st *State, c *casting) {
 		if e.HP > 0 {
 			continue
 		}
+		s.releaseDefeated(st, c, e)
+		e = &st.Entities[i]
 		if e.Kind == KindDummy {
 			c.events = append(c.events, Event{Type: EventDefeat, Entity: e.ID})
 			if e.InitialHP > 0 {

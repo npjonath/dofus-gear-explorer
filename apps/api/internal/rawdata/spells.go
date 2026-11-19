@@ -51,27 +51,29 @@ type rawVariant struct {
 }
 
 type rawZone struct {
-	Shape    int `json:"shape"`
-	Param1   int `json:"param1"`
-	Param2   int `json:"param2"`
-	Decrease int `json:"damageDecreaseStepPercent"`
-	Steps    int `json:"maxDamageDecreaseApplyCount"`
+	IncludeCarried *int `json:"includeCarried"`
+	Shape          int  `json:"shape"`
+	Param1         int  `json:"param1"`
+	Param2         int  `json:"param2"`
+	Decrease       int  `json:"damageDecreaseStepPercent"`
+	Steps          int  `json:"maxDamageDecreaseApplyCount"`
 }
 
 type rawSpellEffect struct {
-	ActionID   int     `json:"actionId"`
-	DiceNum    int     `json:"diceNum"`
-	DiceSide   int     `json:"diceSide"`
-	Value      int     `json:"value"`
-	Triggers   string  `json:"triggers"`
-	Duration   int     `json:"duration"`
-	Delay      int     `json:"delay"`
-	Flags      int     `json:"m_flags"`
-	TargetMask string  `json:"targetMask"`
-	Lasts      int     `json:"effectTriggerDuration"`
-	Random     float64 `json:"random"`
-	Group      int     `json:"group"`
-	Zone       rawZone `json:"zoneDescr"`
+	Dispellable int     `json:"dispellable"`
+	ActionID    int     `json:"actionId"`
+	DiceNum     int     `json:"diceNum"`
+	DiceSide    int     `json:"diceSide"`
+	Value       int     `json:"value"`
+	Triggers    string  `json:"triggers"`
+	Duration    int     `json:"duration"`
+	Delay       int     `json:"delay"`
+	Flags       int     `json:"m_flags"`
+	TargetMask  string  `json:"targetMask"`
+	Lasts       int     `json:"effectTriggerDuration"`
+	Random      float64 `json:"random"`
+	Group       int     `json:"group"`
+	Zone        rawZone `json:"zoneDescr"`
 }
 
 // Flags of a spell grade: how it is aimed.
@@ -151,13 +153,14 @@ func fightEffects(effects []rawSpellEffect, defs map[int]rawEffect) []game.Spell
 			}
 		}
 		out = append(out, game.SpellEffect{
-			Stat: stat, Sign: sign,
+			Stat: stat, Sign: sign, Dispellable: e.Dispellable == 1,
 			Action: e.ActionID, Min: e.DiceNum, Max: e.DiceSide, Value: e.Value, Targets: e.TargetMask,
 			Duration: e.Duration, Delay: e.Delay, Trigger: trigger, Random: e.Random, Group: e.Group,
 			TriggerTurns: e.Lasts,
-			Zone:         game.Zone{Shape: shape, Size: e.Zone.Param1, Min: e.Zone.Param2, Decrease: e.Zone.Decrease, Steps: e.Zone.Steps},
-			Shown:        e.Flags&effectVisibleInTooltip != 0,
-			Described:    e.Flags&effectDescribedOnly != 0,
+			Zone: game.Zone{Shape: shape, Size: e.Zone.Param1, Min: e.Zone.Param2, Decrease: e.Zone.Decrease, Steps: e.Zone.Steps,
+				ExcludeCarried: e.Zone.IncludeCarried != nil && *e.Zone.IncludeCarried == 0},
+			Shown:     e.Flags&effectVisibleInTooltip != 0,
+			Described: e.Flags&effectDescribedOnly != 0,
 		})
 	}
 	return out

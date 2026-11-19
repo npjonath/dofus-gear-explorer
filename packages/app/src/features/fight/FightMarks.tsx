@@ -50,7 +50,7 @@ export function FightMarks({ board, marks, cursor, names, highlight = false, cyc
     const color = `#${mark.color.toString(16).padStart(6, "0")}`
     const hovered = selected?.id === mark.id
     const turns = mark.turns < 0 ? t("fight.buff.forever") : t("fight.buff.turns", { count: mark.turns })
-    const title = [names[mark.from], turns].filter(Boolean).join(" · ")
+    const title = [names[mark.action === 2022 ? mark.spell : mark.from], turns].filter(Boolean).join(" · ")
     if (hovered) label = pointed.length > 1 ? `${index + 1}/${pointed.length} · ${title}` : title
     return (
       <g key={mark.id} fill={color} stroke={color}>

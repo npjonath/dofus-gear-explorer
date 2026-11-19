@@ -150,10 +150,11 @@ const (
 	ActionTargetCastsOnSource = 1019
 	// ActionCastSpell has the caster cast the spell on the target's cell.
 	ActionCastSpell = 1160
-	// ActionSourceCasts has the source cast it on the target's cell, and
-	// ActionSourceCastsOnSelf on its own cell.
-	ActionSourceCasts       = 2160
-	ActionSourceCastsOnSelf = 2794
+	// ActionSourceCasts has the source cast it on the target's cell.
+	ActionSourceCasts = 2160
+	// ActionTargetCastsOnCell has the named fighter cast it on the originally
+	// aimed cell, including an empty one.
+	ActionTargetCastsOnCell = 2794
 	// ActionCastsOnCell has the caster cast it on the aimed cell, whether
 	// anyone stands there or not.
 	ActionCastsOnCell = 2960
@@ -163,7 +164,7 @@ const (
 func CastsSpell(action int) bool {
 	switch action {
 	case ActionTargetCasts, ActionTargetExecutes, ActionTargetExecutesShown, ActionTargetCastsOnSource,
-		ActionCastSpell, ActionSourceCasts, ActionSourceCastsOnSelf, ActionCastsOnCell:
+		ActionCastSpell, ActionSourceCasts, ActionTargetCastsOnCell, ActionCastsOnCell:
 		return true
 	}
 	return false
@@ -173,7 +174,7 @@ func CastsSpell(action int) bool {
 // spell and its grade. The importer retains it even when no breed casts it.
 func PlacesMark(action int) bool {
 	switch action {
-	case 400, 401, 402, 1091, 1165:
+	case 400, 401, 402, 1091, 1165, 2022:
 		return true
 	}
 	return false
@@ -181,6 +182,7 @@ func PlacesMark(action int) bool {
 
 // Zone is the cells an effect covers around the cell a spell is aimed at.
 type Zone struct {
+	ExcludeCarried bool `json:"excludeCarried,omitempty"`
 	// Shape is the game's letter for the shape: "P" a single cell, "C" a
 	// circle, "X" a cross, "L" a line, and so on.
 	Shape string `json:"shape,omitempty"`
@@ -196,6 +198,7 @@ type Zone struct {
 // SpellEffect is one effect of a spell grade as the game data gives it,
 // which the fight simulator applies.
 type SpellEffect struct {
+	Dispellable bool `json:"dispellable,omitempty"`
 	// Action is the game's effect number; Min, Max and Value are its
 	// parameters: a roll, a number of cells, a state, another spell.
 	Action int `json:"action"`

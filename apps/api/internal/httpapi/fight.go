@@ -108,22 +108,20 @@ func validState(st *fight.State) bool {
 	if len(st.Board.SightWalls) > cells || len(st.Board.Blue) > cells || len(st.Board.Red) > cells || len(st.Board.Walls) > cells || len(st.Entities) > maxFightEntities || len(st.Uses) > maxFightUses || st.Player() == nil {
 		return false
 	}
-	if !fight.ValidMarks(st) || st.ActiveID != 0 && st.Active().ID != st.ActiveID || st.LastEntityID < 0 || st.LastEntityID > 1_000_000 {
+	if !fight.ValidMarks(st) || !fight.ValidPositions(st) || st.ActiveID != 0 && st.Active().ID != st.ActiveID || st.LastEntityID < 0 || st.LastEntityID > 1_000_000 {
 		return false
 	}
 	seen := map[int]bool{}
 	players := 0
-	occupied := map[int]bool{}
 	hooks := 0
 	for _, e := range st.Entities {
 		if seen[e.ID] || e.ID < 1 || e.ID > 1_000_000 || len(e.Uses) > maxFightUses || len(e.Stats) > 256 {
 			return false
 		}
 		seen[e.ID] = true
-		if occupied[e.Cell] || e.Kind != fight.KindPlayer && e.Kind != fight.KindDummy && e.Kind != fight.KindSummon {
+		if e.Kind != fight.KindPlayer && e.Kind != fight.KindDummy && e.Kind != fight.KindSummon {
 			return false
 		}
-		occupied[e.Cell] = true
 		if e.Kind == fight.KindPlayer {
 			players++
 		}
@@ -234,6 +232,7 @@ func (s *Server) handleFight(w http.ResponseWriter, r *http.Request, eng *engine
 	}
 	for _, mark := range st.Marks {
 		name(mark.From)
+		name(mark.Spell)
 	}
 	for _, ev := range out.Events {
 		name(ev.Spell)

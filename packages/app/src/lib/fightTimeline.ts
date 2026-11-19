@@ -119,6 +119,8 @@ export interface Timeline {
   floats: FloatCue[]
   turns: TurnCue[]
   graphics: GraphicCue[]
+  carriers: Record<number, number>
+  lifts: { rider: number; carrier: number; pickup: boolean; start: number; end: number }[]
 }
 
 function contiguous(board: FightBoard, cells: number[]): boolean {
@@ -143,6 +145,7 @@ function toneOfCast(events: FightEvent[], cast: number): string {
 export function buildTimeline(before: FightState, events: FightEvent[], zone?: number[], visuals?: SpellVisualCatalog): Timeline {
   const board = before.board
   const cellOf = new Map(before.entities.map((entity) => [entity.id, entity.cell]))
+  const carrying = new Map(before.entities.filter((entity) => entity.carriedBy).map((entity) => [entity.id, entity.carriedBy!]))
   const hpOf = new Map(before.entities.map((entity) => [entity.id, entity.hp]))
   const maxOf = new Map(before.entities.map((entity) => [entity.id, entity.maxHp]))
   const busy = new Map<number, number>()
@@ -160,6 +163,8 @@ export function buildTimeline(before: FightState, events: FightEvent[], zone?: n
     floats: [],
     turns: [],
     graphics: [],
+    carriers: Object.fromEntries(carrying),
+    lifts: [],
   }
 
   // When the next beat may start, and when everything laid so far is over.
@@ -208,12 +213,32 @@ export function buildTimeline(before: FightState, events: FightEvent[], zone?: n
 
   events.forEach((event, index) => {
     const entity = event.entity ?? 0
+    if (event.type === "rune") {
+      if (event.cell === undefined || event.spell === undefined) return
+      const caster = before.entities.find((fighter) => fighter.id === entity)
+      if (!caster) return
+      const target = before.entities.find((fighter) => cellOf.get(fighter.id) === event.cell)
+      const visual = castVisual(visuals, event.spell, Boolean(event.critical), caster, target,
+        board, cellOf.get(entity) ?? caster.cell, event.cell, now)
+      for (const cue of visual?.graphics ?? []) {
+        if (cue.kind !== "mark" || timeline.graphics.some((other) =>
+          other.kind === "mark" && other.to === cue.to && other.bone === cue.bone && other.end >= now)) continue
+        timeline.graphics.push(cue)
+        end = Math.max(end, cue.end)
+      }
+      return
+    }
+    if (event.type === "release") {
+      carrying.delete(entity)
+      timeline.lifts.push({ rider: entity, carrier: event.carrier ?? 0, pickup: false, start: now, end: now })
+      return
+    }
     if (event.type === "mark") {
       if (!visuals || event.cell === undefined || event.triggerSpell === undefined) return
-      const mark = before.marks?.find((entry) => entry.cell === event.cell && entry.from === event.spell && entry.action === event.action)
+      const mark = before.marks?.find((entry) => entry.cell === event.cell && (entry.action === 2022 ? entry.spell : entry.from) === event.spell && entry.action === event.action)
       const owner = mark ? before.entities.find((fighter) => fighter.id === mark.caster) : before.entities.find((fighter) => fighter.kind === "player")
       const target = before.entities.find((fighter) => fighter.id === entity)
-      if (!owner || !target) return
+      if (!owner) return
       closeHits()
       closeShove()
       if (mark) {
@@ -225,8 +250,14 @@ export function buildTimeline(before: FightState, events: FightEvent[], zone?: n
           end = Math.max(end, finish)
         }
       }
+      // A rune's activating spell can grant a state and remove it again
+      // within the same action. Its FX binding needs the state at detonation.
+      const caster = event.casterStates ? {
+        ...owner,
+        buffs: event.casterStates.map((ref) => ({kind: "state" as const, spell: 0, from: 0, value: 0, ref, turns: 1})),
+      } : owner
       const visual = castVisual(visuals, event.triggerSpell, Boolean(event.critical ?? mark?.critical),
-        owner, target, board, event.cell, cellOf.get(entity) ?? target.cell, now)
+        caster, target, board, event.cell, cellOf.get(entity) ?? target?.cell ?? event.cell, now)
       if (visual) {
         timeline.graphics.push(...visual.graphics)
         source = event.cell
@@ -291,7 +322,16 @@ export function buildTimeline(before: FightState, events: FightEvent[], zone?: n
       if (cells.length < 2 || !cellOf.has(entity)) return
       closeHits()
       let cue: MoveCue
-      if ((event.value ?? 0) > 0) {
+      if (event.carrier && (event.action === 50 || event.action === 51)) {
+        closeShove()
+        const pickup = event.action === 50
+        const duration = pickup ? 250 : Math.min(500, 180 + cellDistance(board, cells[0]!, cells[cells.length-1]!) * 45)
+        cue = { entity, cells, gait: "slide", start: now, end: now + duration }
+        timeline.lifts.push({ rider: entity, carrier: event.carrier, pickup, start: now, end: cue.end })
+        if (pickup) carrying.set(entity, event.carrier)
+        else carrying.delete(entity)
+        now = cue.end
+      } else if ((event.value ?? 0) > 0) {
         closeShove()
         const start = Math.max(now, busy.get(entity) ?? 0)
         cue = { entity, cells, gait: "walk", start, end: start + (cells.length - 1) * WALK_MS }
@@ -309,6 +349,9 @@ export function buildTimeline(before: FightState, events: FightEvent[], zone?: n
       timeline.moves.push(cue)
       busy.set(entity, cue.end)
       cellOf.set(entity, cells[cells.length - 1]!)
+      for (const [rider, owner] of carrying) {
+        if (owner === entity) cellOf.set(rider, cells[cells.length - 1]!)
+      }
       end = Math.max(end, cue.end)
       free = Math.max(free, cue.end)
       return
@@ -390,6 +433,8 @@ export interface Actor {
   direction?: Direction
   animation?: string
   spell?: number
+  carriedBy?: number
+  lift?: number
 }
 
 export interface Scene {
@@ -467,6 +512,28 @@ export function sceneAt(timeline: Timeline, time: number, facing: Record<number,
     actor.aim = cue.cell === undefined ? undefined : cellXY(board, cue.cell)
   }
 
+  const carriers = { ...timeline.carriers }
+  for (const lift of timeline.lifts) {
+    if (time < lift.start) continue
+    const actor = actors[lift.rider]
+    if (!actor) continue
+    if (lift.pickup && time >= lift.end) carriers[lift.rider] = lift.carrier
+    else delete carriers[lift.rider]
+    if (time < lift.end) {
+      const phase = (time - lift.start) / (lift.end - lift.start)
+      actor.lift = lift.pickup ? phase : 1-phase + 0.7 * Math.sin(Math.PI * phase)
+    }
+  }
+  for (const [riderId, carrierId] of Object.entries(carriers)) {
+    const rider = actors[Number(riderId)]
+    const carrier = actors[carrierId]
+    if (!rider || !carrier) continue
+    rider.x = carrier.x
+    rider.y = carrier.y
+    rider.carriedBy = carrierId
+    rider.lift = 1
+  }
+
   const running = <Cue extends { start: number; end: number }>(cues: Cue[]) =>
     cues
       .filter((cue) => time >= cue.start && time < cue.end)
@@ -485,7 +552,6 @@ export function facingAfter(timeline: Timeline, facing: Record<number, Facing>):
 
 /** The cell each entity stands on once the timeline is over. */
 export function cellsAfter(timeline: Timeline): Record<number, number> {
-  const cells = { ...timeline.start }
-  for (const move of timeline.moves) cells[move.entity] = move.cells[move.cells.length - 1]!
-  return cells
+  const { actors } = sceneAt(timeline, timeline.duration, {})
+  return Object.fromEntries(Object.entries(actors).map(([id, actor]) => [id, Math.round(actor.y) * timeline.board.width + Math.round(actor.x)]))
 }

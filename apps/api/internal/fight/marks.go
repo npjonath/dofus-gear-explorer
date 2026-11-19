@@ -12,6 +12,7 @@ const (
 	endMark   = 402
 	auraMark  = 1091
 	entryMark = 1165
+	runeMark  = 2022
 	maxMarks  = 64
 )
 
@@ -61,7 +62,7 @@ func ValidMarks(st *State) bool {
 }
 
 func (s *Sim) placeMark(st *State, c *casting, at place, a *attack, index int, critical bool, e game.SpellEffect) {
-	if at.depth >= maxDepth || len(st.Marks) >= maxMarks || !st.Board.valid(at.cell) {
+	if at.depth >= maxDepth || !st.Board.valid(at.cell) {
 		return
 	}
 	caster := st.entity(at.caster)
@@ -72,6 +73,18 @@ func (s *Sim) placeMark(st *State, c *casting, at place, a *attack, index int, c
 		if cond.onCaster && !s.holds(cond, caster, nil) {
 			return
 		}
+	}
+	if e.Action == runeMark {
+		// A new elemental rune replaces this caster's rune on the same
+		// cell. Other fighters retain their own independent marks.
+		for _, m := range slices.Clone(st.Marks) {
+			if m.Action == runeMark && m.Caster == at.caster && m.Cell == at.cell {
+				s.removeMark(st, c, m, at.depth)
+			}
+		}
+	}
+	if len(st.Marks) >= maxMarks {
+		return
 	}
 	for _, m := range st.Marks {
 		c.lastMarkID = max(c.lastMarkID, m.ID)
@@ -98,6 +111,9 @@ func (s *Sim) placeMark(st *State, c *casting, at place, a *attack, index int, c
 		Spell: a.id, Index: index, Grade: a.grade, Critical: critical,
 		Cell: at.cell, Cells: cells, Color: e.Value & 0xffffff, Turns: turns}
 	st.Marks = append(st.Marks, mark)
+	if mark.Action == runeMark {
+		c.emit(Event{Type: "rune", Entity: caster.ID, Spell: a.id, Cell: &mark.Cell, Action: runeMark})
+	}
 	if mark.Action == auraMark {
 		for _, target := range st.Entities {
 			s.triggerMark(st, c, mark, target.ID, at.depth+1)
@@ -118,6 +134,60 @@ func (s *Sim) markEffect(m Mark) *game.SpellEffect {
 		return nil
 	}
 	return &effects[m.Index]
+}
+
+// Runes are activated by another spell, even when the rune's tile is empty.
+// The payload may target the occupant, the owner, or a designated fighter
+// elsewhere on the board, as in Runic Overcharge.
+func (s *Sim) actOnRunes(st *State, c *casting, at place, e game.SpellEffect, had map[int]map[int]bool) {
+	caster := st.entity(at.caster)
+	if caster == nil || at.depth >= maxDepth || len(st.Marks) == 0 {
+		return
+	}
+	mask := readMask(e.Targets)
+	for _, condition := range mask.conds {
+		if condition.onCaster && !s.holds(condition, caster, had) {
+			return
+		}
+	}
+	zone := st.Board.zone(e.Zone, at.stood[caster.ID], at.cell)
+	for _, m := range slices.Clone(st.Marks) {
+		if m.Action != runeMark || m.Caster != at.caster || !slices.Contains(zone, m.Cell) || !st.hasMark(m) {
+			continue
+		}
+		if c.fires >= maxFires || c.spent() {
+			break
+		}
+		occupant := st.at(m.Cell)
+		if occupant != nil && (!mask.names(caster, occupant) || !s.met(mask, caster, occupant, had)) {
+			continue
+		}
+		record := s.markEffect(m)
+		if record == nil || (e.Value > 0 && record.Min != e.Value && m.From != e.Value) {
+			continue
+		}
+		payload := s.attack(record.Min, record.Max)
+		if payload == nil {
+			continue
+		}
+		s.removeMark(st, c, m, at.depth)
+		entityID := 0
+		if occupant != nil {
+			entityID = occupant.ID
+		}
+		c.fires++
+		states := []int{}
+		for _, b := range caster.Buffs {
+			if b.Kind == BuffState {
+				states = append(states, b.Ref)
+			}
+		}
+		c.emit(Event{Type: "mark", Entity: entityID, Spell: m.Spell, TriggerSpell: payload.id, Cell: &m.Cell, Action: runeMark, CasterStates: states})
+		root, action := c.root, c.markAction
+		c.root, c.markAction = m.Spell, runeMark
+		s.resolve(st, c, m.Caster, m.Caster, payload, m.Cell, at.depth+1)
+		c.root, c.markAction = root, action
+	}
 }
 
 func (st *State) hasMark(m Mark) bool {

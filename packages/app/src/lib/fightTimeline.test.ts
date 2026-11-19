@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
 import type { FightEntity, FightEvent, FightState } from "../api/types"
-import type { SpellVisualCatalog } from "./gameSpellEffects"
+import { groundGraphics, type SpellVisualCatalog } from "./gameSpellEffects"
 import { buildTimeline, cellsAfter, facingAfter, HIT_HOLD_MS, HIT_MS, HIT_STAGGER_MS, sceneAt, TOPPLE_MS, WALK_MS } from "./fightTimeline"
 
 const WIDTH = 13
@@ -65,6 +65,51 @@ describe("installed spell animations", () => {
     ], undefined, catalog)
     expect(timeline.graphics[0]).toMatchObject({ bone: 8, from: cell(1, 2), to: cell(1, 1) })
     expect(timeline.poses.map((pose) => pose.pose)).toEqual(["hit"])
+  })
+
+  it("plays a rune's spawn, idle, and conditional detonation at its empty tile", () => {
+    const runeCatalog: SpellVisualCatalog = {
+      spells: {
+        10: { normal: [{ sequences: [{ end: "dontWait", gfx: [{ kind: "mark", bone: 1 }] }] }] },
+        11: { normal: [{ casterMask: "C,*E123", sequences: [{ end: "dontWait", gfx: [{ kind: "target", bone: 2 }] }] }] },
+      },
+      casts: {},
+      clips: {
+        1: { animation: "spawn", idle: "idle", duration: 300, directions: [0] },
+        2: { animation: "hit", duration: 200, directions: [0] },
+      },
+    }
+    const at = cell(1, 2)
+    const mark = { action: 2022, spell: 10, from: 9, index: 0, grade: 1, id: 3, cell: at, cells: [at], turns: 2, color: 0xff0000, caster: PLAYER }
+    expect(groundGraphics(runeCatalog, mark)[0]?.idle).toBe("idle")
+    const spawn = buildTimeline(before, [{ type: "rune", spell: 10, entity: PLAYER, cell: at }], undefined, runeCatalog)
+    expect(spawn.graphics[0]).toMatchObject({ bone: 1, animation: "spawn", to: at })
+    const activation = buildTimeline({ ...before, marks: [mark] }, [
+      { type: "mark", spell: 10, triggerSpell: 11, action: 2022, cell: at, casterStates: [123] },
+    ], undefined, runeCatalog)
+    expect(activation.graphics[0]).toMatchObject({ bone: 2, animation: "hit", from: at, to: at })
+  })
+})
+
+describe("carrying another fighter", () => {
+  const p = cell(3,4), r = cell(3,5)
+  it("raises the rider and keeps the rider on the carrier's path", () => {
+    const st = fight(entity(PLAYER, "player", p), entity(DUMMY, "dummy", r))
+    const lift = buildTimeline(st, [{ type:"move", entity:DUMMY, carrier:PLAYER, action:50, path:[r,p] }])
+    expect(sceneAt(lift, lift.duration, looks).actors[DUMMY]).toMatchObject({x:3,y:4,carriedBy:PLAYER,lift:1})
+    st.entities[1]!.cell=p
+    st.entities[1]!.carriedBy=PLAYER
+    const walk = buildTimeline(st,[{type:"move",entity:PLAYER,value:1,path:[p,cell(4,4)]}])
+    const frame = sceneAt(walk, walk.duration/2, looks)
+    expect(frame.actors[DUMMY]?.x).toBe(frame.actors[PLAYER]?.x)
+    expect(cellsAfter(walk)[DUMMY]).toBe(cell(4,4))
+  })
+  it("throws from the carrier's hands and lands on the destination", () => {
+    const st = fight(entity(PLAYER, "player", p), {...entity(DUMMY,"dummy",p),carriedBy:PLAYER})
+    const tl = buildTimeline(st,[{type:"move",entity:DUMMY,carrier:PLAYER,action:51,path:[p,cell(7,4)]}])
+    expect(sceneAt(tl, tl.duration/2, looks).actors[DUMMY]!.lift).toBeGreaterThan(.5)
+    expect(sceneAt(tl, tl.duration, looks).actors[DUMMY]).toMatchObject({x:7,y:4})
+    expect(sceneAt(tl, tl.duration, looks).actors[DUMMY]?.carriedBy).toBeUndefined()
   })
 })
 

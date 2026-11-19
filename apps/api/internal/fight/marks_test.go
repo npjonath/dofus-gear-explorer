@@ -154,3 +154,72 @@ func TestEquipmentBonusesScopedToTrapAndGlyphDamage(t *testing.T) {
 		t.Fatalf("trap got %d damage, want 215", damage)
 	}
 }
+
+func TestRunesActivateOnCommandAndKeepTheirOwner(t *testing.T) {
+	s := newSim(map[int]int{game.StatAP: 12, game.StatMP: 6, 110: 100})
+	withMark(s, 201, runeMark, 2, game.SpellEffect{Action: 99, Min: 20, Targets: "A", Zone: point()})
+	// An actual Huppermage helper uses a point mark; the walk and the turn
+	// change must leave it intact until an activation spell reaches it.
+	s.Cat.SpellByID[201].Levels[0].Effects[0].Zone = point()
+	detonate := spell(203, game.SpellLevel{RangeMax: 10, Effects: []game.SpellEffect{
+		{Action: 2023, Targets: "a,A", Zone: point()},
+		{Action: 97, Min: 200, Described: true, Targets: "A", Zone: point()},
+	}})
+	s.Cat.SpellByID[203] = &detonate
+	st := fightAt(s, Dummies{}, [2]int{5, 6}, [2]int{8, 6})
+	center := st.Entities[1].Cell
+	s.Cast(st, 201, center)
+	s.Cast(st, 201, center)
+	if len(st.Marks) != 1 {
+		t.Fatalf("overwriting one rune left %d marks", len(st.Marks))
+	}
+	other := st.Marks[0]
+	other.ID++
+	other.Caster = 3
+	st.Marks = append(st.Marks, other)
+	s.EndTurn(st)
+	aim := s.Aim(st, 203)
+	if !slices.ContainsFunc(aim.Targets, func(t Target) bool {
+		return t.Cell == center && len(t.Losses) == 1 && t.Losses[0].Min == 40
+	}) || len(st.Marks) != 2 {
+		t.Fatalf("rune preview mutated or included descriptive-only hits: %+v", st.Marks)
+	}
+	ev, _ := s.Cast(st, 203, center)
+	if lost(ev, 2) != 40 || len(st.Marks) != 1 || st.Marks[0].Caster != 3 {
+		t.Fatalf("rune activated incorrectly: %+v %+v", ev, st.Marks)
+	}
+	s.EndTurn(st)
+	if len(st.Marks) != 0 {
+		t.Fatal("the second caster's unused rune did not expire")
+	}
+}
+
+func TestActivatingAnEmptyRuneThroughADelegatedSpell(t *testing.T) {
+	s := newSim(map[int]int{game.StatAP: 12, game.StatMP: 6})
+	withMark(s, 205, runeMark, 2, game.SpellEffect{Action: actionTeleport, Targets: "a,A,*e7", Zone: point()})
+	s.Cat.SpellByID[205].Levels[0].Effects[0].Zone = point()
+	delegate := spell(207, game.SpellLevel{RangeMax: 10, Effects: []game.SpellEffect{
+		{Action: game.ActionTargetCastsOnCell, Min: 208, Max: 1, Targets: "C", Zone: point()},
+	}})
+	detonate := spell(208, game.SpellLevel{Effects: []game.SpellEffect{{Action: 2023, Targets: "a,A", Zone: point()}}})
+	s.Cat.SpellByID[207], s.Cat.SpellByID[208] = &delegate, &detonate
+	st := fightAt(s, Dummies{}, [2]int{10, 6})
+	center := st.Board.cell(5, 6)
+	s.Cast(st, 205, center)
+	s.Move(st, st.Board.cell(6, 6))
+	if len(st.Marks) != 1 {
+		t.Fatal("walking through a rune consumed it")
+	}
+	aim := s.Aim(st, 207)
+	if !slices.ContainsFunc(aim.Targets, func(t Target) bool {
+		return t.Cell == center && len(t.Shifts) == 1 && t.Shifts[0].Entity == 1 && t.Shifts[0].Cell == center
+	}) || len(st.Marks) != 1 {
+		t.Fatal("preview of the empty rune did not report the teleport")
+	}
+	events, why := s.Cast(st, 207, center)
+	if why != "" || len(st.Marks) != 0 || st.Player().Cell != center || !slices.ContainsFunc(events, func(e Event) bool {
+		return e.Type == "mark" && e.Entity == 0 && e.Cell != nil && *e.Cell == center
+	}) {
+		t.Fatalf("empty aimed tile not preserved through the delegated spell: %q %+v", why, events)
+	}
+}

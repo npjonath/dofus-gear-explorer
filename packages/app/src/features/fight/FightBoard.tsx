@@ -48,6 +48,7 @@ interface Props {
 const HEADROOM = 92
 const BAR = 30
 const SPRITE_SCALE = 0.7
+const CARRY_HEIGHT = 52
 
 // An eight-pointed burst: the mark of a critical hit, next to its number and where it lands.
 const BURST = Array.from({ length: 16 }, (_, index) => {
@@ -232,8 +233,13 @@ function Stage({
   const cast = entities.map((entity) => {
     const still = cellXY(board, entity.cell)
     const facing: Facing = playback.facing[entity.id] ?? defaultFacing(entity.kind)
-    const actor: Actor = scene?.actors[entity.id] ?? { ...still, facing, pose: "idle", phase: 0, dir: 1, stride: 0 }
-    return { entity, actor, at: gridPoint(actor.x, actor.y), depth: actor.x + actor.y }
+    const actor: Actor = scene?.actors[entity.id] ?? {
+      ...still, facing, pose: "idle", phase: 0, dir: 1, stride: 0,
+      carriedBy: entity.carriedBy, lift: entity.carriedBy ? 1 : 0,
+    }
+    const at = gridPoint(actor.x, actor.y)
+    at.y -= CARRY_HEIGHT * (actor.lift ?? 0)
+    return { entity, actor, at, depth: actor.x + actor.y + (actor.lift ?? 0) * 0.05 }
   })
   // Whatever is nearer the bottom of the drawing is drawn over what stands behind.
   const standing = [
@@ -313,7 +319,7 @@ function Stage({
             data-picked={picked === entity.id || undefined}
             style={{ "--beat": `${(entity.id * 610) % 1900}ms` } as React.CSSProperties}
           >
-            <ellipse className="fight-foot" rx={14} ry={5.6} />
+            {!actor.lift && <ellipse className="fight-foot" rx={14} ry={5.6} />}
             {board.id ? (
               <GameActor
                 kind={entity.kind}
@@ -321,6 +327,7 @@ function Stage({
                 items={items}
                 monsterId={entity.monsterId}
                 placement={placement}
+                carrying={cast.some((other) => other.actor.carriedBy === entity.id)}
                 pose={actor.pose}
                 scale={SPRITE_SCALE}
                 direction={actor.direction ?? playback.directions[entity.id] ?? (entity.kind === "player" ? 7 : 1)}
@@ -770,7 +777,7 @@ export function FightBoardView({
               className="fight-hit"
               data-cell={entity.cell}
               x={center.x - 13}
-              y={center.y - height}
+              y={center.y - height - (entity.carriedBy ? CARRY_HEIGHT : 0)}
               width={26}
               height={height}
             />
