@@ -563,7 +563,9 @@ func TestWorkIsBounded(t *testing.T) {
 	}
 	work := 3
 	c := &casting{work: &work}
-	if c.spent() || c.spent() || c.spent() || !c.spent() {
-		t.Error("the budget ends after the effects it allows")
+	for applied := 1; applied <= 4; applied++ {
+		if gone := c.spent(); gone != (applied == 4) {
+			t.Errorf("after %d effects of a budget of 3, spent = %v", applied, gone)
+		}
 	}
 }
