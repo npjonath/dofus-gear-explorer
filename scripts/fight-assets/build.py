@@ -14,7 +14,7 @@ here = Path(__file__).resolve().parent
 os_name = {"darwin": "mac", "win32": "win", "linux": "linux"}[sys.platform]
 arch = {"aarch64": "arm64", "arm64": "arm64", "amd64": "x64", "x86_64": "x64"}[platform.machine().lower()]
 dest = here.parents[1] / "apps" / "desktop" / "fight-import" / f"{os_name}-{arch}"
-dest.mkdir(parents=True, exist_ok=True)
+dest.parent.mkdir(parents=True, exist_ok=True)
 
 with tempfile.TemporaryDirectory() as folder:
     os.environ.setdefault("PYINSTALLER_CONFIG_DIR", str(Path(folder) / "cache"))
@@ -26,7 +26,18 @@ with tempfile.TemporaryDirectory() as folder:
          "--collect-all", "texture2ddecoder", "--collect-all", "etcpak",
          "--collect-all", "astc_encoder", "--collect-all", "fmod_toolkit",
          "--collect-all", "brotli", "--copy-metadata", "UnityPy", str(here/"import_assets.py")])
-    shutil.copytree(Path(folder)/"dist"/"fight-import",dest,dirs_exist_ok=True,symlinks=True)
+    with tempfile.TemporaryDirectory(dir=dest.parent) as replacement:
+        stage = Path(replacement) / "new"
+        shutil.copytree(Path(folder) / "dist" / "fight-import", stage, symlinks=True)
+        backup = Path(replacement) / "previous"
+        if dest.exists():
+            dest.rename(backup)
+        try:
+            stage.rename(dest)
+        except OSError:
+            if backup.exists():
+                backup.rename(dest)
+            raise
 
 notices = []
 python_license = Path(os.__file__).parent / "LICENSE.txt"

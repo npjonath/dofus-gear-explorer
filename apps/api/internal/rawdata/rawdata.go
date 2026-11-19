@@ -32,6 +32,7 @@ var DataFiles = []string{
 	"spell_variants.json",
 	"spell_types.json",
 	"breeds.json",
+	"monsters.json",
 }
 
 // LangFile returns the translation asset name for a language code.

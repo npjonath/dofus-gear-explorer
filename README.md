@@ -16,7 +16,7 @@ Browse every piece of equipment in the game, assemble a stuff with its real char
 - **Stuffs**: one tab per stuff, a 16-slot builder with characteristics, set bonuses, passive effects and equip conditions. Each item can carry forgemagic: overs, exos, a transcendence rune and a dracorune.
 - **Damage**: what the weapon and every spell of the stuff's class hit for, normal and critical, checked against dofusbook on the same stuffs.
 - **Stuff search**: set conditions (11 AP, 300 Wisdom, a spell that hits for 1,000…), order what to maximize, require or forbid items, and get the best stuffs with their forgemagic.
-- **Fight**: try the stuff in a fight against training dummies with resistances you set: move, aim a spell and see its range, its zone and what each target would lose before you cast.
+- **Fight**: take a stuff to the Village or Astrub training room. Walk, cast with keyboard shortcuts, control summons and measure damage against the resistances you set. In the desktop app, open **Combat → Options → Import DOFUS graphics** to read the maps, character animations and interface art from your installed DOFUS 3 client. Once imported, combat runs offline.
 - **Comparison**: set two stuffs side by side, or a search result against a stuff, and read what the change gains and loses: characteristics, items with their forgemagic, damage.
 - **Sharing**: copy a stuff's code and send it to a friend, who pastes it in "Import". Nothing goes through a server.
 - French, English, Spanish and Portuguese, for the interface and the game data. Dark and light theme.

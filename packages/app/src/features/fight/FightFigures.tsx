@@ -18,10 +18,11 @@ export interface FigureProps {
 }
 
 /** How far above its feet a figure rises: what is written over it starts there. */
-export const FIGURE_TOP = { player: 60, dummy: 51 } as const
+export const FIGURE_TOP = { player: 60, dummy: 51, summon: 40 } as const
 
 /** The outline of each figure, for the place a shove would leave it. */
 export const SILHOUETTE = {
+  summon: "M-12 0 Q-15 -18 -8 -25 Q0 -32 8 -25 Q15 -18 12 0Z",
   player:
     "M-7 -35 C-9.5 -44 -5 -50.5 1 -50.5 C6.5 -50.5 8.5 -45 7.5 -35 L9 -33 L10.5 -14 L6 -14 L6 0 L-6 0 L-6 -14 L-10.5 -14 L-9 -33 Z",
   dummy:
@@ -97,14 +98,14 @@ export function Dummy() {
   )
 }
 
-export function Figure({ kind, ...props }: FigureProps & { kind: "player" | "dummy" }) {
+export function Figure({ kind, ...props }: FigureProps & { kind: "player" | "dummy" | "summon" }) {
   return kind === "player" ? <Hero {...props} /> : <Dummy />
 }
 
 const STILL: FigureProps = { pose: "idle", phase: 0, stride: 0 }
 
 /** A figure standing still in a small frame of its own: the piece as a portrait. */
-export function FigurePortrait({ kind }: { kind: "player" | "dummy" }) {
+export function FigurePortrait({ kind }: { kind: "player" | "dummy" | "summon" }) {
   return (
     <svg className="fight-portrait" viewBox="-19 -62 38 65" aria-hidden="true">
       <Figure kind={kind} {...STILL} />

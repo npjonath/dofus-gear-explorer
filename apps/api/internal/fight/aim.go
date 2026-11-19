@@ -28,7 +28,7 @@ func (s *Sim) Slot(st *State, id int) *Slot {
 	if a == nil {
 		return nil
 	}
-	player := st.Player()
+	player := st.Active()
 	lo, hi := s.reach(player, a)
 	slot := &Slot{
 		ID: id, APCost: a.cost, RangeMin: lo, RangeMax: hi, CritRate: s.critRate(a, s.StatOf(player)),
@@ -36,7 +36,7 @@ func (s *Sim) Slot(st *State, id int) *Slot {
 	}
 	if a.rules.PerTurn > 0 {
 		slot.Left = a.rules.PerTurn
-		if use := st.Uses[id]; use != nil {
+		if use := st.counters()[id]; use != nil {
 			slot.Left = max(0, a.rules.PerTurn-use.Turn)
 		}
 	}
@@ -87,7 +87,7 @@ func (s *Sim) Aim(st *State, spellID int) *Aim {
 	if a == nil || st.Phase != PhaseFight {
 		return nil
 	}
-	player := st.Player()
+	player := st.Active()
 	aim := &Aim{Spell: spellID, Range: []int{}, Targets: []Target{}, CanCrit: s.critRate(a, s.StatOf(player)) > 0}
 	if s.blocked(st, a) != "" {
 		return aim
@@ -133,7 +133,7 @@ func (s *Sim) preview(st *State, a *attack, spellID, cell int, canCrit bool, wor
 				return -1
 			},
 		}
-		id := trial.Player().ID
+		id := trial.Active().ID
 		s.resolve(trial, c, id, id, a, cell, 0)
 		if crit {
 			s.fire(trial, c, id, id, 0, "CC")
@@ -195,7 +195,7 @@ func (s *Sim) preview(st *State, a *attack, spellID, cell int, canCrit bool, wor
 // shown is the zone a spell covers when aimed at a cell: the cells of the
 // effects the game lists that do not apply to the caster alone.
 func (s *Sim) shown(st *State, a *attack, cell int) []int {
-	player := st.Player()
+	player := st.Active()
 	seen := map[int]bool{cell: true}
 	zone := []int{cell}
 	for _, e := range a.effects {

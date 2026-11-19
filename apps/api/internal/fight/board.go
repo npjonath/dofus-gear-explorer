@@ -5,6 +5,7 @@
 package fight
 
 import (
+	"slices"
 	"sort"
 
 	"dofusdb/api/internal/game"
@@ -13,9 +14,19 @@ import (
 // Board is the arena: a grid of cells numbered row by row, some of them
 // walls that block movement and sight.
 type Board struct {
-	Width  int   `json:"width"`
-	Height int   `json:"height"`
-	Walls  []int `json:"walls"`
+	Width          int     `json:"width"`
+	Height         int     `json:"height"`
+	Walls          []int   `json:"walls"`
+	MapID          int     `json:"id,omitempty"`
+	SightWalls     []int   `json:"sightWalls"`
+	Blue           []int   `json:"blue,omitempty"`
+	Red            []int   `json:"red,omitempty"`
+	ImageWidth     float64 `json:"imageWidth,omitempty"`
+	ImageHeight    float64 `json:"imageHeight,omitempty"`
+	OriginX        float64 `json:"originX,omitempty"`
+	OriginY        float64 `json:"originY,omitempty"`
+	HalfCellWidth  float64 `json:"halfCellWidth,omitempty"`
+	HalfCellHeight float64 `json:"halfCellHeight,omitempty"`
 }
 
 // MaxSide is the longest side a board can have.
@@ -40,12 +51,24 @@ func (b Board) inside(x, y int) bool { return x >= 0 && y >= 0 && x < b.Width &&
 func (b Board) valid(cell int) bool { return cell >= 0 && cell < b.Width*b.Height }
 
 func (b Board) wall(cell int) bool {
-	for _, w := range b.Walls {
-		if w == cell {
-			return true
-		}
+	return slices.Contains(b.Walls, cell)
+}
+
+func (b Board) blocksSight(cell int) bool {
+	if b.SightWalls == nil {
+		return b.wall(cell)
 	}
-	return false
+	return slices.Contains(b.SightWalls, cell)
+}
+
+func (b Board) inCamp(entity *Entity, cell int) bool {
+	if b.MapID == 0 {
+		return true
+	}
+	if entity.Kind == KindPlayer || entity.Ally {
+		return slices.Contains(b.Blue, cell)
+	}
+	return slices.Contains(b.Red, cell)
 }
 
 func abs(v int) int {

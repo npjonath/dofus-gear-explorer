@@ -24,9 +24,10 @@ import (
 )
 
 type Server struct {
-	store   *store.Store
-	updater *updater.Updater
-	log     *slog.Logger
+	creatures atomic.Pointer[creaturePack]
+	store     *store.Store
+	updater   *updater.Updater
+	log       *slog.Logger
 	// engine is swapped atomically when a new release is imported.
 	engine  atomic.Pointer[engine.Engine]
 	access  Access
@@ -64,6 +65,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/solver/results/{id}", s.handleResults)
 	mux.HandleFunc("POST /api/fight", s.withData(s.handleFight))
 	mux.HandleFunc("POST /api/fight/aim", s.withData(s.handleFightAim))
+	mux.HandleFunc("GET /api/fight/assets", s.handleFightAssets)
+	mux.HandleFunc("GET /fight-assets/{path...}", s.serveFightAsset)
 	mux.HandleFunc("GET /images/items/{file}", s.handleIcon)
 	mux.HandleFunc("GET /images/spells/{file}", s.handleIcon)
 	mux.HandleFunc("GET /images/breeds/{file}", s.handleIcon)

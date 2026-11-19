@@ -1,6 +1,7 @@
 import * as React from "react"
 import type { FightEvent, FightState } from "../../api/types"
-import { buildTimeline, cellsAfter, facingAfter, type Facing, type FloatCue, type Timeline } from "../../lib/fightTimeline"
+import { buildTimeline, cellsAfter, sceneAt, type Facing, type FloatCue, type Timeline } from "../../lib/fightTimeline"
+import type { Direction, SpellVisualCatalog } from "../../lib/gameSpellEffects"
 
 /** A number rising from an entity: health lost or gained, points given back. */
 export interface Float {
@@ -8,7 +9,7 @@ export interface Float {
   run: number
   entity: number
   cell: number
-  kind: "player" | "dummy"
+  kind: "player" | "dummy" | "summon"
   text: string
   /** A stat tone, or "plain". */
   tone: string
@@ -28,9 +29,11 @@ export interface Run {
   startedAt: number
   /** The way each entity looked when the action started. */
   facing: Record<number, Facing>
+  directions: Record<number, Direction>
 }
 
 export interface Playback {
+  visualCatalog?: SpellVisualCatalog
   run: Run | null
   /** True while the board is still catching up with the fight. */
   playing: boolean
@@ -39,6 +42,7 @@ export interface Playback {
   /** Health to show instead of the true one, while the losses have not landed yet. */
   hp: Record<number, number> | null
   facing: Record<number, Facing>
+  directions: Record<number, Direction>
   floats: Float[]
   /** Plays the events that led from `before`; `zone` is what the cast was shown to cover. */
   play(before: FightState, events: FightEvent[], text: (cue: FloatCue) => string, zone?: number[]): void
@@ -54,7 +58,7 @@ export interface Playback {
 let sequence = 0
 
 /** The way a piece looks before anything turned it: the player to the right, the dummies back at it. */
-export function defaultFacing(kind: "player" | "dummy"): Facing {
+export function defaultFacing(kind: "player" | "dummy" | "summon"): Facing {
   return kind === "player" ? 1 : -1
 }
 
@@ -76,17 +80,18 @@ function hurry(floats: Float[], run: number, elapsed: number): Float[] {
  * state the engine returned; this only holds what the eye is shown on the way
  * there. `key` names the fight: what belongs to another fight is ignored.
  */
-export function useFightPlayback(key: string): Playback {
+export function useFightPlayback(key: string, visuals?: SpellVisualCatalog): Playback {
   const [run, setRun] = React.useState<Run | null>(null)
   const [done, setDone] = React.useState(0)
   const [freed, setFreed] = React.useState(0)
   const [health, setHealth] = React.useState<{ run: number; values: Record<number, number> } | null>(null)
-  const [looks, setLooks] = React.useState<{ key: string; values: Record<number, Facing> }>({ key, values: {} })
+  const [looks, setLooks] = React.useState<{ key: string; values: Record<number, Facing>; directions: Record<number, Direction> }>({ key, values: {}, directions: {} })
   const [floats, setFloats] = React.useState<Float[]>([])
 
   const live = run?.key === key ? run : null
   const playing = live !== null && done !== live.id
   const facing = looks.key === key ? looks.values : {}
+  const directions = looks.key === key ? looks.directions : {}
 
   React.useEffect(() => {
     if (!live || !playing) return
@@ -108,7 +113,7 @@ export function useFightPlayback(key: string): Playback {
   }
 
   function play(before: FightState, events: FightEvent[], text: (cue: FloatCue) => string, zone?: number[]) {
-    const timeline = buildTimeline(before, events, zone)
+    const timeline = buildTimeline(before, events, zone, visuals)
     const id = ++sequence
     const still = reducedMotion()
     const kinds = new Map(before.entities.map((entity) => [entity.id, entity.kind]))
@@ -129,10 +134,17 @@ export function useFightPlayback(key: string): Playback {
     }))
     const elapsed = live && playing ? performance.now() - live.startedAt : 0
     setFloats((current) => [...(live && playing ? hurry(current, live.id, elapsed) : current), ...risen])
-    setLooks({ key, values: facingAfter(timeline, looked) })
+    const final = sceneAt(timeline, timeline.duration, looked, directions).actors
+    const nextDirections = { ...directions }
+    const nextFacing = { ...looked }
+    for (const [entity, actor] of Object.entries(final)) {
+      nextFacing[Number(entity)] = actor.facing
+      if (actor.direction !== undefined) nextDirections[Number(entity)] = actor.direction
+    }
+    setLooks({ key, values: nextFacing, directions: nextDirections })
     if (timeline.duration === 0 || still) {
       // Nothing to watch: the board shows the fight as it stands.
-      setRun({ id, key, timeline, startedAt: performance.now(), facing: looked })
+      setRun({ id, key, timeline, startedAt: performance.now(), facing: looked, directions })
       setDone(id)
       setHealth(null)
       return
@@ -140,7 +152,7 @@ export function useFightPlayback(key: string): Playback {
     // Health waits for the blow: entities that lose or gain some keep what they had.
     const held: Record<number, number> = {}
     for (const cue of timeline.health) held[cue.entity] ??= before.entities.find((entity) => entity.id === cue.entity)?.hp ?? cue.hp
-    setRun({ id, key, timeline, startedAt: performance.now(), facing: looked })
+    setRun({ id, key, timeline, startedAt: performance.now(), facing: looked, directions })
     setHealth({ run: id, values: held })
   }
 
@@ -148,16 +160,18 @@ export function useFightPlayback(key: string): Playback {
     setRun(null)
     setHealth(null)
     setFloats([])
-    setLooks({ key, values: {} })
+    setLooks({ key, values: {}, directions: {} })
   }
 
   return {
+    visualCatalog: visuals,
     run: live,
     playing,
     settled: !playing || freed === live.id,
     finish: setDone,
     hp: playing && health?.run === live.id ? health.values : null,
     facing,
+    directions,
     floats,
     play,
     skip,

@@ -1,10 +1,27 @@
-import { Button } from "@ui-sdk/react/button"
+import { Dialog, DialogBackdrop, DialogContent, DialogTitle } from "@ui-sdk/react/dialog"
+import { useQuery, useQueryClient } from "@tanstack/react-query"
+import { loadFightKeys, keyLabel } from "../../lib/fightKeys"
+import { GameActor } from "./GameActor"
+import { useGameSpellCatalog } from "./GameSpellEffects"
+import { FightOptions } from "./FightOptions"
+import { StatsPanel } from "../build/StatsPanel"
 import { Popover, PopoverContent, PopoverDescription, PopoverTitle, PopoverTrigger } from "@ui-sdk/react/popover"
-import { RotateCcwIcon, SlidersHorizontalIcon } from "lucide-react"
+import {
+  ArrowLeftIcon,
+  BookOpenIcon,
+  BackpackIcon,
+  SettingsIcon,
+  MaximizeIcon,
+  UserRoundIcon,
+  XIcon,
+  RotateCcwIcon,
+  SlidersHorizontalIcon,
+} from "lucide-react"
 import * as React from "react"
 import { useFightAction, useFightAim, useFightStart } from "../../api/queries"
 import type {
   BuildInput,
+  Evaluation,
   FightAction,
   FightBuff,
   FightDummies,
@@ -16,7 +33,7 @@ import type {
   Stat,
 } from "../../api/types"
 import { useI18n } from "../../i18n"
-import { AP_STAT, HP_STAT, MP_STAT, statIndex, toneOf } from "../../lib/stats"
+import { AP_STAT, statIndex, toneOf } from "../../lib/stats"
 import { useApi } from "../../platform"
 import type { Build } from "../../store"
 import { NumberField } from "../../ui/NumberField"
@@ -32,6 +49,8 @@ interface LogLine {
   /** Who it happened to and which spell, named when it happened. */
   who: string
   spell: string
+  time: string
+  hits?: FightEvent[]
 }
 
 interface Played {
@@ -72,97 +91,56 @@ function SpellIcon({ slot }: { slot: FightSlot }) {
   return <img src={api.imageUrl(path)} alt="" loading="lazy" draggable={false} onError={() => setFailed(true)} />
 }
 
-type SpellGroup = "class" | "common"
+function spellGroups(slots: FightSlot[]) {
+  const groups = new Map<number, FightSlot[]>()
+  for (const slot of slots) {
+    if (slot.weapon) continue
+    const base = slot.variantOf || slot.id
+    groups.set(base, [...(groups.get(base) ?? []), slot])
+  }
+  const commonOrder = [18646, 370, 368, 369, 367, 373, 24006, 3506, 24015, 24011, 366, 364]
+  const rank = (id: number) => {
+    const i = commonOrder.indexOf(id)
+    return i < 0 ? commonOrder.length + id : i
+  }
+  return [...groups.entries()].sort(([a, sa], [b, sb]) => {
+    if (sa[0]!.breedId < 0 && sb[0]!.breedId < 0) return 0
+    return Number(sb[0]!.breedId !== 0) - Number(sa[0]!.breedId !== 0) || (sa[0]!.breedId === 0 ? rank(a) - rank(b) : a - b)
+  })
+}
 
-// Two rows whatever the class: a spell and its variant share a column, as in
-// the game's own spell list, and the common spells wait behind their tab.
-function SpellBar({
-  slots,
+function SpellButton({
+  slot,
   selected,
   onSelect,
   onPeek,
+  shortcut,
 }: {
-  slots: FightSlot[]
-  selected: number | null
-  onSelect(id: number): void
-  onPeek(id: number | null): void
+  slot: FightSlot
+  selected: boolean
+  onSelect: (id: number) => void
+  onPeek: (id: number | null) => void
+  shortcut: string
 }) {
   const { t } = useI18n()
-  const [wanted, setWanted] = React.useState<SpellGroup>("class")
-  const groups: Record<SpellGroup, FightSlot[]> = {
-    class: slots.filter((slot) => slot.weapon || slot.breedId !== 0),
-    common: slots.filter((slot) => !slot.weapon && slot.breedId === 0),
-  }
-  const names: Record<SpellGroup, { short: string; full: string }> = {
-    class: { short: t("fight.spells.class"), full: t("fight.classSpells") },
-    common: { short: t("fight.spells.common"), full: t("fight.commonSpells") },
-  }
-  const tabs = (["class", "common"] as const).filter((name) => groups[name].length > 0)
-  const tab = tabs.includes(wanted) ? wanted : (tabs[0] ?? wanted)
-  const columns = new Map<string, FightSlot[]>()
-  for (const slot of groups[tab]) {
-    const column = slot.weapon ? "weapon" : String(slot.variantOf || slot.id)
-    columns.set(column, [...(columns.get(column) ?? []), slot])
-  }
+  const reason = slot.blocked && slot.blocked !== "phase" ? t(`fight.blocked.${slot.blocked}`) : ""
   return (
-    <div className="flex min-w-0 flex-1 items-start gap-2">
-      {tabs.length > 1 && (
-        <div className="grid flex-none gap-1" role="group" aria-label={t("fight.spells")}>
-          {tabs.map((name) => (
-            <button
-              key={name}
-              type="button"
-              className="chip fight-tab"
-              aria-pressed={tab === name}
-              aria-label={names[name].full}
-              title={names[name].full}
-              onClick={() => setWanted(name)}
-            >
-              {names[name].short}
-            </button>
-          ))}
-        </div>
-      )}
-      <div
-        className="fight-bar"
-        role="group"
-        aria-label={names[tab].full}
-        style={{ "--cols": String(columns.size) } as React.CSSProperties}
-      >
-        <div className="fight-bar-row">
-          {[...columns].map(([column, pair]) => (
-            <div key={column} className="fight-pair">
-              {pair.map((slot) => {
-                // Before the fight starts nothing can be cast, and nothing is wrong with any spell.
-                const blocked = slot.blocked && slot.blocked !== "phase" ? slot.blocked : null
-                const state = blocked ? t(`fight.blocked.${blocked}`) : ""
-                return (
-                  <button
-                    key={slot.id}
-                    type="button"
-                    className="cell fight-spell"
-                    aria-pressed={selected === slot.id}
-                    aria-disabled={Boolean(blocked)}
-                    aria-label={[slot.name, t("item.apCost", { n: slot.apCost }), state].filter(Boolean).join(", ")}
-                    onClick={() => onSelect(slot.id)}
-                    onMouseEnter={() => onPeek(slot.id)}
-                    onMouseLeave={() => onPeek(null)}
-                    onFocus={() => onPeek(slot.id)}
-                    onBlur={() => onPeek(null)}
-                  >
-                    <SpellIcon slot={slot} />
-                    <span className="fight-spell-cost" data-tone="ap">
-                      {slot.apCost}
-                    </span>
-                    {slot.cooldown > 0 && <span className="fight-spell-wait">{slot.cooldown}</span>}
-                  </button>
-                )
-              })}
-            </div>
-          ))}
-        </div>
-      </div>
-    </div>
+    <button
+      type="button"
+      className="cell fight-spell"
+      aria-label={`${slot.name}, ${t("item.apCost", { n: slot.apCost })}`}
+      aria-pressed={selected}
+      aria-disabled={Boolean(slot.blocked)}
+      title={[slot.name, shortcut, reason].filter(Boolean).join(" · ")}
+      onClick={() => onSelect(slot.id)}
+      onMouseEnter={() => onPeek(slot.id)}
+      onMouseLeave={() => onPeek(null)}
+      onFocus={() => onPeek(slot.id)}
+      onBlur={() => onPeek(null)}
+    >
+      <SpellIcon slot={slot} />
+      {slot.cooldown > 0 && <span className="fight-spell-wait">{slot.cooldown}</span>}
+    </button>
   )
 }
 
@@ -257,6 +235,9 @@ function EntitySheet({
   const { t, number } = useI18n()
   function describe(buff: FightBuff): { label: string; tone: string } | null {
     switch (buff.kind) {
+      case "armor":
+      case "shield":
+        return { label: t(buff.kind === "armor" ? "fight.armor" : "fight.shield", { n: number(buff.value) }), tone: "plain" }
       case "stat": {
         const stat = stats.get(buff.ref)
         if (!stat) return null
@@ -311,12 +292,31 @@ function LogEntry({ line, stats }: { line: LogLine; stats: Map<number, Stat> }) 
   const { event, who, spell } = line
   const value = event.value ?? 0
   switch (event.type) {
+    case "armor":
+    case "shield":
+      return (
+        <li>
+          {who} · {t(event.type === "armor" ? "fight.armor" : "fight.shield", { n: signed(value, number) })}
+        </li>
+      )
+    case "summon":
+      return <li>{t("fight.log.summon", { who, spell })}</li>
+    case "mark":
+      return <li>{t("fight.log.mark", { who, spell })}</li>
+    case "dodge": {
+      const stat = event.stat === undefined ? "" : (stats.get(event.stat)?.label ?? "")
+      return <li>{t("fight.log.dodge", { who, value: number(value), stat })}</li>
+    }
     case "turn":
-      return <li className="fight-log-turn">{t("fight.turn", { turn: value })}</li>
+      return (
+        <li className="fight-log-turn">
+          <time>{line.time}</time> {t("fight.turn", { turn: value })}
+        </li>
+      )
     case "cast":
       return (
         <li>
-          {t("fight.log.cast", { who, spell })}
+          <time>{line.time}</time> <b>{t("fight.log.cast", { who, spell })}</b>
           {event.critical && <strong className="text-ink"> {t("fight.log.critical")}</strong>}
         </li>
       )
@@ -324,7 +324,25 @@ function LogEntry({ line, stats }: { line: LogLine; stats: Map<number, Stat> }) 
       return (
         <li className="flex items-baseline gap-2 pl-3">
           <span className="pip" data-tone={event.push ? "plain" : elementTone(event.element)} />
-          <span>{t(event.push ? "fight.log.push" : "fight.log.damage", { who, value: number(value) })}</span>
+          <span>
+            {t(event.push ? "fight.log.push" : "fight.log.damage", {
+              who,
+              value: number(line.hits?.reduce((sum, hit) => sum + (hit.value ?? 0), 0) ?? value),
+            })}
+            {(line.hits?.length ?? 0) > 1 && (
+              <>
+                {" "}
+                (
+                {line.hits!.map((hit, i) => (
+                  <React.Fragment key={i}>
+                    {i > 0 ? " + " : ""}
+                    <em data-tone={elementTone(hit.element)}>{number(hit.value ?? 0)}</em>
+                  </React.Fragment>
+                ))}
+                )
+              </>
+            )}
+          </span>
         </li>
       )
     case "heal":
@@ -349,7 +367,9 @@ function LogEntry({ line, stats }: { line: LogLine; stats: Map<number, Stat> }) 
       return <li className="pl-3">{t("fight.log.ap", { who, count: value })}</li>
     case "move": {
       const cells = (event.path?.length ?? 1) - 1
-      return <li className="pl-3">{t(value > 0 ? "fight.log.walk" : "fight.log.moved", { who, count: value > 0 ? value : cells })}</li>
+      return (
+        <li className="pl-3">{t(value > 0 ? "fight.log.walk" : "fight.log.moved", { who, count: value > 0 ? value : cells })}</li>
+      )
     }
     case "defeat":
       return <li className="pl-3">{t("fight.log.defeat", { who })}</li>
@@ -378,8 +398,20 @@ function DummySettings({ dummies, onChange }: { dummies: FightDummies; onChange(
             value={dummies.count}
             min={1}
             max={4}
-            onChange={(count) => onChange({ ...dummies, count })}
+            onChange={(count) => onChange({ ...dummies, count, allies: Math.min(count - 1, dummies.allies ?? 0) })}
           />
+          {dummies.count > 1 && (
+            <>
+              <span className="text-ink-2">{t("fight.allies")}</span>
+              <NumberField
+                label={t("fight.allies")}
+                value={dummies.allies ?? 0}
+                min={0}
+                max={dummies.count - 1}
+                onChange={(allies) => onChange({ ...dummies, allies })}
+              />
+            </>
+          )}
           <span className="text-ink-2">{t("fight.dummies.hp")}</span>
           <NumberField
             label={t("fight.dummies.hp")}
@@ -433,7 +465,38 @@ function DummySettings({ dummies, onChange }: { dummies: FightDummies; onChange(
   )
 }
 
-export function FightPanel({ meta, build, input }: { meta: Meta; build: Build; input: BuildInput }) {
+type Panel = "chat" | "stats" | "spells" | "gear" | "settings" | "entity" | null
+
+export function FightPanel({
+  meta,
+  build,
+  input,
+  evaluation,
+  onExit,
+}: {
+  meta: Meta
+  build: Build
+  input: BuildInput
+  evaluation?: Evaluation
+  onExit: () => void
+}) {
+  const api = useApi()
+  const cache = useQueryClient()
+  const assetQuery = useQuery({ queryKey: ["fight-assets", api.baseUrl], queryFn: () => api.fightAssets(), staleTime: 60000 })
+  const maps = assetQuery.data?.maps
+  const [mapChoice, setMapChoice] = React.useState(99222029)
+  const mapId = maps?.includes(mapChoice) ? mapChoice : (maps?.[0] ?? 0)
+  const [panel, setPanel] = React.useState<Panel>(null)
+  const [keys, setKeys] = React.useState(loadFightKeys)
+  const [variants, setVariants] = React.useState<Record<number, number>>({})
+  const [highlightMarks, setHighlightMarks] = React.useState(false)
+  const [showTip, setShowTip] = React.useState(false)
+  const gameRef = React.useRef<HTMLDivElement>(null)
+  const [fullscreen, setFullscreen] = React.useState(false)
+  const toggleFullscreen = async () => {
+    if (document.fullscreenElement) await document.exitFullscreen()
+    else await gameRef.current?.requestFullscreen()
+  }
   const { t, number } = useI18n()
   const stats = React.useMemo(() => {
     // What only a fight changes has no line in a stuff's sheet: it is named here.
@@ -445,12 +508,12 @@ export function FightPanel({ meta, build, input }: { meta: Meta; build: Build; i
   }, [meta, t])
   const [dummies, setDummies] = React.useState<FightDummies>({ count: 1, hp: 50_000, stats: {} })
   const [round, setRound] = React.useState(0)
-  const start = useFightStart(input, build.breedId, dummies, round)
+  const start = useFightStart(input, build.breedId, { ...dummies, mapId }, round)
   const action = useFightAction(input, build.breedId)
 
   // A fight belongs to the stuff, the class and the dummies it started with:
   // change one and a new fight starts.
-  const key = JSON.stringify([input, build.breedId, dummies, round])
+  const key = JSON.stringify([input, build.breedId, dummies, mapId, round])
   const [played, setPlayed] = React.useState<Played | null>(null)
   const live = played?.key === key ? played : null
   const view = live?.view ?? start.data
@@ -463,18 +526,23 @@ export function FightPanel({ meta, build, input }: { meta: Meta; build: Build; i
   // The entity the player clicked in the turn order: it stays pointed until another is.
   const [pinned, setPinned] = React.useState<number | null>(null)
   const [refused, setRefused] = React.useState<string | null>(null)
-  const playback = useFightPlayback(key)
+  const visualCatalog = useGameSpellCatalog(mapId ? api.imageUrl("/fight-assets") : undefined, assetQuery.data?.pack)
+  const playback = useFightPlayback(key, visualCatalog)
   const logEnd = React.useRef<HTMLLIElement>(null)
+  const pendingAction = React.useRef(false)
+  const actionEpoch = React.useRef(0)
 
   const aim = useFightAim(input, build.breedId, view?.state, spell).data
   const breedName = meta.breeds.find((breed) => breed.id === build.breedId)?.name
 
   function nameOf(entity: FightEntity): string {
+    if (entity.kind === "summon") return entity.name ?? t("fight.actors")
     if (entity.kind === "player") return breedName ?? t("fight.you")
-    return t("fight.dummy", { n: entity.id - 1 })
+    return entity.id === 2 ? "Poutch Ingball" : `Poutch Ingball ${entity.id - 1}`
   }
 
   function restart() {
+    actionEpoch.current++
     setRound(round + 1)
     setSpell(null)
     setPicked(null)
@@ -491,17 +559,41 @@ export function FightPanel({ meta, build, input }: { meta: Meta; build: Build; i
 
   // `zone` is what the cast was shown to cover when it was aimed: the events do not say it.
   function act(next: FightAction, zone?: number[]) {
-    if (!view || action.isPending) return
+    if (!view || pendingAction.current || start.isPlaceholderData) return
+    pendingAction.current = true
+    const epoch = actionEpoch.current
     const before = view.state
     action.mutate(
       { state: before, action: next },
       {
+        onSettled: () => {
+          pendingAction.current = false
+        },
         onSuccess: (result) => {
+          if (epoch !== actionEpoch.current) return
           const byId = new Map(result.state.entities.map((entity) => [entity.id, entity]))
-          const lines: LogLine[] = result.events.map((event) => {
+          const time = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false })
+          const lines: LogLine[] = []
+          for (const event of result.events) {
             const entity = byId.get(event.entity ?? 0)
-            return { id: nextId(), event, who: entity ? nameOf(entity) : "", spell: result.names[event.spell ?? -1] ?? "" }
-          })
+            const previous = lines.at(-1)
+            if (
+              event.type === "damage" &&
+              previous?.event.type === "damage" &&
+              event.entity === previous.event.entity &&
+              event.push === previous.event.push
+            ) {
+              previous.hits = [...(previous.hits ?? [previous.event]), event]
+            } else {
+              lines.push({
+                id: nextId(),
+                event,
+                time,
+                who: entity ? nameOf(entity) : "",
+                spell: result.names[event.spell ?? -1] ?? "",
+              })
+            }
+          }
           setPlayed({ key, view: result, log: [...log, ...lines].slice(-400) })
           // Placing an entity is not an event of the fight: it is carried to its cell all the same.
           const carried = before.entities.find((entity) => next.type === "place" && entity.id === next.entity)
@@ -526,7 +618,13 @@ export function FightPanel({ meta, build, input }: { meta: Meta; build: Build; i
     const occupant = view.state.entities.find((entity) => entity.cell === cell)
     if (view.state.phase === "placement") {
       if (occupant) setPicked(picked === occupant.id ? null : occupant.id)
-      else if (picked !== null) act({ type: "place", entity: picked, cell })
+      else {
+        const camp = stateBoard?.blue?.includes(cell) ? "player" : stateBoard?.red?.includes(cell) ? "dummy" : null
+        const entity =
+          view.state.entities.find((e) => e.id === picked && (!camp || (e.ally ? "player" : e.kind) === camp)) ??
+          view.state.entities.find((e) => (e.ally ? "player" : e.kind) === camp)
+        if (entity) act({ type: "place", entity: entity.id, cell })
+      }
       return
     }
     if (spell !== null) {
@@ -537,156 +635,445 @@ export function FightPanel({ meta, build, input }: { meta: Meta; build: Build; i
     if (view.steps.some((step) => step.cell === cell)) act({ type: "move", cell })
   }
 
-  if (!view) {
+  const stateBoard = view?.state.board
+  const groups = React.useMemo(() => spellGroups(view?.spells ?? []), [view?.spells])
+  const deck = groups.map(([base, slots]) => slots.find((slot) => slot.id === (variants[base] ?? base)) ?? slots[0]!)
+  const weapon = view?.spells.find((slot) => slot.weapon)
+  function endTurn() {
+    if (!view || action.isPending || start.isPlaceholderData) return
+    playback.skip()
+    setSpell(null)
+    setPicked(null)
+    setPeek(null)
+    act({ type: view.state.phase === "fight" ? "end" : "begin" })
+  }
+  const onShortcut = React.useEffectEvent((event: KeyboardEvent) => {
+    if (!gameRef.current?.getClientRects().length || event.repeat || event.isComposing || event.metaKey || event.altKey) return
+    if (
+      event.target instanceof HTMLElement &&
+      event.target.closest("input,select,textarea,[contenteditable=true],[role=dialog],[data-slot=popover-content]")
+    )
+      return
+    if (panel || document.querySelector('[role="dialog"], [data-slot="popover-content"][data-open]')) return
+    if (event.code === "Escape") {
+      setSpell(null)
+      setPicked(null)
+      setPeek(null)
+      setShowTip(false)
+      return
+    }
+    const pos = keys.indexOf(event.code)
+    if (pos < 0) return
+    if (pos >= 12 && (event.ctrlKey || event.shiftKey)) return
+    event.preventDefault()
+    if (pos < 12) {
+      const slot = deck[pos + (event.ctrlKey || event.shiftKey ? 12 : 0)]
+      if (slot) toggleSpell(slot.id)
+    } else if (pos === 12 && weapon) toggleSpell(weapon.id)
+    else if (pos === 13) endTurn()
+    else if (pos >= 14) setPanel((["stats", "spells", "gear", "settings"] as const)[pos - 14] ?? null)
+  })
+  React.useEffect(() => {
+    const keydown = (event: KeyboardEvent) => {
+      if (event.key === "Alt") setShowTip(true)
+      if (
+        event.code === "KeyY" &&
+        !event.ctrlKey &&
+        !(event.target instanceof HTMLElement && event.target.closest("input,textarea,[role=dialog]"))
+      )
+        setHighlightMarks(true)
+      onShortcut(event)
+    }
+    const clear = () => {
+      setShowTip(false)
+      setHighlightMarks(false)
+    }
+    const keyup = (event: KeyboardEvent) => {
+      if (event.key === "Alt") setShowTip(false)
+      if (event.code === "KeyY") setHighlightMarks(false)
+    }
+    const sync = () => setFullscreen(Boolean(document.fullscreenElement))
+    window.addEventListener("keydown", keydown)
+    window.addEventListener("keyup", keyup)
+    window.addEventListener("blur", clear)
+    document.addEventListener("fullscreenchange", sync)
+    return () => {
+      window.removeEventListener("keydown", keydown)
+      window.removeEventListener("keyup", keyup)
+      window.removeEventListener("blur", clear)
+      document.removeEventListener("fullscreenchange", sync)
+    }
+  }, [])
+  function changeMap(id: number) {
+    setMapChoice(id)
+    restart()
+    setPanel(null)
+  }
+  if (!view)
     return (
-      <div className="board grid flex-1 place-items-center p-6">
-        <p className="m-0 rounded-lg border border-line bg-panel p-6 text-ink-2" role={start.isError ? "alert" : "status"}>
-          {start.isError ? t("fight.failed") : t("fight.loading")}
-        </p>
+      <div className="fight-screen combat-loading" ref={gameRef}>
+        <p role={start.isError ? "alert" : "status"}>{t(start.isError ? "fight.failed" : "fight.loading")}</p>
+        <button onClick={onExit}>{t("fight.back")}</button>
       </div>
     )
-  }
-
   const { state } = view
   const fighting = state.phase === "fight"
-  const player = state.entities.find((entity) => entity.kind === "player")!
+  const player = state.entities.find((e) => e.id === state.activeId) ?? state.entities.find((e) => e.kind === "player")!
   const shownSlot = view.spells.find((slot) => slot.id === (peek ?? spell))
-  const hovered = cursor !== null ? state.entities.find((entity) => entity.cell === cursor) : undefined
-  const shownEntity = hovered ?? state.entities.find((entity) => entity.id === pinned) ?? player
-  // Health follows the board: a loss shows when the blow lands.
+  const hovered = state.entities.find((e) => e.cell === cursor)
+  const shownEntity = hovered ?? state.entities.find((e) => e.id === pinned) ?? player
   const hpOf = (entity: FightEntity) => playback.hp?.[entity.id] ?? entity.hp
-  const vitals = [
-    { stat: stats.get(HP_STAT), tone: "vitality", value: number(hpOf(player)) },
-    { stat: stats.get(AP_STAT), tone: "ap", value: number(view.ap) },
-    { stat: stats.get(MP_STAT), tone: "mp", value: number(view.mp) },
-  ]
-
+  const art = Boolean(state.board.id)
+  const hud = (id: string) => api.imageUrl(`/fight-assets/hud/${id}.png`)
+  const imageStyle = (id: string) => ({ backgroundImage: `url("${hud(id)}")` })
+  const menuTitle =
+    panel === "chat"
+      ? t("fight.chat")
+      : panel === "settings"
+        ? t("fight.settings")
+        : panel === "stats"
+          ? t("build.stats")
+          : panel === "spells"
+            ? t("fight.spells")
+            : panel === "gear"
+              ? t("build.view.gear")
+              : nameOf(shownEntity)
+  const tool = (id: "stats" | "spells" | "gear", asset: string, label: string, icon: React.ReactNode) => (
+    <button title={label} aria-label={label} onClick={() => setPanel(id)}>
+      {art ? <img src={hud(asset)} alt="" /> : icon}
+    </button>
+  )
+  const button = (slot: FightSlot, index: number) => (
+    <SpellButton
+      key={slot.id}
+      slot={slot}
+      selected={spell === slot.id}
+      onSelect={toggleSpell}
+      onPeek={setPeek}
+      shortcut={slot.weapon ? keyLabel(keys[12]!) : index < 24 ? `${index >= 12 ? "⇧ " : ""}${keyLabel(keys[index % 12]!)}` : ""}
+    />
+  )
   return (
-    <div className="fight flex min-h-0 flex-1 flex-col lg:flex-row">
-      <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-        <div className="flex items-center gap-x-4 border-b border-line bg-panel px-4 py-2">
-          <strong className="flex-none">{fighting ? t("fight.turn", { turn: state.turn }) : t("fight.placement")}</strong>
-          <span className="min-w-0 flex-1 truncate text-ink-2" title={fighting ? undefined : t("fight.placementHint")}>
-            {fighting
-              ? t("fight.damage", { turn: number(state.turnDamage), total: number(state.totalDamage) })
-              : t("fight.placementHint")}
-          </span>
-          <DummySettings dummies={dummies} onChange={setDummies} />
-          <Button onClick={restart}>
-            <RotateCcwIcon aria-hidden="true" className="size-4" />
-            {t("fight.restart")}
-          </Button>
+    <div className="fight-screen" ref={gameRef} data-art={art || undefined}>
+      {art && (
+        <style>{`@font-face{font-family:CombatLexend;src:url("${api.imageUrl("/fight-assets/hud/lexend-regular.ttf")}")}@font-face{font-family:CombatLexend;src:url("${api.imageUrl("/fight-assets/hud/lexend-bold.ttf")}");font-weight:700}@font-face{font-family:CombatRowdies;src:url("${api.imageUrl("/fight-assets/hud/rowdies-regular.ttf")}")}`}</style>
+      )}
+      <header className="combat-top">
+        <div className="combat-summary">
+          <b>{build.name}</b>
+          {fighting && (
+            <>
+              <span>{t("fight.turn", { turn: state.turn })}</span>
+              <span>{t("fight.crit", { n: view.currentStats?.["18"] ?? 0 })}</span>
+              <span>{t("fight.damage", { turn: number(state.turnDamage), total: number(state.totalDamage) })}</span>
+            </>
+          )}
         </div>
-
-        <div className="fight-stage min-h-0 flex-1">
-          <FightBoardView
-            view={view}
-            aim={aim}
-            spell={spell}
-            cursor={cursor}
-            picked={picked}
-            pointed={hovered?.id ?? pinned}
-            playback={playback}
-            busy={action.isPending}
-            nameOf={nameOf}
-            onCursor={setCursor}
-            onAct={onCell}
-            onCancel={() => {
+        <nav aria-label={t("build.view.fight")}>
+          <button className="compact-chat" onClick={() => setPanel("chat")}>
+            {t("fight.chat")}
+          </button>
+          {tool("stats", "characteristic", t("build.stats"), <UserRoundIcon />)}
+          {tool("spells", "spells", t("fight.spells"), <BookOpenIcon />)}
+          {tool("gear", "inventory", t("build.view.gear"), <BackpackIcon />)}
+          <DummySettings
+            dummies={dummies}
+            onChange={(next) => {
+              actionEpoch.current++
+              setDummies(next)
               setSpell(null)
               setPicked(null)
+              playback.reset()
             }}
           />
-
-          <ol className="fight-order" aria-label={t("fight.order")}>
-            {state.entities.map((entity) => {
-              const name = nameOf(entity)
-              const active = fighting && entity.kind === "player"
-              const hp = hpOf(entity)
-              return (
-                <li key={entity.id}>
-                  <button
-                    type="button"
-                    className="cell fight-order-cell"
-                    title={name}
-                    aria-label={[name, t("fight.entity.hp", { hp: number(hp), max: number(entity.maxHp) }), active ? t("fight.order.playing") : ""]
-                      .filter(Boolean)
-                      .join(", ")}
-                    aria-pressed={pinned === entity.id}
-                    aria-current={active || undefined}
-                    data-pointed={shownEntity.id === entity.id || undefined}
-                    onClick={() => setPinned(pinned === entity.id ? null : entity.id)}
-                    onMouseEnter={() => setCursor(entity.cell)}
-                    onMouseLeave={() => setCursor(null)}
-                    onFocus={() => setCursor(entity.cell)}
-                    onBlur={() => setCursor(null)}
-                  >
-                    <Portrait entity={entity} breedId={build.breedId} />
-                    <span className="fight-order-hp">
-                      <span style={{ transform: `scaleX(${Math.max(0, Math.min(1, hp / entity.maxHp))})` }} />
-                    </span>
-                  </button>
-                </li>
-              )
-            })}
-          </ol>
-
-          <div className="fight-vitals">
-            {vitals.map(({ stat, tone, value }) => (
-              <div key={tone} className="vital fight-vital" data-tone={tone}>
-                <span className="label">{stat?.label}</span>
-                <span className="value">{value}</span>
-              </div>
-            ))}
-          </div>
-
-          <Button
-            data-variant="solid"
-            className="fight-end h-10!"
-            disabled={action.isPending}
-            onClick={() => {
-              playback.skip()
-              setSpell(null)
-              setPicked(null)
-              act({ type: fighting ? "end" : "begin" })
-            }}
+          <button title={t("fight.restart")} onClick={restart}>
+            <RotateCcwIcon />
+            <span>{t("fight.restart")}</span>
+          </button>
+          <button title={t("fight.back")} onClick={onExit}>
+            <ArrowLeftIcon />
+            <span>{t("fight.back")}</span>
+          </button>
+          <button
+            aria-label={t("fight.fullscreen")}
+            aria-pressed={fullscreen}
+            onClick={() => void toggleFullscreen().catch(() => {})}
           >
-            {fighting ? t("fight.endTurn") : t("fight.ready")}
-          </Button>
-        </div>
-
-        <div className="fight-dock flex items-start gap-3 border-t border-line bg-panel px-4 py-2">
-          {build.breedId === null && view.spells.every((slot) => slot.weapon || slot.breedId === 0) && (
-            <p className="m-0 max-w-56 flex-none text-ink-2">{t("fight.noBreed")}</p>
-          )}
-          <SpellBar slots={view.spells} selected={spell} onSelect={toggleSpell} onPeek={setPeek} />
-        </div>
+            <MaximizeIcon />
+          </button>
+          <button aria-label={t("fight.settings")} title={t("fight.settings")} onClick={() => setPanel("settings")}>
+            <SettingsIcon />
+          </button>
+        </nav>
+      </header>
+      <div className="fight-stage combat-stage">
+        <FightBoardView
+          highlightMarks={highlightMarks}
+          view={view}
+          aim={aim}
+          spell={spell}
+          cursor={cursor}
+          picked={picked}
+          pointed={hovered?.id ?? pinned}
+          breedId={build.breedId}
+          items={input.items}
+          playback={playback}
+          busy={action.isPending || start.isPlaceholderData}
+          nameOf={nameOf}
+          onCursor={setCursor}
+          onAct={onCell}
+          onCancel={() => {
+            setSpell(null)
+            setPicked(null)
+          }}
+        />
+        <ol className="fight-order combat-order" aria-label={t("fight.order")}>
+          <li className="combat-round">
+            <svg width="16" height="17" viewBox="0 0 16 18" aria-hidden="true">
+              <path d="M6 1h4M8 2v2m5 0-1.5 1.5" fill="none" stroke="currentColor" strokeWidth="1.6" />
+              <circle cx="8" cy="10" r="5.3" fill="none" stroke="currentColor" strokeWidth="1.5" />
+              <path d="M8 6v4l2 1" fill="none" stroke="currentColor" strokeWidth="1.4" />
+            </svg>
+            {state.turn || 1}
+          </li>
+          {[...state.entities]
+            .sort((a, b) => Number(a.kind === "dummy" && !a.ally) - Number(b.kind === "dummy" && !b.ally))
+            .map((entity) => (
+              <li key={entity.id}>
+                <button
+                  type="button"
+                  className="cell fight-order-cell"
+                  title={nameOf(entity)}
+                  aria-label={`${nameOf(entity)}, ${number(hpOf(entity))} / ${number(entity.maxHp)} PV`}
+                  data-kind={entity.ally ? "player" : entity.kind}
+                  aria-current={(fighting && entity.id === player.id) || undefined}
+                  onClick={() => {
+                    setPinned(entity.id)
+                    setPanel("entity")
+                  }}
+                  onMouseEnter={() => setCursor(entity.cell)}
+                  onMouseLeave={() => setCursor(null)}
+                >
+                  {art ? (
+                    <svg
+                      viewBox={
+                        entity.kind === "player" ? "-15 -58 30 33" : entity.kind === "summon" ? "-14 -28 28 29" : "-20 -66 40 57"
+                      }
+                      aria-hidden="true"
+                    >
+                      <GameActor
+                        kind={entity.kind}
+                        breedId={build.breedId}
+                        items={input.items}
+                        monsterId={entity.monsterId}
+                        direction={entity.kind === "player" ? 3 : 1}
+                        portrait
+                        placement={!fighting}
+                        pose="idle"
+                      />
+                    </svg>
+                  ) : (
+                    <Portrait entity={entity} breedId={build.breedId} />
+                  )}
+                  <span className="fight-order-hp">
+                    <span style={{ transform: `scaleY(${Math.max(0, Math.min(1, hpOf(entity) / entity.maxHp))})` }} />
+                  </span>
+                </button>
+              </li>
+            ))}
+        </ol>
+        {state.entities.some((e) => e.kind === "summon") && (
+          <aside className="combat-summons">
+            <h3>{t("fight.actors")}</h3>
+            {state.entities
+              .filter((e) => e.kind === "summon")
+              .map((e) => (
+                <button
+                  key={e.id}
+                  onClick={() => {
+                    setPinned(e.id)
+                    setPanel("entity")
+                  }}
+                >
+                  <svg viewBox="-25 -49 50 50" aria-hidden="true">
+                    <GameActor portrait kind="summon" monsterId={e.monsterId} pose="idle" direction={1} />
+                  </svg>
+                  <span>
+                    <b>{nameOf(e)}</b>
+                    <small>
+                      {number(hpOf(e))} ♥　{view.state.activeId === e.id ? view.ap : (e.stats?.["1"] ?? 0)} PA　
+                      {view.state.activeId === e.id ? view.mp : (e.stats?.["23"] ?? 0)} PM
+                    </small>
+                  </span>
+                </button>
+              ))}
+          </aside>
+        )}
+        {!fighting && (
+          <div className="combat-placement">
+            <span>{t("fight.placementHint")}</span>
+            {maps?.length ? (
+              <select aria-label={t("fight.arena")} value={mapId} onChange={(event) => changeMap(Number(event.target.value))}>
+                {maps.map((id) => (
+                  <option key={id} value={id}>
+                    {t(id === 99222029 ? "fight.village" : "fight.astrub")}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <button onClick={() => setPanel("settings")}>{t("fight.import")}</button>
+            )}
+          </div>
+        )}
+        {((showTip && shownSlot) || refused || action.isError) && (
+          <div className="combat-tooltip" role="status">
+            {showTip && shownSlot && <SpellSheet slot={shownSlot} />}
+            {refused && t(`fight.blocked.${refused}` as "fight.blocked.ap")}
+            {action.isError && t("fight.failed")}
+          </div>
+        )}
       </div>
-
-      <aside className="fight-side flex min-h-0 flex-none flex-col border-line bg-panel max-lg:border-t lg:w-[22rem] lg:border-l">
-        <section className="grid gap-2 border-b border-line p-4" aria-live="polite">
-          {shownSlot ? <SpellSheet slot={shownSlot} /> : <p className="m-0 text-ink-2">{t("fight.sheet.empty")}</p>}
-          {refused && refused !== "phase" && (
-            <p className="m-0 text-bad" role="alert">
-              {t(`fight.blocked.${refused}` as "fight.blocked.ap")}
-            </p>
-          )}
-        </section>
-        <section className="grid gap-2 border-b border-line p-4">
-          <h3 className="section-title">{t("fight.entity.effects")}</h3>
-          <EntitySheet entity={shownEntity} name={nameOf(shownEntity)} names={view.names} stats={stats} />
-        </section>
-        <section className="flex min-h-40 flex-1 flex-col">
-          <h3 className="section-title px-4 pt-4 pb-2">{t("fight.log")}</h3>
-          <ol className="fight-log m-0 min-h-0 flex-1 list-none overflow-y-auto px-4 pb-4" aria-live="polite">
-            {log.length === 0 && <li className="text-ink-2">{t("fight.log.empty")}</li>}
+      <footer className="combat-dock">
+        <section className="combat-chat">
+          <h3>{t("fight.chat")}</h3>
+          <ol className="fight-log" aria-live="polite">
             {log.map((line) => (
               <LogEntry key={line.id} line={line} stats={stats} />
             ))}
             <li ref={logEnd} aria-hidden="true" />
           </ol>
-          <p className="m-0 border-t border-line px-4 py-3 text-[0.86rem] text-ink-3">{t("fight.limits")}</p>
         </section>
-      </aside>
+        <div className="combat-vitals">
+          <div className="combat-heart" title={t("fight.entity.hp", { hp: number(hpOf(player)), max: number(player.maxHp) })}>
+            {art && (
+              <>
+                <img src={hud("heart-background")} alt="" />
+                <img
+                  src={hud("heart-fill")}
+                  alt=""
+                  style={{ clipPath: `inset(${100 - Math.max(0, hpOf(player) / player.maxHp) * 100}% 0 0)` }}
+                />
+                <img src={hud("heart-border")} alt="" />
+              </>
+            )}
+            <strong>{hpOf(player)}</strong>
+          </div>
+          <div className="combat-points">
+            <span title={stats.get(1)?.label} style={art ? imageStyle("ap") : undefined}>
+              {view.ap}
+            </span>
+            <span title={stats.get(23)?.label} style={art ? imageStyle("mp") : undefined}>
+              {view.mp}
+            </span>
+          </div>
+        </div>
+        <section className="combat-spells" aria-label={t("fight.spells")}>
+          <h3>{t("fight.spells")}</h3>
+          <div className="combat-spellgrid">
+            <div className="combat-weapon">{weapon && button(weapon, -1)}</div>
+            <div className="combat-deck">{deck.map(button)}</div>
+          </div>
+        </section>
+        <div className="combat-endbox">
+          <button
+            className="combat-end"
+            disabled={action.isPending || start.isPlaceholderData}
+            onClick={endTurn}
+            title={keyLabel(keys[13]!)}
+            style={
+              art
+                ? ({
+                    "--end-mask": `url("${hud("end-idle")}")`,
+                    "--end-bg": `url("${hud("end-background")}")`,
+                  } as React.CSSProperties)
+                : undefined
+            }
+          >
+            <span>{t(fighting ? "fight.endTurn" : "fight.ready")}</span>
+          </button>
+        </div>
+      </footer>
+      <Dialog
+        open={panel !== null}
+        onOpenChange={(open) => {
+          if (!open) setPanel(null)
+        }}
+      >
+        <DialogBackdrop />
+        <DialogContent className="combat-dialog">
+          <header>
+            <DialogTitle>{menuTitle}</DialogTitle>
+            <button aria-label={t("about.close")} onClick={() => setPanel(null)}>
+              <XIcon />
+            </button>
+          </header>
+          {panel === "settings" && (
+            <FightOptions
+              maps={maps ?? []}
+              map={mapId}
+              onMap={changeMap}
+              keys={keys}
+              onKeys={setKeys}
+              onImported={async () => {
+                await cache.invalidateQueries({ queryKey: ["fight-actors"] })
+                return assetQuery.refetch()
+              }}
+            />
+          )}
+          {panel === "chat" && (
+            <ol className="fight-log">
+              {log.map((line) => (
+                <LogEntry key={line.id} line={line} stats={stats} />
+              ))}
+            </ol>
+          )}
+          {panel === "stats" && (
+            <StatsPanel
+              meta={meta}
+              evaluation={evaluation && view.currentStats ? { ...evaluation, stats: view.currentStats } : evaluation}
+            />
+          )}
+          {panel === "entity" && <EntitySheet entity={shownEntity} name={nameOf(shownEntity)} names={view.names} stats={stats} />}
+          {panel === "gear" && (
+            <div className="combat-inventory">
+              {meta.positions.flatMap((pos) => {
+                const item = evaluation?.items[pos.key]
+                return item
+                  ? [
+                      <div key={pos.key}>
+                        <img src={api.imageUrl(item.image)} alt="" />
+                        {item.name}
+                      </div>,
+                    ]
+                  : []
+              })}
+            </div>
+          )}
+          {panel === "spells" && (
+            <div className="combat-book">
+              {groups.map(([base, slots]) => (
+                <div key={base}>
+                  {slots.map((slot) => (
+                    <button
+                      key={slot.id}
+                      aria-pressed={deck.some((s) => s.id === slot.id)}
+                      onClick={() => {
+                        setVariants({ ...variants, [base]: slot.id })
+                        setPeek(slot.id)
+                        setSpell(null)
+                      }}
+                    >
+                      <SpellIcon slot={slot} />
+                      {slot.name}
+                    </button>
+                  ))}
+                </div>
+              ))}
+              {shownSlot && <SpellSheet slot={shownSlot} />}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   )
 

@@ -42,8 +42,9 @@ type fightSlotDTO struct {
 }
 
 type fightDTO struct {
-	State  *fight.State  `json:"state"`
-	Events []fight.Event `json:"events"`
+	CurrentStats map[int]int   `json:"currentStats"`
+	State        *fight.State  `json:"state"`
+	Events       []fight.Event `json:"events"`
 	// Refused says why the action was not done; empty when it was.
 	Refused string `json:"refused,omitempty"`
 	AP      int    `json:"ap"`
@@ -104,11 +105,36 @@ func validState(st *fight.State) bool {
 		return false
 	}
 	cells := w * h
-	if len(st.Board.Walls) > cells || len(st.Entities) > maxFightEntities || len(st.Uses) > maxFightUses || st.Player() == nil {
+	if len(st.Board.SightWalls) > cells || len(st.Board.Blue) > cells || len(st.Board.Red) > cells || len(st.Board.Walls) > cells || len(st.Entities) > maxFightEntities || len(st.Uses) > maxFightUses || st.Player() == nil {
 		return false
 	}
+	if !fight.ValidMarks(st) || st.ActiveID != 0 && st.Active().ID != st.ActiveID || st.LastEntityID < 0 || st.LastEntityID > 1_000_000 {
+		return false
+	}
+	seen := map[int]bool{}
+	players := 0
+	occupied := map[int]bool{}
 	hooks := 0
 	for _, e := range st.Entities {
+		if seen[e.ID] || e.ID < 1 || e.ID > 1_000_000 || len(e.Uses) > maxFightUses || len(e.Stats) > 256 {
+			return false
+		}
+		seen[e.ID] = true
+		if occupied[e.Cell] || e.Kind != fight.KindPlayer && e.Kind != fight.KindDummy && e.Kind != fight.KindSummon {
+			return false
+		}
+		occupied[e.Cell] = true
+		if e.Kind == fight.KindPlayer {
+			players++
+		}
+		if e.Kind == fight.KindSummon && (e.MonsterID < 1 || e.Grade < 1) {
+			return false
+		}
+		for _, use := range e.Uses {
+			if use == nil || len(use.Targets) > maxFightEntities {
+				return false
+			}
+		}
 		if e.Cell < 0 || e.Cell >= cells || len(e.Buffs) > maxFightBuffs || len(e.Hooks) > maxFightBuffs {
 			return false
 		}
@@ -124,7 +150,7 @@ func validState(st *fight.State) bool {
 			}
 		}
 	}
-	if hooks > maxFightHooks {
+	if players != 1 || hooks > maxFightHooks {
 		return false
 	}
 	for id, use := range st.Uses {
@@ -144,6 +170,7 @@ func (s *Server) handleFight(w http.ResponseWriter, r *http.Request, eng *engine
 		return
 	}
 	sim := fightSim(eng, &req, lang)
+	sim.Creatures = s.fightCreatures()
 	out := fightDTO{Events: []fight.Event{}, Spells: []fightSlotDTO{}, Names: map[int]string{}}
 	st := req.State
 	switch {
@@ -152,7 +179,16 @@ func (s *Server) handleFight(w http.ResponseWriter, r *http.Request, eng *engine
 		if req.Dummies != nil {
 			dummies = *req.Dummies
 		}
-		st = sim.Start(dummies)
+		if dummies.MapID != 0 {
+			board, err := s.fightBoard(dummies.MapID)
+			if err != nil {
+				writeError(w, http.StatusBadRequest, "map_unavailable", "The selected combat map is unavailable.")
+				return
+			}
+			st = sim.StartOn(dummies, board)
+		} else {
+			st = sim.Start(dummies)
+		}
 	case !validState(st):
 		writeError(w, http.StatusBadRequest, "bad_request", "The fight sent cannot be played.")
 		return
@@ -178,7 +214,13 @@ func (s *Server) handleFight(w http.ResponseWriter, r *http.Request, eng *engine
 	}
 	out.State = st
 	out.AP, out.MP = sim.Points(st)
-	stat := sim.StatOf(st.Player())
+	stat := sim.StatOf(st.Active())
+	out.CurrentStats = map[int]int{}
+	for _, id := range eng.Catalog.StatIDs {
+		if value := stat(id); value != 0 {
+			out.CurrentStats[id] = value
+		}
+	}
 	out.MaxAP, out.MaxMP = stat(game.StatAP), stat(game.StatMP)
 	out.Steps = sim.Reach(st)
 
@@ -190,10 +232,17 @@ func (s *Server) handleFight(w http.ResponseWriter, r *http.Request, eng *engine
 			out.Names[id] = sim.Weapon.Name.Get(lang)
 		}
 	}
+	for _, mark := range st.Marks {
+		name(mark.From)
+	}
 	for _, ev := range out.Events {
 		name(ev.Spell)
 	}
-	for _, e := range st.Entities {
+	for i := range st.Entities {
+		e := &st.Entities[i]
+		if m := sim.Creatures[e.MonsterID]; m != nil {
+			e.Name = m.Names.Get(lang)
+		}
 		for _, b := range e.Buffs {
 			name(b.From)
 		}
@@ -209,17 +258,24 @@ func (s *Server) handleFight(w http.ResponseWriter, r *http.Request, eng *engine
 	if cat.BreedByID[req.BreedID] != nil {
 		breeds = []int{req.BreedID, 0}
 	}
-	for _, breedID := range breeds {
-		for _, sp := range cat.SpellsByBreed[breedID] {
-			slot := sim.Slot(st, sp.ID)
-			if slot == nil {
-				continue
+	var spells []*game.Spell
+	if active := st.Active(); active.Kind == fight.KindSummon {
+		for _, spell := range sim.SummonSpells(active) {
+			if sp := cat.SpellByID[spell.ID]; sp != nil {
+				spells = append(spells, sp)
 			}
-			out.Spells = append(out.Spells, fightSlotDTO{
-				Slot: *slot, Name: sp.Name.Get(lang), IconID: sp.IconID, BreedID: sp.BreedID, VariantOf: sp.VariantOf,
-				Attack: engine.SpellAttack(sp, sim.Level, engine.RangeAuto, stat),
-			})
 		}
+	} else {
+		for _, id := range breeds {
+			spells = append(spells, cat.SpellsByBreed[id]...)
+		}
+	}
+	for _, sp := range spells {
+		slot := sim.Slot(st, sp.ID)
+		if slot == nil {
+			continue
+		}
+		out.Spells = append(out.Spells, fightSlotDTO{Slot: *slot, Name: sp.Name.Get(lang), IconID: sp.IconID, BreedID: sp.BreedID, VariantOf: sp.VariantOf, Attack: engine.SpellAttack(sp, sim.Level, engine.RangeAuto, stat)})
 	}
 	writeJSON(w, http.StatusOK, out)
 }
@@ -233,7 +289,9 @@ func (s *Server) handleFightAim(w http.ResponseWriter, r *http.Request, eng *eng
 		writeError(w, http.StatusBadRequest, "bad_request", "The fight sent cannot be played.")
 		return
 	}
-	aim := fightSim(eng, &req, lang).Aim(req.State, req.Spell)
+	sim := fightSim(eng, &req, lang)
+	sim.Creatures = s.fightCreatures()
+	aim := sim.Aim(req.State, req.Spell)
 	if aim == nil {
 		aim = &fight.Aim{Spell: req.Spell, Range: []int{}, Targets: []fight.Target{}}
 	}

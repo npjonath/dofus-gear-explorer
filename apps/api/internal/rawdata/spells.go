@@ -359,6 +359,35 @@ func parseSpells(dir string, spells []rawSpellHead, defs map[int]rawEffect, pass
 
 	// A spell often works through others it casts in turn, which no
 	// character can cast directly: the simulator needs those too.
+	monsterRefs, err := readRefs(dir, "monsters.json")
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	monsters, err := decodeClass[struct {
+		ID     int        `json:"id"`
+		Spells array[int] `json:"spells"`
+		Grades array[struct {
+			Start int `json:"startingSpellId"`
+		}] `json:"grades"`
+	}](monsterRefs, "MonsterData")
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	levelSpell := map[int]int{}
+	for spell, levels := range rawLevels {
+		for _, l := range levels {
+			levelSpell[l.ID] = spell
+		}
+	}
+	summonSpells := map[int][]int{}
+	for _, m := range monsters {
+		summonSpells[m.ID] = m.Spells.Array
+		for _, grade := range m.Grades.Array {
+			if grade.Start > 0 {
+				summonSpells[m.ID] = append(summonSpells[m.ID], levelSpell[grade.Start])
+			}
+		}
+	}
 	queue := make([]int, 0, len(owner))
 	for id := range owner {
 		queue = append(queue, id)
@@ -369,12 +398,18 @@ func parseSpells(dir string, spells []rawSpellHead, defs map[int]rawEffect, pass
 		for _, level := range rawLevels[id] {
 			for _, list := range [][]rawSpellEffect{level.Effects.Array, level.Critical.Array} {
 				for _, e := range list {
-					if !game.CastsSpell(e.ActionID) {
-						continue
+					var linked []int
+					switch {
+					case game.CastsSpell(e.ActionID) || game.PlacesMark(e.ActionID):
+						linked = []int{e.DiceNum}
+					case game.SummonsCreature(e.ActionID):
+						linked = summonSpells[e.DiceNum]
 					}
-					if _, known := owner[e.DiceNum]; !known && len(rawLevels[e.DiceNum]) > 0 {
-						owner[e.DiceNum] = place{breed: game.BreedTriggered}
-						queue = append(queue, e.DiceNum)
+					for _, child := range linked {
+						if _, known := owner[child]; !known && len(rawLevels[child]) > 0 {
+							owner[child] = place{breed: game.BreedTriggered}
+							queue = append(queue, child)
+						}
 					}
 				}
 			}

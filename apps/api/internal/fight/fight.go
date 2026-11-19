@@ -34,6 +34,8 @@ const (
 	BuffRange = "range"
 	// BuffSuffered multiplies the damage the entity takes by Value percent,
 	// and BuffHealed the heals it receives.
+	BuffShield   = "shield"
+	BuffArmor    = "armor"
 	BuffSuffered = "suffered"
 	BuffHealed   = "healed"
 	// BuffSpell changes how the spell Ref is cast: Mod is the game's action
@@ -49,6 +51,7 @@ const (
 
 // Buff is a lasting effect on an entity.
 type Buff struct {
+	Mark int    `json:"mark,omitempty"`
 	Kind string `json:"kind"`
 	// Spell is the spell that applied it, which may be one another spell
 	// cast in turn, and From the spell the player cast.
@@ -66,6 +69,7 @@ type Buff struct {
 // or the end of a turn, a state gained or lost, a hit taken. It names the
 // effect by where it is in the game data rather than carrying it.
 type Hook struct {
+	Mark     int  `json:"mark,omitempty"`
 	Spell    int  `json:"spell"`
 	Grade    int  `json:"grade"`
 	Critical bool `json:"critical,omitempty"`
@@ -83,11 +87,17 @@ type Hook struct {
 
 // Entity is a fighter on the board.
 type Entity struct {
-	ID    int    `json:"id"`
-	Kind  string `json:"kind"`
-	Cell  int    `json:"cell"`
-	HP    int    `json:"hp"`
-	MaxHP int    `json:"maxHp"`
+	Ally      bool         `json:"ally,omitempty"`
+	Name      string       `json:"name,omitempty"`
+	MonsterID int          `json:"monsterId,omitempty"`
+	Grade     int          `json:"grade,omitempty"`
+	Owner     int          `json:"owner,omitempty"`
+	Uses      map[int]*Use `json:"uses,omitempty"`
+	ID        int          `json:"id"`
+	Kind      string       `json:"kind"`
+	Cell      int          `json:"cell"`
+	HP        int          `json:"hp"`
+	MaxHP     int          `json:"maxHp"`
 	// Stats holds a dummy's own characteristics: its resistances. The
 	// player's come from the stuff.
 	Stats map[int]int `json:"stats,omitempty"`
@@ -107,10 +117,13 @@ type Use struct {
 // State is a fight as it stands. The interface holds it and sends it back
 // with each action.
 type State struct {
-	Board    Board    `json:"board"`
-	Phase    string   `json:"phase"`
-	Turn     int      `json:"turn"`
-	Entities []Entity `json:"entities"`
+	ActiveID     int      `json:"activeId,omitempty"`
+	LastEntityID int      `json:"lastEntityId,omitempty"`
+	Marks        []Mark   `json:"marks,omitempty"`
+	Board        Board    `json:"board"`
+	Phase        string   `json:"phase"`
+	Turn         int      `json:"turn"`
+	Entities     []Entity `json:"entities"`
 	// APUsed and MPUsed are the points the player spent this turn.
 	APUsed int          `json:"apUsed"`
 	MPUsed int          `json:"mpUsed"`
@@ -122,8 +135,10 @@ type State struct {
 
 // Dummies configures the training dummies of a fight.
 type Dummies struct {
-	Count int `json:"count"`
-	HP    int `json:"hp"`
+	Allies int `json:"allies,omitempty"`
+	MapID  int `json:"mapId,omitempty"`
+	Count  int `json:"count"`
+	HP     int `json:"hp"`
 	// Stats are their characteristics, by the game's ids: the resistances
 	// in percent and fixed, per element and to critical hits.
 	Stats map[int]int `json:"stats"`
@@ -131,6 +146,8 @@ type Dummies struct {
 
 // Sim plays a fight for one stuff.
 type Sim struct {
+	Creatures map[int]*Creature
+
 	Cat *game.Catalog
 	// Stat gives the stuff's final characteristics.
 	Stat  func(statID int) int
@@ -199,6 +216,7 @@ func (st *State) free(cell int) bool {
 
 func (st *State) clone() *State {
 	out := *st
+	out.Marks = append([]Mark(nil), st.Marks...)
 	out.Board.Walls = append([]int(nil), st.Board.Walls...)
 	out.Entities = make([]Entity, len(st.Entities))
 	for i, e := range st.Entities {
@@ -221,11 +239,18 @@ func (st *State) clone() *State {
 // Start sets a fight up: the player on one side, the dummies on the other,
 // ready to be placed.
 func (s *Sim) Start(d Dummies) *State {
-	board := DefaultBoard()
+	return s.StartOn(d, DefaultBoard())
+}
+
+func (s *Sim) StartOn(d Dummies, board Board) *State {
 	st := &State{Board: board, Phase: PhasePlacement, Uses: map[int]*Use{}}
 	health := max(1, s.Stat(game.StatHP))
 	mid := board.Height / 2
-	st.Entities = append(st.Entities, Entity{ID: 1, Kind: KindPlayer, Cell: board.cell(3, mid), HP: health, MaxHP: health, Buffs: []Buff{}})
+	playerCell := board.cell(3, mid)
+	if len(board.Blue) > 0 {
+		playerCell = board.Blue[0]
+	}
+	st.Entities = append(st.Entities, Entity{ID: 1, Kind: KindPlayer, Cell: playerCell, HP: health, MaxHP: health, Buffs: []Buff{}})
 	count := min(4, max(1, d.Count))
 	hp := min(1_000_000, max(1, d.HP))
 	spots := [][2]int{{9, mid}, {9, mid - 1}, {9, mid + 1}, {10, mid}}
@@ -236,8 +261,16 @@ func (s *Sim) Start(d Dummies) *State {
 				stats[id] = v
 			}
 		}
+		dummyCell := board.cell(spots[i][0], spots[i][1])
+		ally := i >= count-min(count-1, max(0, d.Allies))
+		if len(board.Red) > i {
+			dummyCell = board.Red[i]
+		}
+		if ally && len(board.Blue) > i+1 {
+			dummyCell = board.Blue[i+1]
+		}
 		st.Entities = append(st.Entities, Entity{
-			ID: i + 2, Kind: KindDummy, Cell: board.cell(spots[i][0], spots[i][1]), HP: hp, MaxHP: hp, Stats: stats, Buffs: []Buff{},
+			ID: i + 2, Kind: KindDummy, Ally: ally, Cell: dummyCell, HP: hp, MaxHP: hp, Stats: stats, Buffs: []Buff{},
 		})
 	}
 	return st
@@ -262,7 +295,7 @@ func (s *Sim) StatOf(e *Entity) func(statID int) int {
 
 // Points returns the action and movement points the player has left.
 func (s *Sim) Points(st *State) (ap, mp int) {
-	stat := s.StatOf(st.Player())
+	stat := s.StatOf(st.Active())
 	return stat(game.StatAP) - st.APUsed, stat(game.StatMP) - st.MPUsed
 }
 
@@ -393,7 +426,23 @@ func (s *Sim) tuned(caster *Entity, a *attack) *attack {
 
 // spell is the weapon or a spell as the player casts it now.
 func (s *Sim) spell(st *State, id int) *attack {
-	return s.tuned(st.Player(), s.attack(id, 0))
+	active := st.Active()
+	if active.Kind == KindSummon {
+		_, g := s.grade(active.MonsterID, active.Grade)
+		if g != nil {
+			for _, sp := range g.Spells {
+				if sp.ID == id {
+					return s.tuned(active, s.attack(id, sp.Grade))
+				}
+			}
+		}
+		return nil
+	}
+	sp := s.Cat.SpellByID[id]
+	if id != WeaponID && (sp == nil || sp.BreedID != 0 && sp.BreedID != s.Breed) {
+		return nil
+	}
+	return s.tuned(active, s.attack(id, 0))
 }
 
 // critRate is the chance of a critical hit, from 0 to 100.
@@ -423,7 +472,7 @@ const (
 func (st *State) cooldown(a *attack) int {
 	// Before the first turn, the wait is the one that turn will start with.
 	left := a.rules.InitialCooldown - max(1, st.Turn) + 1
-	if use := st.Uses[a.id]; use != nil && use.Last > 0 && a.rules.Interval > 0 {
+	if use := st.counters()[a.id]; use != nil && use.Last > 0 && a.rules.Interval > 0 {
 		left = max(left, a.rules.Interval-(st.Turn-use.Last))
 	}
 	return max(0, left)
@@ -437,7 +486,7 @@ func (s *Sim) blocked(st *State, a *attack) string {
 	if st.cooldown(a) > 0 {
 		return BlockedCooldown
 	}
-	if use := st.Uses[a.id]; use != nil && a.rules.PerTurn > 0 && use.Turn >= a.rules.PerTurn {
+	if use := st.counters()[a.id]; use != nil && a.rules.PerTurn > 0 && use.Turn >= a.rules.PerTurn {
 		return BlockedPerTurn
 	}
 	if ap, _ := s.Points(st); a.cost > ap {
@@ -462,7 +511,7 @@ func (s *Sim) reach(caster *Entity, a *attack) (lo, hi int) {
 
 func (st *State) sees(from, to int) bool {
 	for _, c := range st.Board.between(from, to) {
-		if st.Board.wall(c) || st.at(c) != nil {
+		if st.Board.blocksSight(c) || st.at(c) != nil {
 			return false
 		}
 	}
@@ -492,7 +541,7 @@ func (s *Sim) aimable(st *State, a *attack, caster *Entity, cell int) string {
 	if a.rules.Sight && !st.sees(caster.Cell, cell) {
 		return BlockedSight
 	}
-	if use := st.Uses[a.id]; use != nil && occupant != nil && a.rules.PerTarget > 0 && use.Targets[occupant.ID] >= a.rules.PerTarget {
+	if use := st.counters()[a.id]; use != nil && occupant != nil && a.rules.PerTarget > 0 && use.Targets[occupant.ID] >= a.rules.PerTarget {
 		return BlockedPerTarget
 	}
 	return ""
@@ -504,7 +553,7 @@ func (s *Sim) Place(st *State, entityID, cell int) string {
 	if st.Phase != PhasePlacement || e == nil {
 		return BlockedPhase
 	}
-	if !st.free(cell) {
+	if !st.free(cell) || !st.Board.inCamp(e, cell) {
 		return BlockedCell
 	}
 	e.Cell = cell
@@ -540,7 +589,7 @@ func (s *Sim) Begin(st *State) ([]Event, string) {
 		return nil, BlockedPhase
 	}
 	st.Phase, st.Turn = PhaseFight, 1
-	events := []Event{{Type: EventTurn, Value: 1}}
+	var events []Event
 	player := st.Player()
 	var opening []int
 	for _, sp := range s.Cat.StartSpells[s.Breed] {
@@ -564,6 +613,7 @@ func (s *Sim) Begin(st *State) ([]Event, string) {
 		s.settle(st, c)
 		events = append(events, c.events...)
 	}
+	events = append(events, Event{Type: EventTurn, Value: 1})
 	c := s.casting(0, false, false)
 	s.fire(st, c, player.ID, player.ID, 0, "TB")
 	s.settle(st, c)
@@ -586,7 +636,7 @@ func (s *Sim) Reach(st *State) []Step {
 		return steps
 	}
 	_, mp := s.Points(st)
-	start := st.Player().Cell
+	start := st.Active().Cell
 	seen := map[int]bool{start: true}
 	frontier := []Step{{Cell: start}}
 	for len(frontier) > 0 {
@@ -627,16 +677,36 @@ func (s *Sim) Move(st *State, cell int) ([]Event, string) {
 	if !ok {
 		return nil, BlockedMP
 	}
-	player := st.Player()
+	player := st.Active()
 	path := []int{cell}
 	for at := step; at.From != player.Cell; {
 		at = byCell[at.From]
 		path = append([]int{at.Cell}, path...)
 	}
 	path = append([]int{player.Cell}, path...)
-	player.Cell = cell
-	st.MPUsed += step.Cost
-	return []Event{{Type: EventMove, Entity: player.ID, Path: path, Value: step.Cost}}, ""
+	c := s.casting(0, false, false)
+	id := player.ID
+	for i, next := range path[1:] {
+		entity := st.entity(id)
+		_, remaining := s.Points(st)
+		if entity == nil || entity.HP <= 0 || remaining <= 0 || entity.Cell != path[i] || !st.free(next) {
+			break
+		}
+		entity.Cell = next
+		st.MPUsed++
+		last := len(c.events) - 1
+		if last >= 0 && c.events[last].Type == EventMove && c.events[last].Entity == id && c.events[last].Value > 0 {
+			c.events[last].Path = append(c.events[last].Path, next)
+			c.events[last].Value++
+		} else {
+			c.emit(Event{Type: EventMove, Entity: id, Path: []int{path[i], next}, Value: 1})
+		}
+		if s.crossMarks(st, c, id, path[i], 0) {
+			break
+		}
+	}
+	s.settle(st, c)
+	return c.events, ""
 }
 
 // EndTurn ends the player's turn. The dummies do nothing on theirs, so the
@@ -647,12 +717,37 @@ func (s *Sim) EndTurn(st *State) ([]Event, string) {
 		return nil, BlockedPhase
 	}
 	c := s.casting(0, false, false)
-	player := st.Player().ID
-	s.fire(st, c, player, player, 0, "TE")
+	current := st.Active()
+	currentID := current.ID
+	s.fire(st, c, currentID, currentID, 0, "TE")
+	s.markTurn(st, c, currentID, false)
 	for i := range st.Entities {
-		if id := st.Entities[i].ID; id != player {
-			s.fire(st, c, id, id, 0, "TB")
-			s.fire(st, c, id, id, 0, "TE")
+		next := &st.Entities[i]
+		if !s.playable(st, next) || (current.Kind == KindSummon && next.ID <= currentID) {
+			continue
+		}
+		st.ActiveID = next.ID
+		st.APUsed, st.MPUsed = 0, 0
+		s.ageMarks(st, c, next.ID)
+		s.markTurn(st, c, next.ID, true)
+		s.fire(st, c, next.ID, next.ID, 0, "TB")
+		s.settle(st, c)
+		return c.events, ""
+	}
+	player := st.Player().ID
+	st.ActiveID = 0
+	for i := range st.Entities {
+		e := st.Entities[i]
+		if e.ID != player && !s.playable(st, &e) {
+			s.ageMarks(st, c, e.ID)
+			s.markTurn(st, c, e.ID, true)
+			s.fire(st, c, e.ID, e.ID, 0, "TB")
+			s.fire(st, c, e.ID, e.ID, 0, "TE")
+			s.markTurn(st, c, e.ID, false)
+		}
+		for _, use := range e.Uses {
+			use.Turn = 0
+			use.Targets = map[int]int{}
 		}
 	}
 	st.Turn++
@@ -683,10 +778,12 @@ func (s *Sim) EndTurn(st *State) ([]Event, string) {
 		s.drop(st, c, at, &st.Entities[i], func(b Buff) bool { return b.Turns == 0 })
 	}
 	c.events = append(c.events, Event{Type: EventTurn, Value: st.Turn})
+	s.ageMarks(st, c, player)
 	for i := range st.Entities {
 		s.due(st, c, st.Entities[i].ID)
 	}
 	s.fire(st, c, player, player, 0, "TB")
+	s.markTurn(st, c, player, true)
 	s.settle(st, c)
 	return c.events, ""
 }
@@ -697,7 +794,7 @@ func (s *Sim) Cast(st *State, spellID, cell int) ([]Event, string) {
 	if a == nil {
 		return nil, BlockedUnknown
 	}
-	player := st.Player()
+	player := st.Active()
 	if reason := s.blocked(st, a); reason != "" {
 		return nil, reason
 	}
@@ -720,10 +817,10 @@ func (s *Sim) Cast(st *State, spellID, cell int) ([]Event, string) {
 // spend pays for a cast and counts it.
 func (s *Sim) spend(st *State, a *attack, cell int) {
 	st.APUsed += a.cost
-	use := st.Uses[a.id]
+	use := st.counters()[a.id]
 	if use == nil {
 		use = &Use{Targets: map[int]int{}}
-		st.Uses[a.id] = use
+		st.counters()[a.id] = use
 	}
 	if use.Targets == nil {
 		use.Targets = map[int]int{}
@@ -739,10 +836,13 @@ func (s *Sim) spend(st *State, a *attack, cell int) {
 // defeated dummy back up, as a training dummy does.
 func (s *Sim) settle(st *State, c *casting) {
 	for _, ev := range c.events {
+		if ev.Type == EventTurn {
+			st.TurnDamage = 0
+		}
 		if ev.Type != EventDamage {
 			continue
 		}
-		if e := st.entity(ev.Entity); e != nil && e.Kind == KindDummy {
+		if e := st.entity(ev.Entity); e != nil && e.Kind == KindDummy && !e.Ally {
 			st.TurnDamage += ev.Value
 			st.TotalDamage += ev.Value
 		}
@@ -757,6 +857,12 @@ func (s *Sim) settle(st *State, c *casting) {
 			e.HP, e.Buffs = e.MaxHP, []Buff{}
 		} else {
 			e.HP = 0
+		}
+	}
+	s.removeDefeatedSummons(st, c)
+	for _, mark := range append([]Mark(nil), st.Marks...) {
+		if st.entity(mark.Caster) == nil {
+			s.removeMark(st, c, mark, 0)
 		}
 	}
 }

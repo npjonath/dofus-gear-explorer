@@ -1,5 +1,6 @@
 import type { FightBoard, FightEvent, FightState } from "../api/types"
 import { cellDistance, cellXY, heading } from "./fightBoard"
+import { castVisual, gameDirection, groundGraphics, type Direction, type GraphicCue, type SpellVisualCatalog } from "./gameSpellEffects"
 import { toneOfElement } from "./stats"
 
 /*
@@ -52,6 +53,8 @@ export interface PoseCue {
   cell?: number
   /** The tone of what is being cast. */
   tone?: string
+  animation?: string
+  spell?: number
 }
 
 export interface BoltCue {
@@ -97,7 +100,8 @@ export interface FloatCue {
 export interface TurnCue {
   entity: number
   at: number
-  facing: Facing
+  facing?: Facing
+  direction: Direction
 }
 
 export interface Timeline {
@@ -114,6 +118,7 @@ export interface Timeline {
   health: HealthCue[]
   floats: FloatCue[]
   turns: TurnCue[]
+  graphics: GraphicCue[]
 }
 
 function contiguous(board: FightBoard, cells: number[]): boolean {
@@ -135,7 +140,7 @@ function toneOfCast(events: FightEvent[], cast: number): string {
  * Lays the events of one action on a clock. `zone` is the cells the cast was
  * shown to cover when it was aimed; without it the aimed cell alone flashes.
  */
-export function buildTimeline(before: FightState, events: FightEvent[], zone?: number[]): Timeline {
+export function buildTimeline(before: FightState, events: FightEvent[], zone?: number[], visuals?: SpellVisualCatalog): Timeline {
   const board = before.board
   const cellOf = new Map(before.entities.map((entity) => [entity.id, entity.cell]))
   const hpOf = new Map(before.entities.map((entity) => [entity.id, entity.hp]))
@@ -154,6 +159,7 @@ export function buildTimeline(before: FightState, events: FightEvent[], zone?: n
     health: [],
     floats: [],
     turns: [],
+    graphics: [],
   }
 
   // When the next beat may start, and when everything laid so far is over.
@@ -202,6 +208,33 @@ export function buildTimeline(before: FightState, events: FightEvent[], zone?: n
 
   events.forEach((event, index) => {
     const entity = event.entity ?? 0
+    if (event.type === "mark") {
+      if (!visuals || event.cell === undefined || event.triggerSpell === undefined) return
+      const mark = before.marks?.find((entry) => entry.cell === event.cell && entry.from === event.spell && entry.action === event.action)
+      const owner = mark ? before.entities.find((fighter) => fighter.id === mark.caster) : before.entities.find((fighter) => fighter.kind === "player")
+      const target = before.entities.find((fighter) => fighter.id === entity)
+      if (!owner || !target) return
+      closeHits()
+      closeShove()
+      if (mark) {
+        for (const { gfx, trigger } of groundGraphics(visuals, mark)) {
+          if (!trigger) continue
+          const finish = now + trigger.duration
+          timeline.graphics.push({ ...gfx, from: event.cell, to: event.cell, direction: 0,
+            start: now, end: finish, animation: trigger.animation })
+          end = Math.max(end, finish)
+        }
+      }
+      const visual = castVisual(visuals, event.triggerSpell, Boolean(event.critical ?? mark?.critical),
+        owner, target, board, event.cell, cellOf.get(entity) ?? target.cell, now)
+      if (visual) {
+        timeline.graphics.push(...visual.graphics)
+        source = event.cell
+        now = visual.hit
+        end = Math.max(visual.end, end)
+      }
+      return
+    }
     if (event.type === "cast") {
       if (!cellOf.has(entity)) return
       closeHits()
@@ -214,14 +247,30 @@ export function buildTimeline(before: FightState, events: FightEvent[], zone?: n
       const dir = heading(board, from, to)
       const tone = toneOfCast(events, index)
       const distance = cellDistance(board, from, to)
-      if (dir !== 0) timeline.turns.push({ entity, at: now, facing: dir })
+      const direction = gameDirection(board, from, to)
+      if (direction !== undefined) timeline.turns.push({ entity, at: now, facing: dir || undefined, direction })
+      const caster = before.entities.find((fighter) => fighter.id === entity)
+      const target = before.entities.find((fighter) => cellOf.get(fighter.id) === to)
+      const visual = caster && castVisual(visuals, event.spell ?? 0, Boolean(event.critical), caster, target, board, from, to, now)
+      if (visual) {
+        timeline.poses.push({
+          entity, pose: "windup", start: now, end: visual.poseEnd, dir: dir || 1,
+          cell: to, tone, animation: visual.animation, spell: event.spell,
+        })
+        timeline.graphics.push(...visual.graphics)
+        zoneLeft = undefined
+        end = Math.max(end, visual.end)
+        free = Math.max(free, visual.hit + HIT_HOLD_MS)
+        now = visual.hit
+        return
+      }
       let impact: number
       if (distance === 1) {
         // Next to the target: the caster strikes it, nothing flies.
-        timeline.poses.push({ entity, pose: "lunge", start: now, end: now + LUNGE_MS, dir: dir || 1, cell: to, tone })
+        timeline.poses.push({ entity, pose: "lunge", start: now, end: now + LUNGE_MS, dir: dir || 1, cell: to, tone, spell: event.spell })
         impact = now + LUNGE_MS * 0.45
       } else {
-        timeline.poses.push({ entity, pose: "windup", start: now, end: now + WINDUP_MS, dir: dir || 1, cell: to, tone })
+        timeline.poses.push({ entity, pose: "windup", start: now, end: now + WINDUP_MS, dir: dir || 1, cell: to, tone, spell: event.spell })
         impact = now + WINDUP_MS * 0.7
         if (distance > 1) {
           const flight = Math.max(BOLT_MIN_MS, Math.min(BOLT_MAX_MS, distance * BOLT_MS_PER_CELL))
@@ -338,12 +387,16 @@ export interface Actor {
   /** The grid point a caster aims at. */
   aim?: { x: number; y: number }
   tone?: string
+  direction?: Direction
+  animation?: string
+  spell?: number
 }
 
 export interface Scene {
   actors: Record<number, Actor>
   bolts: { cue: BoltCue; progress: number }[]
   impacts: { cue: ImpactCue; progress: number }[]
+  graphics: { cue: GraphicCue; progress: number; index: number }[]
 }
 
 // A walk picks up speed over its first half cell and slows over its last.
@@ -356,12 +409,12 @@ function glide(progress: number, cells: number): number {
 }
 
 /** The board at a moment of the timeline. `facing` is the way each entity looked when it started. */
-export function sceneAt(timeline: Timeline, time: number, facing: Record<number, Facing>): Scene {
+export function sceneAt(timeline: Timeline, time: number, facing: Record<number, Facing>, directions: Record<number, Direction> = {}): Scene {
   const { board } = timeline
   const actors: Record<number, Actor> = {}
   for (const [id, cell] of Object.entries(timeline.start)) {
     const at = cellXY(board, cell)
-    actors[Number(id)] = { x: at.x, y: at.y, facing: facing[Number(id)] ?? 1, pose: "idle", phase: 0, dir: 1, stride: 0 }
+    actors[Number(id)] = { x: at.x, y: at.y, facing: facing[Number(id)] ?? 1, direction: directions[Number(id)], pose: "idle", phase: 0, dir: 1, stride: 0 }
   }
 
   const beats = [
@@ -371,7 +424,8 @@ export function sceneAt(timeline: Timeline, time: number, facing: Record<number,
   for (const { at, turn, move } of beats) {
     if (at > time) break
     if (turn) {
-      actors[turn.entity]!.facing = turn.facing
+      if (turn.facing !== undefined) actors[turn.entity]!.facing = turn.facing
+      actors[turn.entity]!.direction = turn.direction
       continue
     }
     const actor = actors[move.entity]!
@@ -394,6 +448,7 @@ export function sceneAt(timeline: Timeline, time: number, facing: Record<number,
     actor.y = from.y + (to.y - from.y) * part
     actor.stride = walked
     const turned = heading(board, cells[step]!, cells[step + 1]!)
+    if (move.gait === "walk") actor.direction = gameDirection(board, cells[step]!, cells[step + 1]!)
     if (move.gait === "walk" && turned !== 0) actor.facing = turned
     actor.dir = heading(board, cells[0]!, cells[steps]!) || 1
   }
@@ -407,6 +462,8 @@ export function sceneAt(timeline: Timeline, time: number, facing: Record<number,
     actor.phase = (time - cue.start) / (cue.end - cue.start)
     actor.dir = cue.dir
     actor.tone = cue.tone
+    actor.animation = cue.animation
+    actor.spell = cue.spell
     actor.aim = cue.cell === undefined ? undefined : cellXY(board, cue.cell)
   }
 
@@ -414,7 +471,10 @@ export function sceneAt(timeline: Timeline, time: number, facing: Record<number,
     cues
       .filter((cue) => time >= cue.start && time < cue.end)
       .map((cue) => ({ cue, progress: (time - cue.start) / (cue.end - cue.start) }))
-  return { actors, bolts: running(timeline.bolts), impacts: running(timeline.impacts) }
+  const graphics = timeline.graphics.flatMap((cue, index) =>
+    time < cue.start || time >= cue.end ? [] : [{ cue, progress: (time - cue.start) / (cue.end - cue.start), index }],
+  )
+  return { actors, bolts: running(timeline.bolts), impacts: running(timeline.impacts), graphics }
 }
 
 /** The way each entity looks once the timeline is over. */

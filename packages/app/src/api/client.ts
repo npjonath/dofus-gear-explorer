@@ -32,6 +32,7 @@ export class ApiError extends Error {
 export interface ApiClient {
   baseUrl: string
   imageUrl(path: string): string
+  fightAssets(): Promise<{ maps: number[]; pack:string }>
   status(): Promise<DataStatus>
   checkForUpdate(): Promise<DataStatus>
   startUpdate(): Promise<DataStatus>
@@ -99,6 +100,7 @@ export function createApiClient(baseUrl: string): ApiClient {
   return {
     baseUrl: root,
     imageUrl: (path) => root + path,
+    fightAssets: () => request("/api/fight/assets"),
     status: () => request("/api/data/status"),
     checkForUpdate: () => post("/api/data/check", {}),
     startUpdate: () => post("/api/data/update", {}),

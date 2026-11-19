@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest"
 import type { FightEntity, FightEvent, FightState } from "../api/types"
+import type { SpellVisualCatalog } from "./gameSpellEffects"
 import { buildTimeline, cellsAfter, facingAfter, HIT_HOLD_MS, HIT_MS, HIT_STAGGER_MS, sceneAt, TOPPLE_MS, WALK_MS } from "./fightTimeline"
 
 const WIDTH = 13
@@ -26,6 +27,46 @@ function fight(...entities: FightEntity[]): FightState {
 const PLAYER = 1
 const DUMMY = 2
 const looks = { [PLAYER]: 1, [DUMMY]: -1 } as const
+
+describe("installed spell animations", () => {
+  const before = fight(entity(PLAYER, "player", cell(2, 2)), entity(DUMMY, "dummy", cell(1, 1)))
+  const catalog: SpellVisualCatalog = {
+    spells: { 42: { normal: [
+      { cast: "self-cast", targetMask: "c" },
+      { cast: "attack", targetMask: "g,A,x", sequences: [{ end: "waitForAll", gfx: [{ kind: "target", bone: 8 }] }] },
+    ] } },
+    casts: { attack: { duration: 600, shot: 200 }, "self-cast": { duration: 700, shot: 350 } },
+    clips: { 8: { animation: "FX", duration: 900, shot: 80, directions: [0] } },
+  }
+
+  it("starts the native target effect at the caster's SHOT and lands damage on the effect's SHOT", () => {
+    const timeline = buildTimeline(before, [
+      { type: "cast", spell: 42, entity: PLAYER, cell: cell(1, 1), critical: true },
+      { type: "damage", entity: DUMMY, value: 100 },
+    ], undefined, catalog)
+    expect(timeline.poses[0]).toMatchObject({ animation: "attack", start: 0, end: 600 })
+    expect(timeline.graphics[0]).toMatchObject({ bone: 8, start: 200, end: 1100, to: cell(1, 1) })
+    expect(timeline.health[0]?.at).toBe(280)
+    expect(sceneAt(timeline, 650, looks).graphics[0]?.progress).toBeCloseTo(0.5)
+    expect(sceneAt(timeline, timeline.duration, looks).actors[PLAYER]?.direction).toBe(6)
+    expect(timeline.bolts).toHaveLength(0)
+  })
+
+  it("selects the caster-only script on self-cast", () => {
+    const timeline = buildTimeline(before, [{ type: "cast", spell: 42, entity: PLAYER, cell: cell(2, 2) }], undefined, catalog)
+    expect(timeline.poses[0]?.animation).toBe("self-cast")
+    expect(timeline.graphics).toHaveLength(0)
+  })
+
+  it("plays a triggered glyph on its victim, without making its owner cast again", () => {
+    const timeline = buildTimeline(before, [
+      { type: "mark", spell: 19, triggerSpell: 42, cell: cell(1, 2), entity: DUMMY },
+      { type: "damage", entity: DUMMY, value: 100 },
+    ], undefined, catalog)
+    expect(timeline.graphics[0]).toMatchObject({ bone: 8, from: cell(1, 2), to: cell(1, 1) })
+    expect(timeline.poses.map((pose) => pose.pose)).toEqual(["hit"])
+  })
+})
 
 describe("a walk", () => {
   const before = fight(entity(PLAYER, "player", cell(2, 2)))

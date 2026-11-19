@@ -67,6 +67,21 @@ def import_pack(source, target):
     with tempfile.NamedTemporaryFile(dir=target, mode="w", encoding="utf-8", delete=False) as pointer:
         pointer.write(name)
     os.replace(pointer.name, target / "current")
+    # A patch can change gigabytes of textures. Keep the last generation for
+    # in-flight reads; only prune older generations made by this importer.
+    generations = sorted((entry for entry in target.glob("pack-*")
+                          if not entry.is_symlink() and entry.is_dir() and (entry / "complete.json").is_file()),
+                         key=lambda entry: entry.stat().st_mtime, reverse=True)
+    older = [entry for entry in generations if entry != final]
+    for entry in older[1:]:
+        if (target / "current").read_text(encoding="utf-8").strip() != name:
+            break
+        try:
+            metadata = json.loads((entry / "complete.json").read_text(encoding="utf-8"))
+            if metadata.get("format") == 1 and metadata.get("id") == entry.name:
+                shutil.rmtree(entry)
+        except (OSError, ValueError):
+            continue
 
 
 if __name__ == "__main__":

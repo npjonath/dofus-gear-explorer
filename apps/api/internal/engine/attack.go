@@ -130,7 +130,7 @@ func (spec *AttackSpec) terms(element int, stat func(statID int) int) terms {
 }
 
 // hit applies the formula to one base value.
-func (t terms) hit(base int, crit bool) int {
+func (t terms) scaled(base int, crit bool) int {
 	damage := base*t.multiplier/100 + t.fixed
 	if crit {
 		damage += t.critical
@@ -138,7 +138,11 @@ func (t terms) hit(base int, crit bool) int {
 	if damage < 0 {
 		return 0
 	}
-	return damage * t.kind / 100 * t.reach / 100
+	return damage
+}
+
+func (t terms) hit(base int, crit bool) int {
+	return t.scaled(base, crit) * t.kind / 100 * t.reach / 100
 }
 
 func (t terms) line(line game.AttackLine) Hit {
@@ -150,15 +154,28 @@ func (t terms) line(line game.AttackLine) Hit {
 	return hit
 }
 
-// Line computes one line. It also returns the element the line ends up in.
-func (spec *AttackSpec) Line(line game.AttackLine, stat func(statID int) int) (Hit, int) {
-	element := line.Element
+// CombatHit applies the weapon/spell and distance multipliers together, as the
+// fight preview does. The static damage sheet rounds at each step.
+func (spec *AttackSpec) CombatHit(base, element int, critical bool, stat func(int) int) (int, int) {
+	element = resolvedElement(element, stat)
+	t := spec.terms(element, stat)
+	return t.scaled(base, critical) * t.kind * t.reach / 10000, element
+}
+
+func resolvedElement(element int, stat func(int) int) int {
 	switch element {
 	case game.ElementBest:
-		element = BestElement(stat)
+		return BestElement(stat)
 	case game.ElementWorst:
-		element = WorstElement(stat)
+		return WorstElement(stat)
+	default:
+		return element
 	}
+}
+
+// Line computes one line. It also returns the element the line ends up in.
+func (spec *AttackSpec) Line(line game.AttackLine, stat func(statID int) int) (Hit, int) {
+	element := resolvedElement(line.Element, stat)
 	switch line.Kind {
 	case game.LineHeal:
 		// A heal scales with the element's characteristic alone, then adds

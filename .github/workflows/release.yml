@@ -94,9 +94,13 @@ jobs:
           --notes-file .github/release-notes.md
           --generate-notes
 
+  importers:
+    needs: verify
+    uses: ./.github/workflows/fight-import.yml
+
   package:
     name: Package ${{ matrix.target }}
-    needs: verify
+    needs: [verify, importers]
     strategy:
       fail-fast: false
       matrix:
@@ -133,6 +137,16 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - name: Build the API
         run: pnpm --filter @dde/api build:targets ${{ matrix.api }}
+      - uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53
+        with:
+          pattern: fight-${{ matrix.target }}-*
+          path: downloaded-importers
+          merge-multiple: true
+      - name: Unpack native combat importers
+        shell: bash
+        run: |
+          mkdir -p apps/desktop/fight-import
+          for archive in downloaded-importers/*.tgz; do tar -xzf "$archive" -C apps/desktop/fight-import; done
       - name: Build the interface
         run: pnpm --filter @dde/desktop exec electron-vite build
       - name: Package (and upload to the draft release)

@@ -225,7 +225,7 @@ The search reads one of three measures on that sum, `normal`, `crit` or `mean` (
 
 The Fight view of a stuff plays turns against training dummies (`apps/api/internal/fight`). The server keeps nothing: the interface holds the fight and sends it back with each action, so a fight is plain data and every step is a pure function of it.
 
-- **Board**: a 13 × 13 grid with four pillars. Range counts cells along rows and columns. A cell is in sight when the straight line to it crosses no wall and no entity; a line through the exact corner of four cells crosses none.
+- **Board**: the imported Village and Astrub Kanojedos use their own movement cells, sight obstacles and starting camps. Without an art pack the tactical arena uses a 13 × 13 grid with four pillars. Range counts cells along rows and columns. A cell is in sight when the straight line to it crosses no wall and no entity; a line through the exact corner of four cells crosses none.
 - **Casting**: a spell grade's flags in `spell_levels.json` (`m_flags`: 1 in line, 2 diagonal, 4 needs sight, 8 a free cell, 16 a taken cell, 64 range follows the caster's Range) and its `maxCastPerTurn`, `maxCastPerTarget`, `minCastInterval`, `initialCooldown` and `maxStack`. The weapon is cast in sight, at one cell, within its range.
 - **Effects** are applied in the order of the data. Who an effect is meant for is read from its zone and its target mask as things stood when the spell was cast: where everyone stood, and the states everyone was in. So a push does not make the next effect miss, and a spell that puts its caster in a state and has another effect for casters in that state applies one of the two. A mask names who (`a` allies, `A` enemies, `C` the caster wherever it stands, `g` allies but the caster) then conditions that must all hold: `E`/`e` in a state or not, `V`/`v` at or under a share of its health or above, `B`/`b` of a class or not, starred when asked of the caster. The other letters ask what a player or a dummy never is (a given monster, a summon, carried): the upper-case one fails, its lower-case opposite passes. An effect kept for monster 50000 is how the data shows a line in a spell's description without applying it.
 - **Spells cast in turn**: most class spells work through others. Actions 792, 1017 and 1018 have the target cast one on its own cell, 1019 on the source, 1160 has the caster cast it on the target's cell, 2160 and 2794 the source, and 2960 the caster on the aimed cell whoever stands there.
@@ -234,7 +234,7 @@ The Fight view of a stuff plays turns against training dummies (`apps/api/intern
 - **Lasting effects**: characteristics raised or lowered, states, damage taken or heals received multiplied, and what changes one spell: its base damage, range, cost, critical chance, casts per turn or per target, cooldown and aiming rules (actions 280 to 299, 314, 2905, 2906). Final damage in percent (107), Power for spells or for weapons (98, 103) and resistance in percent (101) are read when a hit is dealt.
 - **Random outcomes**: effects with a `random` weight are drawn as one lottery per spell; effects sharing a `group` happen together, and the weights are chances in percent. The preview gives the least and the most over every outcome.
 - **Damage**: the formula of the Damage section, with melee decided by the distance when the spell was cast; then the hit loses 10% per cell away from the centre of a zone (the zone's own figures), then the target's fixed resistance comes off, then its percentage. A push stopped short deals `floor((level / 2 + 32 + Pushback damage) × cells left / 4)`, and half of it to whoever blocks the way.
-- **Not simulated**: summons, traps, glyphs, runes, shields, the triggers not listed above, tackle, and the zones of weapons. A skipped effect the game lists in the spell's description is reported in the log, once per cast.
+- **Ground effects and creatures**: glyphs and traps retain their cell masks and execute the referenced spell when a fighter enters, starts or ends a turn, as specified by the effect. The local art import also links creature grades, starting spells, AP, MP, appearances and spell bars. Controllable summons take a turn before the dummies. Fixed reductions and shields are applied before health loss. Tackle, weapon areas and some class-specific effects still have incomplete coverage.
 - **Dummies** do nothing on their turn and stand back up at full health when defeated. Their resistances are characteristics like any other (33 to 37 in percent, 54 to 58 fixed, 87 critical).
 
 Checked, on the Enutrof of the Damage section:
@@ -242,6 +242,20 @@ Checked, on the Enutrof of the Damage section:
 - the preview of each Enutrof spell on a dummy without resistance gives dofusbook's figures (Roulage de Pelle 364 to 417, 597 to 663 critical; Coup de Grisou 510 to 562 at the centre and 80% of it two cells away);
 - against DoPoutch with the same stuff: pushback damage (55 for one cell left, 111 for two at level 200 with 90 Pushback damage), and what the stuff's item passives do turn after turn (Prynyang, Dofus Nébuleux and Dofus Ocre: +30% final damage and -10% resistance on the first turn, -7% and +3% and one more AP on the second), down to Flamèche on the second turn, 86 to 95 and 254 to 264 critical on both sides;
 - every class spell was cast once on a dummy and its preview compared with the Damage view's total: 401 of 836 spells give the same figures, 27 differ by the falloff of a zone, 361 deal no direct damage on either side, and 12 deal none in the fight where the Damage view lists some (summons, runes, poisons). The 33 others differ because the Damage view adds lines that are alternatives (a Pandawa's sober and drunk lines, a hit that grows with a state) where the fight applies the one that holds.
+
+### Importing the combat artwork
+
+The desktop app detects a local client or lets the player choose its directory from **Combat → Options**. The importer reads the Unity bundles and writes a versioned pack under the API data directory (`fight-assets/`). The app serves it from its own local API. No game image, font, animation or audio bank belongs in Git or in an installer. The bundled importer contains Python and its libraries, including their licences. The installed game is only read.
+
+For web development, prepare the same pack with Python 3.13 and uv:
+
+```sh
+pnpm data:fight-assets --source "/path/to/DOFUS" --output apps/api/data/fight-assets
+```
+
+On the 3.7.14.18 client the pack uses about 2 GiB. An import builds in a temporary directory and then switches the active pack. A second import with unchanged catalogs reuses the existing pack. If the client omits a worn item's appearance ID, an optional local `fight-assets/equipment-skins.json` can associate item IDs with skin IDs from that installation. The reference stuff's hat, cape and shield have verified mappings. Unmapped gear still contributes its full stats. The renderer and notices describe their upstream terms.
+
+`scripts/fight-assets/build.py` builds the native importer for the host architecture. Release CI builds and tests one on each of Windows x64, Linux x64, macOS Intel and macOS Apple Silicon. Native local packaging builds a missing importer with uv. For cross-packaging, first unpack the target platform’s importer artifact under `apps/desktop/fight-import/`. The existing Go API can still be built independently for any target.
 
 ## How the solver works
 

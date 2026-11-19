@@ -169,6 +169,16 @@ func CastsSpell(action int) bool {
 	return false
 }
 
+// PlacesMark identifies effects whose first two arguments specify the payload
+// spell and its grade. The importer retains it even when no breed casts it.
+func PlacesMark(action int) bool {
+	switch action {
+	case 400, 401, 402, 1091, 1165:
+		return true
+	}
+	return false
+}
+
 // Zone is the cells an effect covers around the cell a spell is aimed at.
 type Zone struct {
 	// Shape is the game's letter for the shape: "P" a single cell, "C" a
@@ -326,4 +336,14 @@ var AttackStats = []int{
 	StatStrength, StatIntel, StatChance, StatAgility, StatPower,
 	StatDamage, StatDamageEarth, StatDamageFire, StatDamageWater, StatDamageAir, StatDamageNeutral,
 	StatCritDamage, StatRangedDamage, StatWeaponDamage, StatSpellDamage, StatMeleeDamage,
+}
+
+// SummonsCreature identifies direct creation of a creature on the aimed cell.
+func SummonsCreature(action int) bool {
+	switch action {
+	case 181, 405, 1008, 1011, 2796:
+		return true
+	default:
+		return false
+	}
 }

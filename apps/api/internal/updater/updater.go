@@ -105,6 +105,8 @@ func New(st *store.Store, client *release.Client, opts Options, log *slog.Logger
 // ImagesDir is where item icons are extracted.
 func (u *Updater) ImagesDir() string { return filepath.Join(u.opts.DataDir, "images", "items") }
 
+func (u *Updater) FightAssetsDir() string { return filepath.Join(u.opts.DataDir, "fight-assets") }
+
 // SpellImagesDir and BreedImagesDir hold the spell icons and the class
 // portraits the fight simulator shows.
 func (u *Updater) SpellImagesDir() string { return filepath.Join(u.opts.DataDir, "images", "spells") }
@@ -125,7 +127,7 @@ func (u *Updater) extractFightImages(dir string) error {
 	}
 	spells, breeds := map[int]bool{}, map[int]bool{}
 	for _, sp := range ds.Spells {
-		if sp.BreedID != game.BreedTriggered {
+		if sp.IconID > 0 {
 			spells[sp.IconID] = true
 		}
 	}

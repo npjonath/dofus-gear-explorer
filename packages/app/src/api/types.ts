@@ -525,13 +525,23 @@ export interface DataStatus {
 
 /** The fight simulator: a fight is held here and sent back with each action. */
 export interface FightBoard {
+  id?: number
+  blue?: number[]
+  red?: number[]
+  sightWalls?: number[] | null
+  imageWidth?: number
+  imageHeight?: number
+  originX?: number
+  originY?: number
+  halfCellWidth?: number
+  halfCellHeight?: number
   width: number
   height: number
   /** Cells that block movement and sight. */
   walls: number[]
 }
 
-export type FightBuffKind = "stat" | "state" | "base" | "range" | "suffered" | "healed"
+export type FightBuffKind = "shield" | "armor" | "stat" | "state" | "base" | "range" | "suffered" | "healed"
 
 export interface FightBuff {
   kind: FightBuffKind
@@ -546,8 +556,12 @@ export interface FightBuff {
 }
 
 export interface FightEntity {
+  ally?:boolean
+  monsterId?:number
+  name?:string
+  owner?:number
   id: number
-  kind: "player" | "dummy"
+  kind: "player" | "dummy" | "summon"
   cell: number
   hp: number
   maxHp: number
@@ -555,11 +569,28 @@ export interface FightEntity {
   buffs: FightBuff[]
 }
 
+export interface FightMark {
+  id: number
+  action: number
+  caster: number
+  from: number
+  spell: number
+  grade: number
+  index: number
+  critical?: boolean
+  cell: number
+  cells: number[]
+  color: number
+  turns: number
+}
+
 export interface FightState {
+  activeId?:number
   board: FightBoard
   phase: "placement" | "fight"
   turn: number
   entities: FightEntity[]
+  marks?: FightMark[]
   apUsed: number
   mpUsed: number
   uses: Record<string, unknown>
@@ -568,9 +599,10 @@ export interface FightState {
 }
 
 export interface FightEvent {
-  type: "turn" | "cast" | "move" | "damage" | "heal" | "buff" | "ap" | "defeat" | "skipped"
+  type: "armor" | "shield" | "summon" | "turn" | "cast" | "move" | "damage" | "heal" | "buff" | "ap" | "defeat" | "skipped" | "mark" | "dodge"
   entity?: number
   spell?: number
+  triggerSpell?: number
   value?: number
   element?: number
   critical?: boolean
@@ -638,6 +670,7 @@ export interface FightStep {
 }
 
 export interface FightView {
+  currentStats?:Record<string,number>
   state: FightState
   events: FightEvent[]
   refused?: FightBlocked
@@ -651,6 +684,8 @@ export interface FightView {
 }
 
 export interface FightDummies {
+  allies?:number
+  mapId?: number
   count: number
   hp: number
   /** Resistances by characteristic id. */

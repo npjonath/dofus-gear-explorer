@@ -398,7 +398,7 @@ export function BuildPage({ meta }: { meta: Meta }) {
   // fields keep their own undo.
   const visible = useLocation().route === "build"
   React.useEffect(() => {
-    if (!visible) return
+    if (!visible || view === "fight") return
     const onKeyDown = (event: KeyboardEvent) => {
       const key = event.key.toLowerCase()
       if (!(event.ctrlKey || event.metaKey) || (key !== "z" && key !== "y")) return
@@ -411,7 +411,7 @@ export function BuildPage({ meta }: { meta: Meta }) {
     }
     window.addEventListener("keydown", onKeyDown)
     return () => window.removeEventListener("keydown", onKeyDown)
-  }, [visible, build.id, t])
+  }, [visible, view, build.id, t])
 
   const act = (key: string, action: SlotAction) => {
     if (action === "remove") {
@@ -554,9 +554,7 @@ export function BuildPage({ meta }: { meta: Meta }) {
         </button>
       </div>
 
-      {view === "fight" ? (
-        <FightPanel meta={meta} build={build} input={input} />
-      ) : view === "damage" ? (
+      {view === "damage" ? (
         <DamagePanel meta={meta} build={build} input={input} />
       ) : (
         <div className="board grid flex-1 grid-cols-[minmax(0,1fr)] content-start justify-items-center gap-4 p-4 sm:p-6">
@@ -653,6 +651,9 @@ export function BuildPage({ meta }: { meta: Meta }) {
   // characteristics beside a stuff, the picker once a slot is chosen.
   const showSlot = selected !== null && view === "gear"
   let workspace: React.ReactNode
+  if (visible && view === "fight" && stuffTab !== "list" && stuffTab !== "search") {
+    return <FightPanel key={build.id} meta={meta} build={build} input={input} evaluation={evaluation} onExit={() => setView("gear")} />
+  }
   if (stuffTab === "list") {
     workspace = <BuildList meta={meta} onNew={() => setCreating(true)} />
   } else if (stuffTab === "search") {

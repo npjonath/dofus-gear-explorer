@@ -138,6 +138,7 @@ export function useFightStart(build: BuildInput, breedId: number | null, dummies
   return useQuery({
     queryKey: ["fight", "start", lang, version, build, breedId, dummies, round],
     queryFn: ({ signal }) => api.fight(lang, build, breedId, { dummies }, signal),
+    placeholderData: keepPreviousData,
     enabled: version !== undefined,
     staleTime: Infinity,
   })

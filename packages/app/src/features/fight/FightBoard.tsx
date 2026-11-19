@@ -1,5 +1,5 @@
 import * as React from "react"
-import type { FightAim, FightBoard, FightEntity, FightView } from "../../api/types"
+import type { FightAim, FightBoard, FightEntity, FightMark, FightView } from "../../api/types"
 import { useI18n } from "../../i18n"
 import {
   blockFaces,
@@ -16,10 +16,17 @@ import {
 } from "../../lib/fightBoard"
 import { sceneAt, type Actor, type Facing, type Scene } from "../../lib/fightTimeline"
 import { toneOfElement } from "../../lib/stats"
+import { GameGroundMarks, GameSpellEffects } from "./GameSpellEffects"
+import { FightMarks } from "./FightMarks"
+import { GameActor } from "./GameActor"
+import { useApi } from "../../platform"
 import { Figure, FIGURE_TOP, SILHOUETTE } from "./FightFigures"
 import { defaultFacing, type Playback, type Run } from "./useFightPlayback"
 
 interface Props {
+  breedId: number | null
+  items: Record<string, number>
+  highlightMarks: boolean
   view: FightView
   aim: FightAim | undefined
   /** The spell in hand, if any. */
@@ -40,13 +47,15 @@ interface Props {
 // Room above the back row: a figure, its readout and what a cast would cost it.
 const HEADROOM = 92
 const BAR = 30
+const SPRITE_SCALE = 0.7
 
 // An eight-pointed burst: the mark of a critical hit, next to its number and where it lands.
 const BURST = Array.from({ length: 16 }, (_, index) => {
   const radius = index % 2 === 0 ? 6.5 : 2.9
   const angle = (index * Math.PI) / 8 - Math.PI / 2
   return `${index === 0 ? "M" : "L"}${(Math.cos(angle) * radius).toFixed(2)} ${(Math.sin(angle) * radius).toFixed(2)}`
-}).join(" ")
+})
+  .join(" ")
   .concat(" Z")
 
 const easeOut = (value: number) => 1 - (1 - value) ** 3
@@ -96,8 +105,8 @@ const Ground = React.memo(function Ground({ board }: { board: FightBoard }) {
   const walls = new Set(board.walls)
   return (
     <g>
-      <polygon className="fight-slab" data-face="left" points={slab.left} />
-      <polygon className="fight-slab" data-face="right" points={slab.right} />
+      {!board.id && <polygon className="fight-slab" data-face="left" points={slab.left} />}
+      {!board.id && <polygon className="fight-slab" data-face="right" points={slab.right} />}
       {Array.from({ length: board.width * board.height }, (_, cell) => {
         const { x, y } = cellXY(board, cell)
         return (
@@ -111,7 +120,7 @@ const Ground = React.memo(function Ground({ board }: { board: FightBoard }) {
           />
         )
       })}
-      <polygon className="fight-rim" points={slab.top} />
+      {!board.id && <polygon className="fight-rim" points={slab.top} />}
     </g>
   )
 })
@@ -149,7 +158,8 @@ function stance(actor: Actor, kind: FightEntity["kind"], at: Point) {
       squash = 0.55 + 0.45 * opacity
       break
     case "windup":
-      lean = actor.facing * (phase < 0.55 ? -7 * Math.sin((Math.PI * phase) / 0.55) : 6 * Math.sin((Math.PI * (phase - 0.55)) / 0.45))
+      lean =
+        actor.facing * (phase < 0.55 ? -7 * Math.sin((Math.PI * phase) / 0.55) : 6 * Math.sin((Math.PI * (phase - 0.55)) / 0.45))
       break
     case "lunge": {
       const aim = actor.aim ? gridPoint(actor.aim.x, actor.aim.y) : at
@@ -179,8 +189,13 @@ function stance(actor: Actor, kind: FightEntity["kind"], at: Point) {
 }
 
 interface StageProps {
+  placement: boolean
+  activeId: number
+  breedId: number | null
+  items: Record<string, number>
   board: FightBoard
   entities: FightEntity[]
+  marks?: FightMark[]
   playback: Playback
   picked: number | null
   pointed: number | null
@@ -192,11 +207,27 @@ interface StageProps {
 }
 
 // Everything that stands or flies on the arena. It follows the clock of the action being played.
-function Stage({ board, entities, playback, picked, pointed, losses, canCrit, unit, nameOf }: StageProps) {
+function Stage({
+  board,
+  entities,
+  marks,
+  playback,
+  picked,
+  pointed,
+  losses,
+  canCrit,
+  unit,
+  nameOf,
+  breedId,
+  items,
+  placement,
+  activeId,
+}: StageProps) {
   const { t, number } = useI18n()
+  const assetRoot = useApi().imageUrl("/fight-assets")
   const { run, playing } = playback
   const elapsed = useElapsed(run, playing, playback.finish)
-  const scene: Scene | null = run && playing ? sceneAt(run.timeline, elapsed, run.facing) : null
+  const scene: Scene | null = run && playing ? sceneAt(run.timeline, elapsed, run.facing, run.directions) : null
 
   const cast = entities.map((entity) => {
     const still = cellXY(board, entity.cell)
@@ -206,16 +237,34 @@ function Stage({ board, entities, playback, picked, pointed, losses, canCrit, un
   })
   // Whatever is nearer the bottom of the drawing is drawn over what stands behind.
   const standing = [
-    ...board.walls.map((cell) => {
+    ...(board.id ? [] : board.walls).map((cell) => {
       const { x, y } = cellXY(board, cell)
       return { depth: x + y, pillar: cell, piece: undefined }
     }),
     ...cast.map((piece) => ({ depth: piece.depth + 0.01, pillar: undefined, piece })),
   ].sort((a, b) => a.depth - b.depth)
   const facingOf = new Map(cast.map((piece) => [piece.entity.id, piece.actor.facing]))
+  const animatingMarks = new Set(
+    playing
+      ? run?.timeline.graphics.filter((cue) => cue.kind === "mark" && elapsed < cue.end).map((cue) => `${cue.to}-${cue.bone}`)
+      : []
+  )
 
   return (
     <>
+      {board.id && marks && (
+        <GameGroundMarks
+          assetRoot={assetRoot}
+          board={board}
+          marks={marks}
+          catalog={playback.visualCatalog}
+          scale={SPRITE_SCALE}
+          animating={animatingMarks}
+        />
+      )}
+      {board.id && scene && (
+        <GameSpellEffects assetRoot={assetRoot} board={board} graphics={scene.graphics} layer="ground" scale={SPRITE_SCALE} />
+      )}
       {scene?.impacts.map(({ cue, progress }) => {
         const center = cellCenter(board, cue.center)
         const grow = 0.55 + 0.75 * easeOut(progress)
@@ -236,6 +285,20 @@ function Stage({ board, entities, playback, picked, pointed, losses, canCrit, un
         )
       })}
 
+      {board.id &&
+        cast
+          .filter((p) => p.entity.id === activeId)
+          .map(({ at, entity }) => (
+            <path
+              key={entity.id}
+              transform={`translate(${at.x} ${at.y})`}
+              pointerEvents="none"
+              fill="none"
+              stroke="white"
+              strokeWidth="2"
+              d="M-5 -7L0 -10L5 -7 M14 -3L19 0L14 3 M5 7L0 10L-5 7 M-14 3L-19 0L-14 -3"
+            />
+          ))}
       {standing.map(({ pillar, piece }) => {
         if (pillar !== undefined) return <Pillar key={`pillar-${pillar}`} center={cellCenter(board, pillar)} />
         const { entity, actor, at } = piece
@@ -245,22 +308,42 @@ function Stage({ board, entities, playback, picked, pointed, losses, canCrit, un
             key={entity.id}
             className="fight-entity"
             transform={`translate(${at.x} ${at.y})`}
-            data-kind={entity.kind}
+            data-kind={entity.ally ? "player" : entity.kind}
             data-pose={actor.pose}
             data-picked={picked === entity.id || undefined}
             style={{ "--beat": `${(entity.id * 610) % 1900}ms` } as React.CSSProperties}
           >
             <ellipse className="fight-foot" rx={14} ry={5.6} />
-            <g
-              transform={`translate(${move.x} ${move.y}) rotate(${move.lean}) scale(${actor.facing} ${move.squash})`}
-              opacity={move.opacity}
-            >
-              <Figure kind={entity.kind} pose={actor.pose} phase={actor.phase} stride={actor.stride} tone={actor.tone} />
-            </g>
+            {board.id ? (
+              <GameActor
+                kind={entity.kind}
+                breedId={breedId}
+                items={items}
+                monsterId={entity.monsterId}
+                placement={placement}
+                pose={actor.pose}
+                scale={SPRITE_SCALE}
+                direction={actor.direction ?? playback.directions[entity.id] ?? (entity.kind === "player" ? 7 : 1)}
+                animation={actor.animation}
+                spellId={actor.spell}
+                phase={actor.pose === "idle" ? undefined : actor.phase}
+                fallback={<Figure kind={entity.kind} pose="idle" phase={0} stride={0} />}
+              />
+            ) : (
+              <g
+                transform={`translate(${move.x} ${move.y}) rotate(${move.lean}) scale(${actor.facing} ${move.squash})`}
+                opacity={move.opacity}
+              >
+                <Figure kind={entity.kind} pose={actor.pose} phase={actor.phase} stride={actor.stride} tone={actor.tone} />
+              </g>
+            )}
           </g>
         )
       })}
 
+      {board.id && scene && (
+        <GameSpellEffects assetRoot={assetRoot} board={board} graphics={scene.graphics} layer="front" scale={SPRITE_SCALE} />
+      )}
       {scene?.bolts.map(({ cue, progress }) => {
         const from = cellCenter(board, cue.from)
         const to = cellCenter(board, cue.to)
@@ -309,7 +392,8 @@ function Stage({ board, entities, playback, picked, pointed, losses, canCrit, un
         const loss = losses.get(entity.id)
         const after = loss ? clamp((entity.hp - loss.max) / entity.maxHp, 0, 1) : health
         // While a cast is previewed on it, what it would lose takes the place of its name.
-        const named = pointed === entity.id && !loss
+        const named = pointed === entity.id
+        if (board.id && !named && !loss) return null
         const name = nameOf(entity)
         const figures = t("fight.entity.hp", { hp: number(hp), max: number(entity.maxHp) })
         const width = named ? Math.max(76, Math.max(name.length * 6.6, figures.length * 5.9) + 16) : BAR
@@ -332,7 +416,15 @@ function Stage({ board, entities, playback, picked, pointed, losses, canCrit, un
               </>
             )}
             <rect className="fight-hp-track" x={-bar / 2} y={-4.5} width={bar} height={4} rx={1} />
-            <rect className="fight-hp" x={-bar / 2} y={-4.5} width={bar} height={4} rx={1} style={{ transform: `scaleX(${health})` }} />
+            <rect
+              className="fight-hp"
+              x={-bar / 2}
+              y={-4.5}
+              width={bar}
+              height={4}
+              rx={1}
+              style={{ transform: `scaleX(${health})` }}
+            />
             {loss && after < health && (
               <rect className="fight-hp-loss" x={-bar / 2 + bar * after} y={-4.5} width={bar * (health - after)} height={4} />
             )}
@@ -356,6 +448,7 @@ function Stage({ board, entities, playback, picked, pointed, losses, canCrit, un
 }
 
 export function FightBoardView({
+  highlightMarks,
   view,
   aim,
   spell,
@@ -364,6 +457,8 @@ export function FightBoardView({
   pointed,
   playback,
   busy,
+  breedId,
+  items,
   nameOf,
   onCursor,
   onAct,
@@ -372,10 +467,50 @@ export function FightBoardView({
   const { t } = useI18n()
   const { state } = view
   const board = state.board
-  const frame = boardFrame(board, HEADROOM)
+  const api = useApi()
+  const room =
+    board.id && board.imageWidth && board.imageHeight && board.halfCellWidth && board.halfCellHeight
+      ? {
+          x: (-(board.originX ?? 0) * 30) / board.halfCellWidth,
+          y: (-(board.originY ?? 0) * 15) / board.halfCellHeight,
+          width: (board.imageWidth * 30) / board.halfCellWidth,
+          height: (board.imageHeight * 15) / board.halfCellHeight,
+        }
+      : null
+  const frame = room ?? boardFrame(board, HEADROOM)
+  const [camera, setCamera] = React.useState({ zoom: 1, x: 0, y: 0 })
+  const drag = React.useRef<{ x: number; y: number; cx: number; cy: number; moved: boolean } | null>(null)
+  const suppressClick = React.useRef(false)
   const fighting = state.phase === "fight"
+  const [markCycle, setMarkCycle] = React.useState(0)
+  const [ping, setPing] = React.useState<number | null>(null)
+  const pingTimer = React.useRef<number | undefined>(undefined)
+  React.useEffect(() => () => clearTimeout(pingTimer.current), [])
   const root = React.useRef<HTMLDivElement>(null)
   const width = useWidth(root)
+  React.useEffect(() => {
+    const el = root.current
+    if (!el) return
+    const zoom = (event: WheelEvent) => {
+      event.preventDefault()
+      const svg = el.querySelector("svg")
+      const matrix = svg?.getScreenCTM()
+      if (!svg || !matrix) return
+      const anchor = new DOMPoint(event.clientX, event.clientY).matrixTransform(matrix.inverse())
+      setCamera((prev) => {
+        const next = clamp(prev.zoom * Math.exp(-Math.sign(event.deltaY) * 0.14), 0.65, 3)
+        const ratio = prev.zoom / next
+        return {
+          zoom: next,
+          x: anchor.x - frame.x - frame.width / (2 * next) + (frame.x + prev.x + frame.width / (2 * prev.zoom) - anchor.x) * ratio,
+          y:
+            anchor.y - frame.y - frame.height / (2 * next) + (frame.y + prev.y + frame.height / (2 * prev.zoom) - anchor.y) * ratio,
+        }
+      })
+    }
+    el.addEventListener("wheel", zoom, { passive: false })
+    return () => el.removeEventListener("wheel", zoom)
+  }, [frame.x, frame.y, frame.width, frame.height])
   // What is written on the board keeps a readable size when the board is drawn small.
   const unit = width > 0 ? clamp(frame.width / width, 0.9, 1.9) : 1
 
@@ -396,11 +531,16 @@ export function FightBoardView({
 
   function zoneOf(cell: number): string | undefined {
     if (walls.has(cell)) return undefined
+    if (!fighting && board.id) {
+      if (board.blue?.includes(cell)) return "start-blue"
+      if (board.red?.includes(cell)) return "start-red"
+      return undefined
+    }
     if (impact.has(cell)) return "impact"
     if (targets.has(cell)) return "range"
     if (inRange.has(cell)) return "blocked"
     if (onPath.has(cell)) return "path"
-    if (!aiming && fighting && settled && reach.has(cell)) return "reach"
+    if (!board.id && !aiming && fighting && settled && reach.has(cell)) return "reach"
     if (!fighting && picked !== null && !occupied.has(cell)) return "reach"
     return undefined
   }
@@ -408,7 +548,8 @@ export function FightBoardView({
   // Whether a click on the pointed cell does something.
   function acts(cell: number): boolean {
     if (walls.has(cell)) return false
-    if (!fighting) return occupied.has(cell) || picked !== null
+    if (!fighting)
+      return occupied.has(cell) || (board.id ? Boolean(board.blue?.includes(cell) || board.red?.includes(cell)) : picked !== null)
     return aiming ? (aim?.targets.some((candidate) => candidate.cell === cell) ?? false) : reach.has(cell)
   }
 
@@ -420,6 +561,11 @@ export function FightBoardView({
   function onKeyDown(event: React.KeyboardEvent) {
     if (event.key === "Escape") {
       onCancel()
+      return
+    }
+    if (event.key === "Tab" && cursor !== null && (state.marks ?? []).filter((mark) => mark.cells.includes(cursor)).length > 1) {
+      event.preventDefault()
+      setMarkCycle((n) => n + 1)
       return
     }
     const from = cursor ?? state.entities[0]!.cell
@@ -444,7 +590,8 @@ export function FightBoardView({
     <div
       ref={root}
       className="fight-board"
-      style={{ "--board-ratio": String(frame.width / frame.height) } as React.CSSProperties}
+      data-room={board.id}
+      style={{ "--board-ratio": String(frame.width / frame.height), "--room-width": board.imageWidth ?? 0 } as React.CSSProperties}
       role="application"
       tabIndex={0}
       aria-label={t("fight.board")}
@@ -453,31 +600,97 @@ export function FightBoardView({
       data-act={(cursor !== null && acts(cursor)) || undefined}
       onKeyDown={onKeyDown}
       onMouseLeave={() => onCursor(null)}
+      onPointerDown={(event) => {
+        if (event.button !== 2 && !(event.button === 0 && camera.zoom > 1)) return
+        drag.current = { x: event.clientX, y: event.clientY, cx: camera.x, cy: camera.y, moved: false }
+      }}
+      onPointerMove={(event) => {
+        const start = drag.current
+        if (!start || !event.buttons) return
+        const dx = event.clientX - start.x,
+          dy = event.clientY - start.y
+        if (!start.moved && Math.hypot(dx, dy) < 5) return
+        const scale = root.current?.querySelector("svg")?.getScreenCTM()?.a
+        if (!scale) return
+        start.moved = true
+        event.currentTarget.setPointerCapture(event.pointerId)
+        setCamera((prev) => ({ ...prev, x: start.cx - dx / scale, y: start.cy - dy / scale }))
+      }}
+      onPointerUp={(event) => {
+        suppressClick.current = drag.current?.moved ?? false
+        drag.current = null
+        if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId)
+      }}
+      onPointerCancel={() => {
+        drag.current = null
+      }}
       onContextMenu={(event) => {
         event.preventDefault()
-        onCancel()
+        if (!suppressClick.current) onCancel()
       }}
     >
       <span id="fight-board-hint" className="sr-only">
         {t("fight.boardHint")}
       </span>
       <svg
-        viewBox={`${frame.x} ${frame.y} ${frame.width} ${frame.height}`}
+        viewBox={`${frame.x + camera.x} ${frame.y + camera.y} ${frame.width / camera.zoom} ${frame.height / camera.zoom}`}
         aria-hidden="true"
         onMouseOver={(event) => {
           const cell = cellOf(event)
           if (cell !== null && cell !== cursor) onCursor(cell)
         }}
         onClick={(event) => {
+          if (suppressClick.current) {
+            suppressClick.current = false
+            return
+          }
           const cell = cellOf(event)
+          if (cell !== null && event.altKey) {
+            setPing(cell)
+            clearTimeout(pingTimer.current)
+            pingTimer.current = window.setTimeout(() => setPing(null), 1200)
+            return
+          }
           if (cell !== null) onAct(cell)
         }}
       >
+        <defs>
+          <radialGradient id="combat-cast-tile">
+            <stop offset="0" stopColor="#77749a" />
+            <stop offset=".62" stopColor="#474475" />
+            <stop offset="1" stopColor="#292458" />
+          </radialGradient>
+        </defs>
+        {room && (
+          <image
+            href={api.imageUrl(`/fight-assets/maps/${board.id}.webp`)}
+            {...room}
+            preserveAspectRatio="none"
+            pointerEvents="none"
+          />
+        )}
         <Ground board={board} />
+        <FightMarks
+          board={board}
+          marks={state.marks}
+          cursor={cursor}
+          names={view.names}
+          highlight={highlightMarks}
+          cycle={markCycle}
+        />
+        {ping !== null && (
+          <polygon
+            className="fight-cursor"
+            points={cellPoints(cellCenter(board, ping))}
+            style={{ stroke: "#ffcc52", fill: "#ffcc5266", pointerEvents: "none" }}
+          />
+        )}
         {zones.map(({ cell, zone }) => (
           <polygon key={cell} className="fight-zone" data-zone={zone} points={cellPoints(cellCenter(board, cell), 1.2)} />
         ))}
-        {pickedCell !== undefined && <polygon className="fight-zone" data-zone="picked" points={cellPoints(cellCenter(board, pickedCell), 1.2)} />}
+        {pickedCell !== undefined && (
+          <polygon className="fight-zone" data-zone="picked" points={cellPoints(cellCenter(board, pickedCell), 1.2)} />
+        )}
         {cursor !== null && !walls.has(cursor) && (
           <polygon className="fight-cursor" points={cellPoints(cellCenter(board, cursor), 0.6)} />
         )}
@@ -502,8 +715,13 @@ export function FightBoardView({
           )
         })}
         <Stage
+          activeId={state.activeId || state.entities.find((e) => e.kind === "player")!.id}
+          placement={!fighting}
+          breedId={breedId}
+          items={items}
           board={board}
           entities={state.entities}
+          marks={state.marks}
           playback={playback}
           picked={picked}
           pointed={pointed}
@@ -516,7 +734,17 @@ export function FightBoardView({
         {state.entities.map((entity) => {
           const center = cellCenter(board, entity.cell)
           const height = FIGURE_TOP[entity.kind]
-          return <rect key={entity.id} className="fight-hit" data-cell={entity.cell} x={center.x - 13} y={center.y - height} width={26} height={height} />
+          return (
+            <rect
+              key={entity.id}
+              className="fight-hit"
+              data-cell={entity.cell}
+              x={center.x - 13}
+              y={center.y - height}
+              width={26}
+              height={height}
+            />
+          )
         })}
         {playback.floats.map((float) => {
           const center = cellCenter(board, float.cell)
@@ -536,7 +764,9 @@ export function FightBoardView({
                 style={{ animationDelay: `${float.delay}ms` }}
                 onAnimationEnd={() => playback.endFloat(float.id)}
               >
-                {float.critical && <path className="fight-float-mark" d={BURST} transform={`translate(${-reads / 2 + 6.5} -5.4)`} />}
+                {float.critical && (
+                  <path className="fight-float-mark" d={BURST} transform={`translate(${-reads / 2 + 6.5} -5.4)`} />
+                )}
                 <text x={-reads / 2 + (float.critical ? 15 : 0)}>{float.text}</text>
               </g>
             </g>
