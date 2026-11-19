@@ -92,7 +92,9 @@ func (s *Sim) Aim(st *State, spellID int) *Aim {
 	if s.blocked(st, a) != "" {
 		return aim
 	}
-	for cell := 0; cell < st.Board.Width*st.Board.Height; cell++ {
+	// One budget for the whole preview, every cell and every roll.
+	work := maxAimWork
+	for cell := 0; cell < st.Board.Width*st.Board.Height && work > 0; cell++ {
 		reason := s.aimable(st, a, player, cell)
 		if reason == BlockedRange || reason == BlockedLine || st.Board.wall(cell) {
 			continue
@@ -101,12 +103,12 @@ func (s *Sim) Aim(st *State, spellID int) *Aim {
 		if reason != "" {
 			continue
 		}
-		aim.Targets = append(aim.Targets, s.preview(st, a, spellID, cell, aim.CanCrit))
+		aim.Targets = append(aim.Targets, s.preview(st, a, spellID, cell, aim.CanCrit, &work))
 	}
 	return aim
 }
 
-func (s *Sim) preview(st *State, a *attack, spellID, cell int, canCrit bool) Target {
+func (s *Sim) preview(st *State, a *attack, spellID, cell int, canCrit bool, work *int) Target {
 	target := Target{Cell: cell, Zone: s.shown(st, a, cell), Losses: []Loss{}, Shifts: []Shift{}}
 	// run plays the cast on a copy of the fight, with the lowest or the
 	// highest rolls and one outcome of what the spell draws at random, and
@@ -114,7 +116,7 @@ func (s *Sim) preview(st *State, a *attack, spellID, cell int, canCrit bool) Tar
 	run := func(crit, high bool, outcome int) (map[int]int, *State) {
 		trial := st.clone()
 		top := true
-		c := &casting{root: spellID, crit: crit,
+		c := &casting{root: spellID, crit: crit, work: work,
 			roll: func(lo, hi int) int {
 				if high {
 					return hi

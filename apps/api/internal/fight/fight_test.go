@@ -540,3 +540,30 @@ func TestConditionsOnHealth(t *testing.T) {
 		t.Error("a dummy is no given monster")
 	}
 }
+
+func TestWorkIsBounded(t *testing.T) {
+	// A spell that casts itself on its target would never end: the cast
+	// stops once the spells cast in turn are too deep, and the budget of
+	// effects stops what many of them waiting at once would cost.
+	loop := spell(99, game.SpellLevel{APCost: 1, RangeMax: 6, Effects: []game.SpellEffect{
+		{Action: game.ActionCastSpell, Min: 99, Max: 1, Targets: "A", Zone: point()},
+		{Action: game.ActionCastSpell, Min: 99, Max: 1, Targets: "A", Zone: point()},
+		{Action: 99, Min: 1, Max: 1, Targets: "A", Zone: point(), Shown: true},
+	}})
+	stats := map[int]int{game.StatAP: 12, game.StatMP: 6, game.StatHP: 3000, game.StatCritical: -100}
+	s := &Sim{Cat: game.NewCatalog(&game.Dataset{Spells: []game.Spell{loop}}), Stat: func(id int) int { return stats[id] }, Level: 200, Rand: rand.New(rand.NewPCG(1, 2))}
+	st := fightAt(s, Dummies{}, [2]int{5, 6})
+	events, reason := s.Cast(st, 99, st.Board.cell(5, 6))
+	if reason != "" {
+		t.Fatalf("cast refused: %q", reason)
+	}
+	// Two casts per level over eight levels is 511 spells, each one hit.
+	if got := lost(events, 2); got == 0 || got > 511 {
+		t.Errorf("a spell casting itself dealt %d", got)
+	}
+	work := 3
+	c := &casting{work: &work}
+	if c.spent() || c.spent() || c.spent() || !c.spent() {
+		t.Error("the budget ends after the effects it allows")
+	}
+}

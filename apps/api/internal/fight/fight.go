@@ -528,7 +528,8 @@ func (s *Sim) draw(weights []float64) int {
 }
 
 func (s *Sim) casting(root int, crit, quiet bool) *casting {
-	return &casting{root: root, crit: crit, quiet: quiet, pick: s.draw, roll: func(lo, hi int) int { return lo + s.Rand.IntN(hi-lo+1) }}
+	work := maxWork
+	return &casting{root: root, crit: crit, quiet: quiet, work: &work, pick: s.draw, roll: func(lo, hi int) int { return lo + s.Rand.IntN(hi-lo+1) }}
 }
 
 // Begin starts the first turn: the class's starting spells are cast on the

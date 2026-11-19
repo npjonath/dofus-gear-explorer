@@ -64,6 +64,19 @@ type casting struct {
 	quiet  bool
 	fires  int
 	events []Event
+	// work is what is left of the effects this cast, or the preview it is
+	// part of, may still apply: a fight sent with spells waiting on spells
+	// cannot make one request run without end.
+	work *int
+}
+
+// spent counts one effect applied and reports whether the budget is gone.
+func (c *casting) spent() bool {
+	if c.work == nil {
+		return false
+	}
+	*c.work--
+	return *c.work < 0
 }
 
 func (c *casting) emit(ev Event) {
@@ -146,11 +159,14 @@ var healActions = map[int]int{
 	108: game.ElementFire, 2998: game.ElementWater, 2999: game.ElementAir, 3000: game.ElementEarth,
 }
 
-// Bounds on what one cast can set off: the spells cast in turn, and the
-// waiting effects fired.
+// Bounds on what one cast can set off: the spells cast in turn, the waiting
+// effects fired, and the effects applied in all, for one action and for the
+// preview of a spell over every cell.
 const (
-	maxDepth = 8
-	maxFires = 400
+	maxDepth   = 8
+	maxFires   = 400
+	maxWork    = 20_000
+	maxAimWork = 400_000
 )
 
 // mask is who an effect applies to, read from the game's target mask: who
@@ -391,6 +407,9 @@ func (s *Sim) resolve(st *State, c *casting, casterID, sourceID int, a *attack, 
 		if e.Action == actionNothing {
 			continue
 		}
+		if c.spent() {
+			return
+		}
 		if e.Described && e.Trigger == "" && e.Delay == 0 && (real || !isHit(e)) {
 			continue
 		}
@@ -460,7 +479,7 @@ func (s *Sim) fire(st *State, c *casting, entityID, sourceID, depth int, trigger
 	}
 	hooks := append([]Hook(nil), entity.Hooks...)
 	for _, h := range hooks {
-		if c.fires >= maxFires {
+		if c.fires >= maxFires || c.spent() {
 			return
 		}
 		if h.Delay > 0 {
@@ -474,7 +493,7 @@ func (s *Sim) fire(st *State, c *casting, entityID, sourceID, depth int, trigger
 		if h.Critical {
 			effects = a.critEffects
 		}
-		if h.Index >= len(effects) {
+		if h.Index < 0 || h.Index >= len(effects) {
 			continue
 		}
 		e := effects[h.Index]
@@ -524,6 +543,9 @@ func (s *Sim) due(st *State, c *casting, entityID int) {
 	}
 	entity.Hooks = kept
 	for _, h := range ready {
+		if c.spent() {
+			return
+		}
 		a := s.attack(h.Spell, h.Grade)
 		if a == nil {
 			continue
@@ -532,7 +554,7 @@ func (s *Sim) due(st *State, c *casting, entityID int) {
 		if h.Critical {
 			effects = a.critEffects
 		}
-		if h.Index >= len(effects) || effects[h.Index].Trigger != "" {
+		if h.Index < 0 || h.Index >= len(effects) || effects[h.Index].Trigger != "" {
 			continue
 		}
 		e := effects[h.Index]

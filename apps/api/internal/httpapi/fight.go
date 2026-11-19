@@ -86,6 +86,10 @@ const (
 	maxFightEntities = 16
 	maxFightBuffs    = 256
 	maxFightUses     = 4096
+	// Every entity's waiting effects together, and how long anything lasts
+	// or waits: the game's "whole fight" is 63 turns.
+	maxFightHooks = 512
+	maxFightTurns = 64
 )
 
 // validState reports whether a fight sent by the interface can be played on:
@@ -103,10 +107,25 @@ func validState(st *fight.State) bool {
 	if len(st.Board.Walls) > cells || len(st.Entities) > maxFightEntities || len(st.Uses) > maxFightUses || st.Player() == nil {
 		return false
 	}
+	hooks := 0
 	for _, e := range st.Entities {
 		if e.Cell < 0 || e.Cell >= cells || len(e.Buffs) > maxFightBuffs || len(e.Hooks) > maxFightBuffs {
 			return false
 		}
+		hooks += len(e.Hooks)
+		for _, h := range e.Hooks {
+			if h.Index < 0 || h.Delay < 0 || h.Delay > maxFightTurns || h.Turns < -1 || h.Turns > maxFightTurns {
+				return false
+			}
+		}
+		for _, b := range e.Buffs {
+			if b.Turns < -1 || b.Turns > maxFightTurns {
+				return false
+			}
+		}
+	}
+	if hooks > maxFightHooks {
+		return false
 	}
 	for id, use := range st.Uses {
 		if use == nil || len(use.Targets) > maxFightEntities {
