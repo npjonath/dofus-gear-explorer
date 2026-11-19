@@ -35,8 +35,8 @@ jobs:
         run: |
           cd apps/desktop/fight-import
           ./"${{ matrix.target }}"/fight-import --self-test
-          tar -czf "$RUNNER_TEMP/fight-${{ matrix.target }}.tgz" "${{ matrix.target }}"
+          tar -czf "fight-${{ matrix.target }}.tgz" "${{ matrix.target }}"
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: fight-${{ matrix.target }}
-          path: ${{ runner.temp }}/fight-*.tgz
+          path: apps/desktop/fight-import/fight-*.tgz
