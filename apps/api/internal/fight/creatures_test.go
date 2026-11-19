@@ -102,3 +102,20 @@ func TestSymmetricTeleportUsesThePivotAndTheRealTerrain(t *testing.T) {
 		t.Fatalf("player=%d events=%v", player.Cell, c.events)
 	}
 }
+
+func TestRangeOneDiagonalSpellOffersTheFourDiagonals(t *testing.T) {
+	s := newSim(map[int]int{})
+	skill := spell(302, game.SpellLevel{APCost: 2, RangeMin: 1, RangeMax: 1, Cast: game.CastRules{Diagonal: true}})
+	s.Cat.SpellByID[skill.ID] = &skill
+	st := fightAt(s, Dummies{}, [2]int{5, 6})
+	aim := s.Aim(st, skill.ID)
+	if aim == nil || len(aim.Targets) != 4 {
+		t.Fatalf("diagonal cast range: %+v", aim)
+	}
+	for _, target := range aim.Targets {
+		x, y := st.Board.xy(target.Cell)
+		if abs(x-3) != 1 || abs(y-6) != 1 {
+			t.Fatalf("unexpected diagonal cell (%d,%d)", x, y)
+		}
+	}
+}

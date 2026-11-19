@@ -536,13 +536,20 @@ func (s *Sim) aimable(st *State, a *attack, caster *Entity, cell int) string {
 	if !st.Board.valid(cell) || st.Board.wall(cell) {
 		return BlockedCell
 	}
-	lo, hi := s.reach(caster, a)
-	if d := st.Board.Distance(caster.Cell, cell); d < lo || d > hi {
-		return BlockedRange
-	}
 	x0, y0 := st.Board.xy(caster.Cell)
 	x1, y1 := st.Board.xy(cell)
-	straight, diagonal := x0 == x1 || y0 == y1, abs(x1-x0) == abs(y1-y0)
+	dx, dy := abs(x1-x0), abs(y1-y0)
+	straight, diagonal := dx == 0 || dy == 0, dx == dy
+	distance := dx + dy
+	// Each diagonal square costs one range on a permitted diagonal ray.
+	// Fente has a min/max range of one and highlights its four diagonals.
+	if a.rules.Diagonal && diagonal {
+		distance = dx
+	}
+	lo, hi := s.reach(caster, a)
+	if distance < lo || distance > hi {
+		return BlockedRange
+	}
 	if (a.rules.Line || a.rules.Diagonal) && !(a.rules.Line && straight) && !(a.rules.Diagonal && diagonal) {
 		return BlockedLine
 	}
