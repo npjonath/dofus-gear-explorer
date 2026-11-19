@@ -1,0 +1,42 @@
+name: Combat asset importer
+on:
+  workflow_call:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'scripts/fight-assets/**'
+      - '.github/workflows/fight-import.yml'
+permissions:
+  contents: read
+jobs:
+  native:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: macos-latest, target: mac-arm64 }
+          - { os: macos-15-intel, target: mac-x64 }
+          - { os: ubuntu-22.04, target: linux-x64 }
+          - { os: windows-latest, target: win-x64 }
+    name: Importer ${{ matrix.target }}
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
+        with:
+          python-version: '3.13'
+      - run: python -m pip install -r scripts/fight-assets/requirements.txt pyinstaller==6.22.3
+      - run: python -m unittest discover -s scripts/fight-assets
+      - run: python scripts/fight-assets/build.py
+      - name: Run the packaged importer and preserve executable permissions
+        shell: bash
+        run: |
+          cd apps/desktop/fight-import
+          ./"${{ matrix.target }}"/fight-import --self-test
+          tar -czf "$RUNNER_TEMP/fight-${{ matrix.target }}.tgz" "${{ matrix.target }}"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: fight-${{ matrix.target }}
+          path: ${{ runner.temp }}/fight-*.tgz
