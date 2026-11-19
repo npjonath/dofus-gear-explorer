@@ -3,17 +3,19 @@ import { spawn, type ChildProcess } from "node:child_process"
 import { existsSync, renameSync } from "node:fs"
 import { join, resolve } from "node:path"
 import { createInterface } from "node:readline"
+import { registerFightAssets } from "./fightAssets"
 import { startUpdates } from "./updates"
 
 const appName = "Dofus Gear Explorer"
 app.setName(appName)
 // Two apps sharing one folder cannot both open its storage: the second one would
 // silently forget the stuffs and settings it saves. Development runs get their own.
-const userData = join(app.getPath("appData"), app.isPackaged ? appName : `${appName} Dev`)
+const profile = app.commandLine.getSwitchValue("user-data-dir")
+const userData = profile ? resolve(profile) : join(app.getPath("appData"), app.isPackaged ? appName : `${appName} Dev`)
 
 // The app was called Dofus Database Explorer before 0.1.0: keep its stuffs and game data.
 const legacyData = join(app.getPath("appData"), "Dofus Database Explorer")
-if (app.isPackaged && existsSync(legacyData) && !existsSync(userData)) {
+if (!profile && app.isPackaged && existsSync(legacyData) && !existsSync(userData)) {
   try {
     renameSync(legacyData, userData)
   } catch {
@@ -136,6 +138,7 @@ app.whenReady().then(async () => {
     app.quit()
     return
   }
+  registerFightAssets(process.env.DDE_DATA_DIR ?? join(app.getPath("userData"), "data"))
   createWindow()
   startUpdates(() => BrowserWindow.getAllWindows()[0] ?? null)
   app.on("activate", () => {

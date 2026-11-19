@@ -64,3 +64,39 @@ func TestAttackLinesOfASpellGrade(t *testing.T) {
 		t.Errorf("Corruption = %+v", lines)
 	}
 }
+
+func TestCastRulesAndFightEffects(t *testing.T) {
+	// 1 in line, 4 needs sight, 64 range follows the caster's; 512 is a flag
+	// every grade carries, which says nothing about the cast.
+	rules := castRules(rawSpellLevel{Flags: 1 | 4 | 64 | 512, PerTurn: 2, PerTarget: 1, Interval: 3, Initial: 1, MaxStack: 4})
+	want := game.CastRules{Line: true, Sight: true, BoostRange: true, PerTurn: 2, PerTarget: 1, Interval: 3, InitialCooldown: 1, MaxStack: 4}
+	if rules != want {
+		t.Errorf("cast rules = %+v, want %+v", rules, want)
+	}
+
+	defs := map[int]rawEffect{
+		111: {ID: 111, Characteristic: game.StatAP, BonusType: 1},
+		168: {ID: 168, Characteristic: game.StatAP, BonusType: -1},
+		99:  {ID: 99},
+	}
+	effects := fightEffects([]rawSpellEffect{
+		{ActionID: 99, DiceNum: 20, DiceSide: 25, Triggers: "I", TargetMask: "A", Flags: effectVisibleInTooltip,
+			Zone: rawZone{Shape: 'C', Param1: 2, Param2: 1, Decrease: 10, Steps: 4}},
+		{ActionID: 111, DiceNum: 2, Duration: 2, Triggers: "I", TargetMask: "C"},
+		{ActionID: 168, DiceNum: 1, Triggers: "TB", Random: 50, Group: 3, Flags: effectVisibleInTooltip | effectDescribedOnly},
+	}, defs)
+	if len(effects) != 3 {
+		t.Fatalf("got %d effects, want 3", len(effects))
+	}
+	hit := effects[0]
+	if hit.Action != 99 || hit.Min != 20 || hit.Max != 25 || hit.Trigger != "" || !hit.Shown || hit.Sign != 0 ||
+		!reflect.DeepEqual(hit.Zone, game.Zone{Shape: "C", Size: 2, Min: 1, Decrease: 10, Steps: 4}) {
+		t.Errorf("damage effect = %+v", hit)
+	}
+	if boost := effects[1]; boost.Stat != game.StatAP || boost.Sign != 1 || boost.Duration != 2 || boost.Shown {
+		t.Errorf("boost = %+v", boost)
+	}
+	if loss := effects[2]; loss.Sign != -1 || loss.Trigger != "TB" || loss.Random != 50 || loss.Group != 3 || !loss.Described {
+		t.Errorf("triggered loss = %+v", loss)
+	}
+}

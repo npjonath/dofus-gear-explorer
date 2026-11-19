@@ -160,6 +160,12 @@ func (c *Client) Download(ctx context.Context, asset Asset, dest string, progres
 // ExtractIcons unpacks the wanted item icons from an images archive into
 // destDir as <iconId>.png. Archive entries are named <iconId>-<size>.png.
 func ExtractIcons(archive, destDir string, wanted map[int]bool) (int, error) {
+	return ExtractImages(archive, destDir, "", wanted)
+}
+
+// ExtractImages unpacks the wanted images of an archive into destDir as
+// <id>.png. Archive entries are named <prefix><id>-<size>.png.
+func ExtractImages(archive, destDir, prefix string, wanted map[int]bool) (int, error) {
 	f, err := os.Open(archive)
 	if err != nil {
 		return 0, err
@@ -188,7 +194,10 @@ func ExtractIcons(archive, destDir string, wanted map[int]bool) (int, error) {
 		}
 		// Only the base name is used, so entries cannot escape destDir.
 		base := strings.TrimSuffix(path.Base(hdr.Name), ".png")
-		idPart, _, _ := strings.Cut(base, "-")
+		if !strings.HasPrefix(base, prefix) {
+			continue
+		}
+		idPart, _, _ := strings.Cut(strings.TrimPrefix(base, prefix), "-")
 		id := 0
 		if _, err := fmt.Sscanf(idPart, "%d", &id); err != nil || !wanted[id] {
 			continue

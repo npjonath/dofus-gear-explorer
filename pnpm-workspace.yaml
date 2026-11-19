@@ -3,6 +3,7 @@ packages:
   - packages/*
 
 onlyBuiltDependencies:
+  - d3-ts-renderer
   - electron
   - esbuild
 
@@ -11,3 +12,7 @@ onlyBuiltDependencies:
 # Drop this override once electron-builder moves to a patched minimatch.
 overrides:
   minimatch@>=7.0.0 <11.0.1: 11.0.7
+
+# A newly imported game release can change bodies, colours and the slots hidden by hats.
+patchedDependencies:
+  d3-ts-renderer@0.1.3: patches/d3-ts-renderer-0.1.3.patch

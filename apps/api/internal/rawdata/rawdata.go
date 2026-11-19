@@ -30,7 +30,9 @@ var DataFiles = []string{
 	"spells.json",
 	"spell_levels.json",
 	"spell_variants.json",
+	"spell_types.json",
 	"breeds.json",
+	"monsters.json",
 }
 
 // LangFile returns the translation asset name for a language code.
@@ -123,6 +125,7 @@ type rawSpell struct {
 	DescriptionID flexInt `json:"descriptionId"`
 	IconID        int     `json:"iconId"`
 	TypeID        int     `json:"typeId"`
+	AdminName     string  `json:"adminName"`
 }
 
 // rawSpellHead is what the spell importer needs of a spell.
@@ -155,6 +158,7 @@ type rawCategory struct {
 }
 
 type rawType struct {
+	RawZone     string  `json:"rawZone"`
 	ID          int     `json:"id"`
 	NameID      flexInt `json:"nameId"`
 	SuperTypeID int     `json:"superTypeId"`
@@ -525,7 +529,7 @@ func Parse(dir, version string, langs []string) (*game.Dataset, error) {
 			}
 			if inst.ActionID == effectPassive {
 				if sp, ok := spellByID[inst.DiceNum]; ok && item.Passive == nil {
-					item.Passive = &game.Passive{Name: game.Texts{}, Description: game.Texts{}}
+					item.Passive = &game.Passive{Name: game.Texts{}, Description: game.Texts{}, SpellID: sp.ID}
 					passiveSpells[item.Passive] = sp
 				}
 				continue
@@ -580,7 +584,15 @@ func Parse(dir, version string, langs []string) (*game.Dataset, error) {
 	sort.Slice(ds.Items, func(a, b int) bool { return ds.Items[a].ID < ds.Items[b].ID })
 	sort.Slice(ds.Runes, func(a, b int) bool { return ds.Runes[a].ID < ds.Runes[b].ID })
 
-	ds.Breeds, ds.Spells, err = parseSpells(dir, rawSpells, want)
+	var startTypes map[int]game.Texts
+	// The passive of an item is a spell its wearer's fights start with.
+	var passives []int
+	for _, it := range ds.Items {
+		if it.Passive != nil {
+			passives = append(passives, it.Passive.SpellID)
+		}
+	}
+	ds.Breeds, ds.Spells, startTypes, err = parseSpells(dir, rawSpells, effectByID, passives, want)
 	if err != nil {
 		return nil, err
 	}
@@ -662,7 +674,7 @@ func Parse(dir, version string, langs []string) (*game.Dataset, error) {
 			continue
 		}
 		it := game.ItemType{
-			ID: t.ID, SuperTypeID: t.SuperTypeID,
+			ID: t.ID, SuperTypeID: t.SuperTypeID, RawZone: t.RawZone,
 			Slot: game.SlotBySuperType[t.SuperTypeID], Name: game.Texts{},
 		}
 		want(it.Name, t.NameID)
@@ -741,6 +753,12 @@ func Parse(dir, version string, langs []string) (*game.Dataset, error) {
 				p.target[lang] = s
 			}
 		}
+		for i := range ds.Spells {
+			d := ds.Spells[i].Description
+			if text, ok := d[lang]; ok {
+				d[lang] = cleanPassive(text, "")
+			}
+		}
 		for i := range ds.Items {
 			if p := ds.Items[i].Passive; p != nil {
 				p.Description[lang] = cleanPassive(p.Description[lang], p.Name[lang])
@@ -761,5 +779,6 @@ func Parse(dir, version string, langs []string) (*game.Dataset, error) {
 			}
 		}
 	}
+	assignStartSpells(ds, startTypes)
 	return ds, nil
 }

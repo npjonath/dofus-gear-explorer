@@ -13,6 +13,9 @@ colors:
   ink-3: "oklch(0.5 0.022 260)"
   cell-bg: "oklch(0.925 0.011 258)"
   slot-bg: "oklch(0.992 0.002 258)"
+  slab-top: "oklch(0.875 0.012 258)"
+  slab-side: "oklch(0.8 0.015 260)"
+  slab-shade: "oklch(0.71 0.018 260)"
   accent: "oklch(0.5 0.17 258)"
   accent-ink: "oklch(0.99 0.005 258)"
   accent-soft: "oklch(0.93 0.04 256)"
@@ -32,7 +35,14 @@ colors:
   st-range: "oklch(0.5 0.1 200)"
   st-critical: "oklch(0.56 0.15 55)"
   st-prospecting: "oklch(0.55 0.12 88)"
+  combat-ping: "#ffcc52"
+  combat-ping-fill: "#ffcc5266"
 typography:
+  combat-body:
+    fontFamily: "CombatLexend, system-ui, sans-serif"
+    fontSize: "calc(15 * var(--hud-unit))"
+  combat-display:
+    fontFamily: "CombatRowdies, CombatLexend, sans-serif"
   headline:
     fontFamily: "Figtree Variable, ui-sans-serif, system-ui, sans-serif"
     fontSize: "1.25rem"
@@ -204,7 +214,7 @@ It is a working tool, dense on purpose. The root size is small (14px), rows are 
 
 It refuses two looks by construction: the dark neon gamer dashboard (no glow, no gradients on controls, the dark theme is the same slate board at night, not black) and the white SaaS admin table (the ground is tinted, state is carried by game colours, item cells and slots are the recurring shape instead of cards).
 
-Tokens live in one place, `packages/app/src/styles.css`: the light theme on `:root`, the dark theme on `:root[data-theme="dark"]`. That file is normative. The frontmatter above is the light theme as it stood when this was written; if a value there and the stylesheet disagree, the stylesheet is right and the role described here still holds.
+The Items and Stuff themes live in `packages/app/src/styles.css`, with light tokens on `:root` and dark tokens on `:root[data-theme="dark"]`. The combat viewport uses the local client’s fonts and its own targeting indicators. The frontmatter records the light theme and the combat roles shared across themes.
 
 **Key Characteristics:**
 
@@ -212,7 +222,7 @@ Tokens live in one place, `packages/app/src/styles.css`: the light theme on `:ro
 - Square cells for every item image and every equipment slot, in three sizes of the same shape.
 - Three zone colours used only as state: blue selected, green valid, red failing.
 - Twelve stat tones, resolved from the stat itself, shown as a cell-shaped pip or as the colour of the number.
-- One typeface, four weights, tabular numerals everywhere.
+- Figtree with tabular numerals on Items and Stuff. The combat HUD uses the fonts imported from DOFUS.
 - Flat panels separated by one-pixel lines; shadow only under things that float.
 - Light and dark themes with the same roles; both are first-class.
 
@@ -246,6 +256,10 @@ Stat tones. Each characteristic resolves to one tone through `toneOf` in `packag
 - **Critical Amber** (`st-critical`): critical hit.
 - **Prospecting Gold** (`st-prospecting`): prospecting.
 
+### Combat targeting
+
+Alt-click marks a cell for 1.2 seconds. The `combat-ping` outline and its 40% fill, `combat-ping-fill`, keep the position visible over the room artwork. The pointer keeps its white outline as it moves to another cell.
+
 ### Neutral
 
 - **Board Slate** (`ground`) and **Checker Slate** (`tile`): the board. `ground` is the page and the fill of the filter rail; `tile` is the second tone of the checker, the table header, and the fill of loading skeletons.
@@ -268,11 +282,9 @@ In the dark theme the roles are identical and the board stays slate: the neutral
 
 ## Typography
 
-**Display Font:** none; the system has no display face.
-**Body Font:** Figtree Variable, self-hosted (with ui-sans-serif, system-ui, sans-serif)
-**Label/Mono Font:** the same family; alignment of figures comes from tabular numerals, not from a mono face.
+Items and Stuff use the self-hosted Figtree Variable family with a system sans-serif fallback. Weight and ink level distinguish labels from values. Tabular numerals align the stat columns.
 
-**Character:** one friendly geometric sans doing all the work, kept small and set heavy where it counts. Hierarchy comes from weight and ink level before it comes from size.
+The combat HUD loads Lexend Regular and Bold under the CSS name `CombatLexend` for labels, menus and the combat log. It loads Rowdies Regular as `CombatRowdies` for the stuff name, gauge values and turn button. Both families come from the installed DOFUS client.
 
 ### Hierarchy
 
@@ -294,7 +306,7 @@ Controls from the component library sit at 0.875rem with the same family; button
 
 **The Tabular Rule.** Tabular numerals are on for the whole document. Numeric columns are right-aligned; names are left-aligned and truncate with an ellipsis rather than wrap.
 
-**The Four Weights Rule.** 400 for prose, 600 for labels and controls, 700 for values and titles, 800 for vitals. No italics, no tracked uppercase labels, no letter-spacing other than a slight tightening on the product name.
+**The Four Weights Rule.** On Items and Stuff, use 400 for prose, 600 for labels and controls, 700 for values and titles, 800 for vitals. No italics, no tracked uppercase labels, no letter-spacing other than a slight tightening on the product name.
 
 ## Layout
 
@@ -324,7 +336,7 @@ Spacing follows a 0.25rem step. Panel padding is 1rem (1.25rem for the search fo
 
 ## Elevation & Depth
 
-Flat. Panels are told apart by a one-pixel `line` and by small tonal steps between `ground`, `panel` and `panel-2`, not by shadow. The board's depth is its checker.
+Flat. Panels are told apart by a one-pixel `line` and by small tonal steps between `ground`, `panel` and `panel-2`, not by shadow. The board's depth is its checker. The fallback fight arena uses a raised rim and two darker faces (`slab-top`, `slab-side`, `slab-shade`). Imported rooms carry the depth and lighting of the original map.
 
 ### Shadow Vocabulary
 
@@ -463,6 +475,22 @@ The toast can be dismissed, so the top strip keeps the offer: an icon button app
 
 The desktop icon is the brand mark at scale: the four cells (accent blue, ok green, bad red, neutral) with rounded corners, on a dark slate rounded tile with a faint top-to-bottom gradient and a hairline edge. Source in `apps/desktop/build/icon.svg`, rendered to a 1024px PNG. No Ankama artwork, ever.
 
+### Fight board
+
+Opening Fight from a stuff gives the room the whole window. The isometric floor sits on black, with a slim brown toolbar above it and the combat controls along the bottom. DoPoutch is the visual reference for this arrangement. The room art, sprites and interface textures come from the player's local DOFUS 3 installation.
+
+**Room and targeting.** The Village and Astrub training rooms use the artwork and cell geometry from their respective maps. Keep the diamonds aligned with the floor as the player zooms or pans. Before combat, blue and red cells show the two starting camps. During a turn, the path under the pointer turns green and shows its MP cost. Selecting a spell shows its range in blue-violet, darkens cells out of sight and fills the area of impact in red. A white edge identifies the cursor. Pointing at a target reveals its name, health and predicted losses, with a separate figure for a possible critical hit. Ground marks show their area, source spell and remaining turns on inspection. Number Eliotrope portals in placement order. Pointing to a connected portal traces the route in green with a white dashed centre line and labels its exit with distance and bonus. When a spell projects through the network, place its target preview at the projected cell.
+
+**Actors and motion.** Anchor each sprite at its feet and draw nearer actors last. The class and its visible hat, cloak and shield share one appearance on the floor and in the turn-order portrait when their skins are available. A Poutch Ingball and supported summons use their own monster sprites. Walking, turning, casting, weapon strikes and hits follow the action returned by the fight engine. Where the client supplies a matching sequence, play its caster animation and effects at the source, along the projectile path or at impact. Invisible actors remain legible at reduced opacity. Health changes and floating damage figures follow the hit. The next click can skip to the end of an action. With reduced motion enabled, the board shows the outcome immediately. Without an imported room, the fight uses the isometric checkerboard slab and drawn figures. On an imported map, an unavailable actor appearance falls back to a drawn figure. A cast without a matching sequence uses the built-in strike or projectile and impact.
+
+**Combat HUD.** The top bar holds the stuff name, turn, critical rate and damage totals. Centre the turn order just below it, with a vertical health strip beside each portrait. Summons have a compact panel at the right when present. Along the bottom, read left to right from the combat log to the red health heart, blue AP and green MP counters, weapon and spell icons, and the gold Ready or End Turn button. Health and points are written directly on their gauges. A spell on cooldown carries the number of turns remaining. Choose variants in the spellbook. The heart, point counters, action button textures, toolbar icons and the Lexend and Rowdies typefaces come from the same local import. Characteristics, equipment, spell details and settings open on demand over the room.
+
+**Keyboard.** On the focused board, arrow keys move the cursor, Enter or Space acts on its cell and Escape cancels the selection. Twelve configurable keys select spells, with Shift or Ctrl for the next twelve. The weapon, Ready or End Turn, characteristics, spellbook, equipment and settings have their own bindings. Hold Alt to inspect a spell. Tab cycles through overlapping marks under the cursor. Y is the default binding for ground marks and can be reassigned. Combat settings store key assignments locally and offer a reset to the defaults.
+
+**Combat menus.** The spellbook puts class and common spells in separate tabs and keeps each variant beside its base spell. Search by name or filter by element and role. A lock and the unlock level identify future spells. In the inventory, arrange ten equipment slots around the rotating class model and six Dofus slots below it. Open a slot to replace or forge an item, then review the differences before restarting with the trial equipment. The combat log can fold a spell's effects under its cast. Its menu sets type size, line spacing and opacity and copies the log.
+
+**Sound and display.** The searchable settings include automatic or manual HUD size, animation quality, two or three spell rows and an option to show reachable cells. The master slider adjusts the whole mix. Music, ambience, effects, class voices and interface sounds each have a slider, a numeric level and a mute button. Playback uses the sounds present in the local pack. A separate switch enables the Poutch hit sound. Keep visual cast, hit and turn feedback available when muted.
+
 ### Banner, stage and popups
 
 - **Banner:** a full-width strip under the top bar. `accent-soft` when new game data is available or importing (with a progress bar and the step name; the bar's fill is `accent` and moves to its value without a width animation), `bad-soft` when an update failed. Message on the left, one button on the right.
@@ -515,4 +543,4 @@ Resting the pointer on an item (a board slot, a search result cell, a set piece)
 - **Don't** add glow, gradient fills on buttons, panels or text, or a black neon dark theme; the dark ground is the same slate, at night.
 - **Don't** lay data tables, lists or sheets on the ground or the checker, or box result rows into cards.
 - **Don't** show a stuff as valid before its evaluation says so, or hide a failing condition behind colour alone.
-- **Don't** introduce a second typeface, tracked uppercase labels, or weights outside the four in use (a quiet zero at 500 is the one exception).
+- **Don't** introduce another typeface or tracked uppercase labels on Items and Stuff. Use the four documented weights there, with 500 for a quiet zero.

@@ -40,11 +40,15 @@ const js = JSON.parse(
 for (const [licence, packages] of Object.entries(js)) {
   for (const pkg of packages) {
     if (pkg.name.startsWith("@types/")) continue
+    // The sprite renderer publishes its usage terms in its README instead of a LICENSE file.
+    const renderer = pkg.name === "d3-ts-renderer"
     entries.push({
       name: pkg.name,
       version: pkg.versions.join(", "),
-      licence,
-      texts: licenceTexts(pkg.paths[0]),
+      licence: renderer ? "Upstream usage terms" : licence,
+      texts: renderer
+        ? [readFileSync(join(pkg.paths[0], "README.md"), "utf8").split(/^## Usage\s*$/m)[1].split(/^## /m)[0].trim()]
+        : licenceTexts(pkg.paths[0]),
     })
   }
 }

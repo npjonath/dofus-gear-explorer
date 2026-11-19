@@ -64,6 +64,10 @@
       {
         "from": "../../THIRD_PARTY_NOTICES.md",
         "to": "THIRD_PARTY_NOTICES.md"
+      },
+      {
+        "from": "fight-import/${os}-${arch}/",
+        "to": "fight-import/"
       }
     ],
     "mac": {
@@ -119,6 +123,7 @@
         "provider": "github",
         "releaseType": "draft"
       }
-    ]
+    ],
+    "beforePack": "./scripts/fight-importer.cjs"
   }
 }

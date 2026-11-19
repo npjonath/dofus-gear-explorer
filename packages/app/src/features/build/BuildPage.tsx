@@ -35,6 +35,7 @@ import { SlotGlyph } from "../../ui/SlotGlyph"
 import { toaster } from "../../ui/toaster"
 import { BuildList } from "./BuildList"
 import { BuildTabs } from "./BuildTabs"
+import { FightPanel } from "../fight/FightPanel"
 import { DamagePanel } from "./DamagePanel"
 import { ForgePanel } from "./ForgePanel"
 import { ItemPicker } from "./ItemPicker"
@@ -377,7 +378,7 @@ export function BuildPage({ meta }: { meta: Meta }) {
   const [selectedKey, setSelectedKey] = React.useState<string | null>(null)
   const [selectedIn, setSelectedIn] = React.useState(build.id)
   const [tab, setTab] = React.useState<SlotTab>("items")
-  const [view, setView] = React.useState<"gear" | "damage">("gear")
+  const [view, setView] = React.useState<"gear" | "damage" | "fight">("gear")
   // A slot chosen in one stuff says nothing about the next one.
   if (selectedIn !== build.id) {
     setSelectedIn(build.id)
@@ -397,7 +398,7 @@ export function BuildPage({ meta }: { meta: Meta }) {
   // fields keep their own undo.
   const visible = useLocation().route === "build"
   React.useEffect(() => {
-    if (!visible) return
+    if (!visible || view === "fight") return
     const onKeyDown = (event: KeyboardEvent) => {
       const key = event.key.toLowerCase()
       if (!(event.ctrlKey || event.metaKey) || (key !== "z" && key !== "y")) return
@@ -410,7 +411,7 @@ export function BuildPage({ meta }: { meta: Meta }) {
     }
     window.addEventListener("keydown", onKeyDown)
     return () => window.removeEventListener("keydown", onKeyDown)
-  }, [visible, build.id, t])
+  }, [visible, view, build.id, t])
 
   const act = (key: string, action: SlotAction) => {
     if (action === "remove") {
@@ -509,11 +510,12 @@ export function BuildPage({ meta }: { meta: Meta }) {
         <SegmentedControl
           aria-label={t("build.view")}
           value={view}
-          onValueChange={(next) => setView(next === "damage" ? "damage" : "gear")}
+          onValueChange={(next) => setView(next === "damage" || next === "fight" ? next : "gear")}
         >
           <SegmentedControlIndicator />
           <SegmentedControlItem value="gear">{t("build.view.gear")}</SegmentedControlItem>
           <SegmentedControlItem value="damage">{t("build.view.damage")}</SegmentedControlItem>
+          <SegmentedControlItem value="fight" id="build-open-fight">{t("build.view.fight")}</SegmentedControlItem>
         </SegmentedControl>
         <Button onClick={() => setComparing(true)}>
           <ArrowRightLeftIcon aria-hidden="true" className="size-4" />
@@ -649,6 +651,12 @@ export function BuildPage({ meta }: { meta: Meta }) {
   // characteristics beside a stuff, the picker once a slot is chosen.
   const showSlot = selected !== null && view === "gear"
   let workspace: React.ReactNode
+  if (visible && view === "fight" && stuffTab !== "list" && stuffTab !== "search") {
+    return <FightPanel key={build.id} meta={meta} build={build} input={input} evaluation={evaluation} onExit={() => {
+      setView("gear")
+      requestAnimationFrame(() => document.getElementById("build-open-fight")?.focus())
+    }} />
+  }
   if (stuffTab === "list") {
     workspace = <BuildList meta={meta} onNew={() => setCreating(true)} />
   } else if (stuffTab === "search") {
@@ -673,7 +681,8 @@ export function BuildPage({ meta }: { meta: Meta }) {
         leftSize={20}
         right={showSlot ? slotPanel : undefined}
       >
-        {breakpoint === "xl" ? (
+        {/* A fight needs the height: under xl the characteristics stay with the Equipment view. */}
+        {breakpoint === "xl" || view === "fight" ? (
           board
         ) : (
           <div className="flex h-full min-h-0 flex-col">

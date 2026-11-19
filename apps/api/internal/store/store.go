@@ -17,7 +17,7 @@ import (
 
 // schemaVersion changes whenever the tables below change shape. A database
 // written by another schema version is rebuilt and its data re-imported.
-const schemaVersion = "5"
+const schemaVersion = "12"
 
 // Meta keys.
 const (
@@ -76,6 +76,7 @@ CREATE TABLE IF NOT EXISTS spells (
 	breed_id   INTEGER NOT NULL,
 	ord        INTEGER NOT NULL,
 	variant_of INTEGER NOT NULL,
+	starts_for INTEGER NOT NULL,
 	levels     TEXT NOT NULL
 );
 
@@ -92,6 +93,7 @@ CREATE TABLE IF NOT EXISTS runes (
 CREATE TABLE IF NOT EXISTS item_types (
 	id            INTEGER PRIMARY KEY,
 	super_type_id INTEGER NOT NULL,
+ raw_zone TEXT NOT NULL,
 	slot          TEXT NOT NULL
 );
 
@@ -115,7 +117,8 @@ CREATE TABLE IF NOT EXISTS items (
 	range_max         INTEGER NOT NULL,
 	crit_chance       INTEGER NOT NULL,
 	crit_bonus        INTEGER NOT NULL,
-	max_cast_per_turn INTEGER NOT NULL
+	max_cast_per_turn INTEGER NOT NULL,
+	passive_spell     INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS items_slot_level ON items(slot, level);
 CREATE INDEX IF NOT EXISTS items_type ON items(type_id);
@@ -381,8 +384,11 @@ func (s *Store) Import(ctx context.Context, ds *game.Dataset, importedAt string)
 			return err
 		}
 		if _, err := tx.ExecContext(ctx,
-			"INSERT INTO spells(id, icon_id, breed_id, ord, variant_of, levels) VALUES(?, ?, ?, ?, ?, ?)",
-			sp.ID, sp.IconID, sp.BreedID, sp.Order, sp.VariantOf, string(levels)); err != nil {
+			"INSERT INTO spells(id, icon_id, breed_id, ord, variant_of, starts_for, levels) VALUES(?, ?, ?, ?, ?, ?, ?)",
+			sp.ID, sp.IconID, sp.BreedID, sp.Order, sp.VariantOf, sp.StartsFor, string(levels)); err != nil {
+			return err
+		}
+		if err := putTexts("spell_desc", sp.ID, sp.Description, false); err != nil {
 			return err
 		}
 		if err := putTexts(textSpell, sp.ID, sp.Name, false); err != nil {
@@ -391,8 +397,8 @@ func (s *Store) Import(ctx context.Context, ds *game.Dataset, importedAt string)
 	}
 	for _, t := range ds.Types {
 		if _, err := tx.ExecContext(ctx,
-			"INSERT INTO item_types(id, super_type_id, slot) VALUES(?, ?, ?)",
-			t.ID, t.SuperTypeID, string(t.Slot)); err != nil {
+			"INSERT INTO item_types(id, super_type_id, slot,raw_zone) VALUES(?, ?, ?,?)",
+			t.ID, t.SuperTypeID, string(t.Slot), t.RawZone); err != nil {
 			return err
 		}
 		if err := putTexts(textType, t.ID, t.Name, false); err != nil {
@@ -401,8 +407,8 @@ func (s *Store) Import(ctx context.Context, ds *game.Dataset, importedAt string)
 	}
 
 	insItem, err := prepare(`INSERT INTO items(id, type_id, slot, level, icon_id, set_id, criteria, pods,
-		is_weapon, ap_cost, range_min, range_max, crit_chance, crit_bonus, max_cast_per_turn)
-		VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+		is_weapon, ap_cost, range_min, range_max, crit_chance, crit_bonus, max_cast_per_turn, passive_spell)
+		VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
 	if err != nil {
 		return err
 	}
@@ -429,7 +435,7 @@ func (s *Store) Import(ctx context.Context, ds *game.Dataset, importedAt string)
 			w, isWeapon = *it.Weapon, 1
 		}
 		if _, err := insItem.ExecContext(ctx, it.ID, it.TypeID, string(it.Slot), it.Level, it.IconID, it.SetID,
-			it.Criteria, it.Pods, isWeapon, w.APCost, w.RangeMin, w.RangeMax, w.CritChance, w.CritBonus, w.MaxCastPerTurn); err != nil {
+			it.Criteria, it.Pods, isWeapon, w.APCost, w.RangeMin, w.RangeMax, w.CritChance, w.CritBonus, w.MaxCastPerTurn, passiveSpell(it)); err != nil {
 			return fmt.Errorf("insert item %d: %w", it.ID, err)
 		}
 		for pos, e := range it.Effects {
@@ -595,10 +601,10 @@ func (s *Store) Load(ctx context.Context) (*game.Dataset, error) {
 	}); err != nil {
 		return nil, err
 	}
-	if err := scan("SELECT id, super_type_id, slot FROM item_types ORDER BY id", func(r *sql.Rows) error {
+	if err := scan("SELECT id, super_type_id, slot,raw_zone FROM item_types ORDER BY id", func(r *sql.Rows) error {
 		var t game.ItemType
 		var slot string
-		if err := r.Scan(&t.ID, &t.SuperTypeID, &slot); err != nil {
+		if err := r.Scan(&t.ID, &t.SuperTypeID, &slot, &t.RawZone); err != nil {
 			return err
 		}
 		t.Slot = game.Slot(slot)
@@ -632,16 +638,17 @@ func (s *Store) Load(ctx context.Context) (*game.Dataset, error) {
 	}); err != nil {
 		return nil, err
 	}
-	if err := scan("SELECT id, icon_id, breed_id, ord, variant_of, levels FROM spells ORDER BY id", func(r *sql.Rows) error {
+	if err := scan("SELECT id, icon_id, breed_id, ord, variant_of, starts_for, levels FROM spells ORDER BY id", func(r *sql.Rows) error {
 		var sp game.Spell
 		var levels string
-		if err := r.Scan(&sp.ID, &sp.IconID, &sp.BreedID, &sp.Order, &sp.VariantOf, &levels); err != nil {
+		if err := r.Scan(&sp.ID, &sp.IconID, &sp.BreedID, &sp.Order, &sp.VariantOf, &sp.StartsFor, &levels); err != nil {
 			return err
 		}
 		if err := json.Unmarshal([]byte(levels), &sp.Levels); err != nil {
 			return fmt.Errorf("spell %d: %w", sp.ID, err)
 		}
 		sp.Name = textsOf(textSpell, sp.ID)
+		sp.Description = texts[textKey{"spell_desc", sp.ID}]
 		ds.Spells = append(ds.Spells, sp)
 		return nil
 	}); err != nil {
@@ -650,14 +657,15 @@ func (s *Store) Load(ctx context.Context) (*game.Dataset, error) {
 
 	itemIndex := map[int]int{}
 	if err := scan(`SELECT id, type_id, slot, level, icon_id, set_id, criteria, pods, is_weapon,
-		ap_cost, range_min, range_max, crit_chance, crit_bonus, max_cast_per_turn FROM items ORDER BY id`,
+		ap_cost, range_min, range_max, crit_chance, crit_bonus, max_cast_per_turn, passive_spell FROM items ORDER BY id`,
 		func(r *sql.Rows) error {
 			var it game.Item
 			var slot string
 			var isWeapon int
 			var w game.WeaponInfo
+			passive := 0
 			if err := r.Scan(&it.ID, &it.TypeID, &slot, &it.Level, &it.IconID, &it.SetID, &it.Criteria, &it.Pods,
-				&isWeapon, &w.APCost, &w.RangeMin, &w.RangeMax, &w.CritChance, &w.CritBonus, &w.MaxCastPerTurn); err != nil {
+				&isWeapon, &w.APCost, &w.RangeMin, &w.RangeMax, &w.CritChance, &w.CritBonus, &w.MaxCastPerTurn, &passive); err != nil {
 				return err
 			}
 			it.Slot = game.Slot(slot)
@@ -667,7 +675,7 @@ func (s *Store) Load(ctx context.Context) (*game.Dataset, error) {
 			it.Name = textsOf(textItem, it.ID)
 			it.Description = textsOf(textItemDesc, it.ID)
 			if name := texts[textKey{textPassiveName, it.ID}]; name != nil {
-				it.Passive = &game.Passive{Name: name, Description: textsOf(textPassiveDesc, it.ID)}
+				it.Passive = &game.Passive{Name: name, Description: textsOf(textPassiveDesc, it.ID), SpellID: passive}
 			}
 			itemIndex[it.ID] = len(ds.Items)
 			ds.Items = append(ds.Items, it)
@@ -742,4 +750,11 @@ func (s *Store) Load(ctx context.Context) (*game.Dataset, error) {
 		return nil, err
 	}
 	return ds, nil
+}
+
+func passiveSpell(it *game.Item) int {
+	if it.Passive == nil {
+		return 0
+	}
+	return it.Passive.SpellID
 }

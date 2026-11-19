@@ -7,6 +7,11 @@ settings:
 overrides:
   minimatch@>=7.0.0 <11.0.1: 11.0.7
 
+patchedDependencies:
+  d3-ts-renderer@0.1.3:
+    hash: 410cf03496585176fef0ef4f5419d464d34e86344216483951e04000971dfd6a
+    path: patches/d3-ts-renderer-0.1.3.patch
+
 importers:
 
   .:
@@ -129,6 +134,9 @@ importers:
       clsx:
         specifier: ^2.1.1
         version: 2.1.1
+      d3-ts-renderer:
+        specifier: github:PyDofus/d3-ts-renderer#d9c78be8eafab147459c639fe2fd01dec0ecd863
+        version: https://codeload.github.com/PyDofus/d3-ts-renderer/tar.gz/d9c78be8eafab147459c639fe2fd01dec0ecd863(patch_hash=410cf03496585176fef0ef4f5419d464d34e86344216483951e04000971dfd6a)
       lucide-react:
         specifier: ^1.73.0
         version: 1.73.0(@types/react@19.3.0)(react@19.3.1)
@@ -785,6 +793,12 @@ packages:
   '@types/deep-eql@4.0.2':
     resolution: {integrity: sha512-c9h9dVVMigMPc4bwTvC5dxqtqJZwQPePsWjPlpSOnojbor6pGqdk541lfA7AqFQr5pB1BRdq0juY9db81BwyFw==}
 
+  '@types/dom-mediacapture-transform@0.1.12':
+    resolution: {integrity: sha512-d7/QsLRwF864A5mgIM/YrfiglHoYn7zgCcAoJgW404r+2DwnNr7EBbLnCWpmOMgH8y0te73L1AV6H1bmauaWFw==}
+
+  '@types/dom-webcodecs@0.1.13':
+    resolution: {integrity: sha512-O5hkiFIcjjszPIYyUSyvScyvrBoV3NOEEZx/pMlsu44TKzWNkLVBBxnxJz42in5n3QIolYOcBYFCPZZ0h8SkwQ==}
+
   '@types/estree@1.0.10':
     resolution: {integrity: sha512-lTyOMnOcmRBzdCv6/4zUZCrEhV0xrqQiUZBZtVcbmLHBXKLnN8q89v/wKRF/Q0HbwVsqbIG3o5HDoFl9sduM+g==}
 
@@ -1223,6 +1237,19 @@ packages:
 
   csstype@3.2.3:
     resolution: {integrity: sha512-z1HGKcYy2xA8AGQfwrn0PAy+PB7X/GSj3UVJW9qKyn43xWa+gl5nXmU4qqLMRzWVLFC8KusUX8T/0kCiOYpAIQ==}
+
+  d3-ts-renderer@https://codeload.github.com/PyDofus/d3-ts-renderer/tar.gz/d9c78be8eafab147459c639fe2fd01dec0ecd863:
+    resolution: {tarball: https://codeload.github.com/PyDofus/d3-ts-renderer/tar.gz/d9c78be8eafab147459c639fe2fd01dec0ecd863}
+    version: 0.1.3
+    engines: {node: '>=18.17'}
+    peerDependencies:
+      gl: ^8.1.6
+      sharp: ^0.34.5 || ^0.35.0
+    peerDependenciesMeta:
+      gl:
+        optional: true
+      sharp:
+        optional: true
 
   data-urls@8.0.0:
     resolution: {integrity: sha512-JQUCCK+/CAGbGGx618PlFZMXH81Jtj7t73CHv9dd/zVWvxgGT2zLFRjnKb+Ng46GIwcy+f7f88qd4duqllK+WQ==}
@@ -1774,6 +1801,9 @@ packages:
   math-intrinsics@1.1.0:
     resolution: {integrity: sha512-/IXtbwEk5HTPyEwyKX6hGkYXxM9nbj64B+ilVJnC/R6B0pH5G4V3b0pVbL7DBj4tkhBAppbQUlf6F6Xl9LHu1g==}
     engines: {node: '>= 0.4'}
+
+  mediabunny@1.66.1:
+    resolution: {integrity: sha512-Jl+EfJbUASHtWVtOAGX8AK5WyNNG1RNJGjccAXcI2R6wQmIkdAzpyVgyCxvc5DXGSSRAuhGIevCPs43mXDq2ug==}
 
   mime-db@1.52.0:
     resolution: {integrity: sha512-sPU4uV7dYlvtWJxwwxHD0PuihVNiE7TyAbQ5SWxDCB9mUYvOgroQOwYQQOKPJ8CIbE+1ETVlOoK1UC2nU3gYvg==}
@@ -3034,6 +3064,12 @@ snapshots:
 
   '@types/deep-eql@4.0.2': {}
 
+  '@types/dom-mediacapture-transform@0.1.12':
+    dependencies:
+      '@types/dom-webcodecs': 0.1.13
+
+  '@types/dom-webcodecs@0.1.13': {}
+
   '@types/estree@1.0.10': {}
 
   '@types/fs-extra@9.0.13':
@@ -3428,6 +3464,10 @@ snapshots:
       which: 2.0.2
 
   csstype@3.2.3: {}
+
+  d3-ts-renderer@https://codeload.github.com/PyDofus/d3-ts-renderer/tar.gz/d9c78be8eafab147459c639fe2fd01dec0ecd863(patch_hash=410cf03496585176fef0ef4f5419d464d34e86344216483951e04000971dfd6a):
+    dependencies:
+      mediabunny: 1.66.1
 
   data-urls@8.0.0(@noble/hashes@1.8.0):
     dependencies:
@@ -4012,6 +4052,11 @@ snapshots:
     optional: true
 
   math-intrinsics@1.1.0: {}
+
+  mediabunny@1.66.1:
+    dependencies:
+      '@types/dom-mediacapture-transform': 0.1.12
+      '@types/dom-webcodecs': 0.1.13
 
   mime-db@1.52.0: {}
 

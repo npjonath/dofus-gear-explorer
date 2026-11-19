@@ -31,6 +31,10 @@
   --ink-3: oklch(0.5 0.022 260);
   --cell-bg: var(--tile);
   --slot-bg: var(--panel);
+  /* The fight arena as a block: the top of a pillar, and the two faces the eye sees. */
+  --slab-top: oklch(0.875 0.012 258);
+  --slab-side: oklch(0.8 0.015 260);
+  --slab-shade: oklch(0.71 0.018 260);
 
   --accent: oklch(0.5 0.17 258);
   --accent-ink: oklch(0.99 0.005 258);
@@ -74,6 +78,9 @@
   --cell-bg: oklch(0.47 0.02 264);
   --slot-bg: var(--panel);
   --slot-filled-bg: oklch(0.47 0.02 264);
+  --slab-top: oklch(0.36 0.02 264);
+  --slab-side: oklch(0.15 0.012 264);
+  --slab-shade: oklch(0.115 0.01 264);
   --ink: oklch(0.95 0.005 258);
   --ink-2: oklch(0.82 0.012 260);
   --ink-3: oklch(0.7 0.016 262);
@@ -1559,3 +1566,1246 @@ th[aria-sort="descending"] .th-sort svg { opacity: 1; }
 }
 
 .damage-mean strong { color: var(--ink); font-variant-numeric: tabular-nums; }
+
+/* ───── Fight simulator ───── */
+/* The arena is a slab resting on the plain ground: its cells are the checker. */
+.fight-stage {
+  position: relative;
+  display: grid;
+  place-items: center;
+  padding: 0.75rem;
+  overflow: hidden;
+  background: var(--ground);
+  container-type: size;
+}
+
+.fight-board {
+  width: min(100cqw, 100cqh * var(--board-ratio));
+  aspect-ratio: var(--board-ratio);
+  border-radius: 8px;
+}
+
+.fight-board:focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; }
+
+.fight-board svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  font-family: inherit;
+  font-variant-numeric: tabular-nums;
+}
+
+.fight-cell {
+  fill: var(--tile);
+  stroke: var(--line);
+  stroke-width: 1;
+}
+
+.fight-cell[data-tone="b"] { fill: var(--ground); }
+.fight-cell[data-wall] { fill: var(--slab-side); }
+.fight-board[data-act] .fight-cell { cursor: pointer; }
+
+/* The slab's two front faces and its rim; a pillar is the same block, raised. */
+.fight-slab[data-face="left"],
+.fight-pillar [data-face="left"] { fill: var(--slab-side); }
+.fight-slab[data-face="right"],
+.fight-pillar [data-face="right"] { fill: var(--slab-shade); }
+.fight-pillar [data-face="top"] { fill: var(--slab-top); }
+.fight-pillar polygon { stroke: var(--line-strong); stroke-width: 1; stroke-linejoin: round; }
+.fight-rim { fill: none; stroke: var(--line-strong); stroke-width: 1.2; stroke-linejoin: round; }
+
+.fight-rim,
+.fight-pillar,
+.fight-zone,
+.fight-cursor,
+.fight-ghost,
+.fight-entity,
+.fight-label,
+.fight-impact,
+.fight-bolt,
+.fight-burst,
+.fight-float,
+.fight-cost { pointer-events: none; }
+
+/* The three zone colours, as tiles laid on the cells: green where the player
+   can walk, blue where the spell in hand can be aimed, red where it lands. */
+.fight-zone { stroke-width: 1.2; stroke-linejoin: round; }
+.fight-zone[data-zone="reach"] { fill: var(--ok-soft); stroke: color-mix(in oklab, var(--ok) 50%, var(--ok-soft)); }
+.fight-zone[data-zone="path"] { fill: var(--ok-soft); stroke: var(--ok); stroke-width: 2; }
+.fight-zone[data-zone="range"] { fill: var(--accent-soft); stroke: color-mix(in oklab, var(--accent) 65%, var(--accent-soft)); }
+.fight-zone[data-zone="blocked"] {
+  fill: color-mix(in oklab, var(--accent-soft) 30%, transparent);
+  stroke: color-mix(in oklab, var(--accent) 55%, var(--line-strong));
+  stroke-dasharray: 4 3;
+}
+.fight-zone[data-zone="impact"] { fill: var(--bad-soft); stroke: var(--bad); stroke-width: 2; }
+.fight-zone[data-zone="picked"] { fill: var(--accent-soft); stroke: var(--accent); stroke-width: 2; }
+
+.fight-cursor {
+  fill: color-mix(in oklab, var(--ink) 12%, transparent);
+  stroke: var(--ink);
+  stroke-width: 2;
+  stroke-linejoin: round;
+}
+
+.fight-ghost {
+  fill: color-mix(in oklab, var(--panel) 45%, transparent);
+  stroke: var(--ink-2);
+  stroke-width: 1.4;
+  stroke-dasharray: 3.5 3;
+  stroke-linejoin: round;
+}
+
+/* The pieces: flat shapes in ink, standing on a plain patch of ground. */
+.fight-foot { fill: var(--line-strong); opacity: 0.55; }
+.fight-hit { fill: transparent; pointer-events: all; cursor: pointer; }
+
+.fight-entity[data-picked] .fight-foot { fill: var(--accent-soft); stroke: var(--accent); stroke-width: 2; opacity: 1; }
+
+.fight-fig .fig-ink { fill: var(--ink); }
+.fight-fig .fig-body { fill: var(--ink-2); }
+.fight-fig .fig-trim { fill: var(--cell-bg); }
+.fight-fig .fig-face { fill: var(--cell-bg); stroke: var(--ink); stroke-width: 1; }
+.fight-fig .fig-wood { fill: var(--ink-3); }
+.fight-fig .fig-arm { fill: none; stroke: var(--ink-3); stroke-width: 4.4; stroke-linecap: round; }
+.fight-fig .fig-pip { fill: var(--cell-bg); stroke: var(--ink); stroke-width: 1; }
+.fight-fig .fig-pip[data-tone] { fill: var(--tone); }
+.fight-fig .fig-pad { fill: var(--cell-bg); stroke: var(--ink-3); stroke-width: 1.1; }
+.fight-fig .fig-stitch { fill: none; stroke: var(--ink-3); stroke-width: 1; stroke-dasharray: 2 2; }
+.fight-fig .fig-ring { fill: none; stroke: var(--ink-2); stroke-width: 1.7; }
+
+.fight-entity[data-pose="idle"] :is(.fig-breath, .fig-sway) {
+  transform-box: fill-box;
+  transform-origin: 50% 100%;
+  animation: fight-breathe 3.4s ease-in-out infinite;
+  animation-delay: calc(var(--beat, 0ms) * -1);
+}
+.fight-entity[data-pose="idle"] .fig-sway { animation-name: fight-sway; animation-duration: 4.6s; }
+
+@keyframes fight-breathe {
+  50% { scale: 1.012 1.034; }
+}
+
+@keyframes fight-sway {
+  from, to { rotate: -0.9deg; }
+  50% { rotate: 0.9deg; }
+}
+
+.fight-hp-track { fill: var(--panel); stroke: var(--line-strong); stroke-width: 0.8; }
+.fight-hp {
+  fill: var(--st-vitality);
+  transform-box: fill-box;
+  transform-origin: 0 50%;
+  transition: transform 380ms var(--ease-out);
+}
+.fight-hp-loss { fill: var(--ink-3); }
+
+.fight-readout { fill: var(--panel); stroke: var(--line-strong); stroke-width: 1; }
+.fight-readout-name { font-size: 11.5px; font-weight: 700; fill: var(--ink); }
+.fight-readout-hp { font-size: 10.5px; font-weight: 700; fill: var(--tone); }
+
+.fight-preview,
+.fight-float text,
+.fight-cost {
+  text-anchor: middle;
+  font-weight: 800;
+  paint-order: stroke;
+  stroke: var(--panel);
+  stroke-width: 3.5px;
+  stroke-linejoin: round;
+}
+
+.fight-preview { font-size: 12px; fill: var(--ink); }
+.fight-preview-crit { fill: var(--st-critical); }
+.fight-cost { font-size: 12px; fill: var(--tone, var(--ink)); }
+
+/* What flies and what lands. The projectile is a pip in the tone of its element. */
+.fight-bolt line { stroke: var(--tone, var(--ink-2)); stroke-linecap: round; opacity: 0.5; }
+.fight-bolt rect { fill: var(--tone, var(--ink-2)); stroke: var(--panel); stroke-width: 1.2; }
+.fight-impact polygon { fill: var(--bad); fill-opacity: 0.6; }
+.fight-impact .fight-impact-ring { fill: none; stroke: var(--bad); stroke-width: 2.5; vector-effect: non-scaling-stroke; }
+.fight-burst,
+.fight-float-mark {
+  fill: var(--st-critical);
+  stroke: var(--panel);
+  stroke-width: 1.4;
+  stroke-linejoin: round;
+  paint-order: stroke;
+  vector-effect: non-scaling-stroke;
+}
+
+.fight-float { animation: fight-rise 1500ms var(--ease-out) both; }
+.fight-float text { text-anchor: start; font-size: 15px; fill: var(--tone, var(--ink)); }
+
+@keyframes fight-rise {
+  from { opacity: 0; translate: 0 8px; }
+  12% { opacity: 1; translate: 0 0; }
+  72% { opacity: 1; }
+  to { opacity: 0; translate: 0 -24px; }
+}
+
+@keyframes fight-fade {
+  from, 70% { opacity: 1; }
+  to { opacity: 0; }
+}
+
+/* Around the arena, in the corners its diamond leaves free. */
+.fight-order {
+  position: absolute;
+  top: 0.75rem;
+  left: 0.75rem;
+  display: flex;
+  gap: 0.3rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.fight-order-cell {
+  --cell: 2.6rem;
+  padding: 0 0 4px;
+  overflow: hidden;
+  border-color: var(--line-strong);
+  cursor: pointer;
+  transition: border-color 160ms var(--ease-out), box-shadow 160ms var(--ease-out);
+}
+
+.fight-order-cell .fight-portrait { width: 84%; height: 84%; }
+.fight-order-cell:hover,
+.fight-order-cell[data-pointed] { border-color: var(--ink); }
+.fight-order-cell[aria-pressed="true"] { background: var(--accent-soft); }
+.fight-order-cell[aria-current] { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent); }
+
+.fight-order-hp {
+  position: absolute;
+  inset: auto 0 0;
+  height: 4px;
+  background: var(--panel);
+}
+
+.fight-order-hp span {
+  display: block;
+  height: 100%;
+  background: var(--st-vitality);
+  transform-origin: 0 50%;
+  transition: transform 380ms var(--ease-out);
+}
+
+.fight-vitals {
+  position: absolute;
+  left: 0.75rem;
+  bottom: 0.75rem;
+  display: grid;
+  gap: 0.3rem;
+}
+
+.fight-vital { min-width: 6.6rem; padding: 0.15rem 0.6rem; background: var(--panel); }
+.fight-vital .value { font-size: 1.1rem; }
+
+.fight-stage > .fight-end {
+  position: absolute;
+  right: 0.75rem;
+  bottom: 0.75rem;
+}
+
+/* The spell bar: two rows, a spell over its variant, cells as wide as the room allows. */
+.fight-bar { flex: 1; min-width: 0; container-type: inline-size; }
+
+.fight-bar-row {
+  --gap: 3px;
+  --cell: clamp(1.85rem, calc((100cqw - 4px - (var(--cols) - 1) * var(--gap)) / var(--cols)), 2.6rem);
+  display: flex;
+  gap: var(--gap);
+  padding: 2px;
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+
+.fight-pair { display: grid; flex: none; align-content: start; gap: var(--gap); }
+.fight-tab { justify-content: center; min-width: 5.2rem; padding: 0 0.4rem; }
+
+.fight-spell {
+  padding: 0;
+  border-color: var(--line-strong);
+  cursor: pointer;
+  transition: border-color 160ms var(--ease-out), background-color 160ms var(--ease-out);
+}
+
+.fight-spell:hover:not([aria-disabled="true"]) { border-color: var(--ink-2); }
+.fight-spell[aria-pressed="true"] {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  box-shadow: 0 0 0 2px var(--accent);
+}
+.fight-spell[aria-disabled="true"] { cursor: default; }
+.fight-spell[aria-disabled="true"] :is(img, .fight-spell-initials) { opacity: 0.32; filter: grayscale(1); }
+
+.fight-spell-initials { color: var(--ink-2); font-weight: 700; font-size: 0.8rem; }
+
+.fight-spell-cost {
+  position: absolute;
+  right: -1px;
+  bottom: -1px;
+  padding: 1px 3px;
+  border: 1px solid var(--line-strong);
+  border-radius: 4px 0 5px 0;
+  background: var(--panel);
+  color: var(--tone);
+  font-weight: 800;
+  font-size: 0.72rem;
+  line-height: 1.1;
+}
+
+.fight-spell-wait {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  color: var(--ink);
+  font-weight: 800;
+  font-size: 1.1rem;
+}
+
+.fight-lines { grid-template-columns: minmax(0, 1fr) 4.9rem 4.9rem; gap: 0.5rem; }
+
+.fight-log li { padding: 0.1rem 0; color: var(--ink-2); font-size: 0.93rem; }
+.fight-log .fight-log-turn { margin-top: 0.5rem; color: var(--ink); font-weight: 700; }
+.fight-log .fight-log-turn:first-child { margin-top: 0; }
+
+/* Stacked under the lg breakpoint, the stage has no column to fill: it takes
+   a height of its own, which its container units need to be definite. */
+@media (max-width: 64rem) {
+  .fight-stage { flex: none; height: clamp(24rem, 70svh, 44rem); }
+}
+
+/* Without motion nothing travels or loops: the board shows where things end,
+   and the numbers stay long enough to be read. */
+@media (prefers-reduced-motion: reduce) {
+  .fight-float { animation: fight-fade 1400ms linear both; animation-duration: 1400ms !important; }
+  .fight-entity :is(.fig-breath, .fig-sway) { animation: none !important; }
+}
+
+/* Combat is a separate viewport. Its measurements scale together as the client's HUD does. */
+.fight-screen {
+  --hud-unit: clamp(0.53px, min(0.069444vw, 0.11111dvh), 1.35px);
+  --hud-border: #4b4234;
+  --hud-bg: #211e19;
+  --hud-text: #faf5e8;
+  --ink: var(--hud-text);
+  --ink-2: #ddd6c8;
+  --ink-3: #aca295;
+  --panel: #211f1d;
+  --cell: calc(43 * var(--hud-unit));
+  --accent: #eead44;
+  position: fixed;
+  inset: 0;
+  z-index: 32;
+  isolation: isolate;
+  overflow: hidden;
+  color: var(--hud-text);
+  background: #000;
+  font-family: CombatLexend, system-ui, sans-serif;
+  font-size: calc(15 * var(--hud-unit));
+  line-height: 1.3;
+}
+.fight-screen button,
+.combat-dialog button,
+.combat-settings select {
+  cursor: pointer;
+}
+.fight-screen button:focus-visible,
+.combat-dialog button:focus-visible {
+  outline: 2px solid #ffcb64;
+  outline-offset: 2px;
+}
+.combat-loading {
+  display: grid;
+  place-content: center;
+  gap: 1rem;
+}
+.combat-top {
+  height: calc(51 * var(--hud-unit));
+  padding: 0 calc(10 * var(--hud-unit));
+  display: flex;
+  gap: 0.6em;
+  align-items: center;
+  justify-content: space-between;
+  background: #231e18;
+  border-bottom: 1px solid #514434;
+  position: relative;
+  z-index: 3;
+}
+.combat-summary,
+.combat-top nav {
+  display: flex;
+  align-items: center;
+  gap: calc(8 * var(--hud-unit));
+}
+.combat-summary {
+  white-space: nowrap;
+  overflow: hidden;
+  font-size: calc(12.5 * var(--hud-unit));
+}
+.combat-summary b,
+.combat-dock h3,
+.combat-end {
+  font-family: CombatRowdies, CombatLexend, sans-serif;
+}
+.combat-summary b {
+  text-transform: uppercase;
+}
+.combat-summary span {
+  color: #edc38a;
+}
+.combat-top nav {
+  flex: none;
+}
+.combat-top nav button,
+.combat-placement button,
+.combat-placement select,
+.combat-settings button,
+.combat-dialog header button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4em;
+  min-height: 2em;
+  border: 1px solid var(--hud-border, #574c3e);
+  border-radius: 4px;
+  background: #302a22;
+  color: #fff8e9;
+  padding: 0.25em 0.65em;
+  font: inherit;
+  font-weight: 600;
+}
+.combat-top nav button {
+  height: calc(33 * var(--hud-unit));
+  font-size: calc(12 * var(--hud-unit));
+}
+.combat-top nav button:has(> img),
+.combat-top nav button:has(> svg:only-child) {
+  width: calc(34 * var(--hud-unit));
+  padding: 0.16em;
+}
+.combat-top nav :is(img, svg) {
+  width: 1.8em;
+  height: 1.8em;
+  object-fit: contain;
+}
+.combat-top nav button:has(> span) svg {
+  width: 1.2em;
+}
+.combat-top nav button:hover,
+.combat-settings button:hover {
+  background: #494033;
+}
+.combat-stage {
+  position: absolute;
+  inset: calc(51 * var(--hud-unit)) 0 calc(158 * var(--hud-unit));
+  height: auto !important;
+  padding: 0;
+  overflow: visible;
+  background: #000;
+  container-type: size;
+}
+.combat-stage .fight-board {
+  touch-action: none;
+  border-radius: 0;
+  width: min(100cqw, 100cqh * var(--board-ratio));
+  position: relative;
+}
+.combat-stage .fight-board > svg {
+  overflow: visible;
+}
+.fight-screen[data-art] .fight-cell {
+  fill: transparent;
+  stroke: none;
+  pointer-events: all;
+}
+.fight-screen .fight-zone {
+  stroke: none;
+  fill-opacity: 0.76;
+}
+.fight-zone[data-zone="start-blue"] {
+  fill: #0077bd;
+}
+.fight-zone[data-zone="start-red"] {
+  fill: #e24010;
+}
+.fight-screen .fight-zone[data-zone="range"] {
+  fill: #382d93;
+  stroke: #3a3488;
+}
+.fight-screen .fight-zone[data-zone="impact"] {
+  fill: #d61529;
+  stroke: #fff;
+}
+.fight-screen .fight-zone[data-zone="blocked"] {
+  fill: #242038;
+  fill-opacity: 0.22;
+  stroke: none;
+}
+.fight-screen .fight-zone[data-zone="path"] {
+  fill: #58a51a;
+  stroke: #a1cc43;
+}
+.fight-screen .fight-cursor {
+  stroke: #fff;
+  fill: rgba(255, 255, 255, 0.08);
+  stroke-width: 2;
+}
+.fight-screen .fight-foot {
+  fill: #3989ae;
+  fill-opacity: 0.16;
+  stroke: #229ed2;
+  stroke-width: 2.1;
+  opacity: 1;
+}
+.fight-screen .fight-entity[data-kind="dummy"] .fight-foot {
+  fill: #a42f24;
+  stroke: #cf4336;
+}
+.fight-screen .fight-readout {
+  fill: #1d1b19;
+  stroke: #64554b;
+  fill-opacity: 0.95;
+}
+.fight-screen .fight-preview-crit {
+  fill: #ffad52;
+}
+.combat-order {
+  top: calc(7 * var(--hud-unit));
+  left: 50%;
+  transform: translateX(-50%);
+  gap: calc(4 * var(--hud-unit));
+  padding: calc(3 * var(--hud-unit));
+  background: #211f1d;
+  border: 1px solid #47423e;
+  border-radius: 4px;
+  z-index: 1;
+}
+.combat-order .fight-order-cell {
+  border-radius: 0;
+  border: 1px solid #e8d8bc;
+  background: #547587;
+  padding: 0 0 0 5px;
+  --cell: calc(68 * var(--hud-unit));
+  height: calc(75 * var(--hud-unit));
+}
+.combat-order .fight-order-cell[data-kind="dummy"] {
+  background: #85565c;
+}
+.combat-order .fight-order-cell[aria-current] {
+  box-shadow: none;
+  border-color: white;
+}
+.combat-order .fight-order-cell img {
+  height: 100%;
+  width: 100%;
+  object-fit: contain;
+}
+.combat-order .fight-order-hp {
+  inset: 0 auto 0 0;
+  width: calc(5 * var(--hud-unit));
+  height: auto;
+  background: #381b21;
+}
+.combat-order .fight-order-hp span {
+  height: 100%;
+  background: #de283f;
+  transform-origin: bottom;
+}
+.combat-round {
+  align-self: center;
+  padding: 0.3em;
+  font-weight: 700;
+  font-size: 0.92em;
+}
+.combat-placement {
+  position: absolute;
+  left: 1em;
+  top: 0.6em;
+  max-width: 30%;
+  display: grid;
+  justify-items: start;
+  gap: 0.4em;
+  pointer-events: none;
+  font-size: calc(12 * var(--hud-unit));
+}
+.combat-placement :is(button, select) {
+  pointer-events: auto;
+}
+.combat-dock {
+  position: absolute;
+  bottom: calc(7 * var(--hud-unit));
+  left: calc(7 * var(--hud-unit));
+  right: calc(7 * var(--hud-unit));
+  display: flex;
+  gap: calc(8 * var(--hud-unit));
+  align-items: flex-end;
+  pointer-events: none;
+}
+.combat-dock > * {
+  pointer-events: auto;
+  background: #201e1c;
+  border: 1px solid #35312e;
+  border-radius: calc(5 * var(--hud-unit));
+}
+.combat-dock h3 {
+  margin: 0;
+  text-align: center;
+  text-transform: uppercase;
+  font-size: calc(12 * var(--hud-unit));
+  font-weight: 600;
+  letter-spacing: 0.035em;
+}
+.combat-chat {
+  width: calc(256 * var(--hud-unit));
+  height: calc(187 * var(--hud-unit));
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.combat-chat h3 {
+  background: #2b2928;
+  padding: 0.3em;
+}
+.combat-chat .fight-log {
+  overflow: auto;
+  scrollbar-width: thin;
+  flex: 1;
+  list-style: none;
+  margin: 0;
+  padding: 0.35em 0.5em;
+  line-height: 1.25;
+}
+.combat-chat .fight-log li {
+  font-size: calc(14 * var(--hud-unit));
+  color: #e0d8cb;
+}
+.combat-chat .fight-log strong,
+.combat-chat .fight-log-turn {
+  color: #c2d88d;
+}
+.combat-vitals {
+  border: 0;
+  padding: 0 calc(8 * var(--hud-unit)) calc(4 * var(--hud-unit));
+  display: grid;
+  justify-items: center;
+  align-content: end;
+  margin-bottom: calc(28 * var(--hud-unit));
+}
+.combat-heart {
+  position: relative;
+  width: calc(84 * var(--hud-unit));
+  height: calc(84 * var(--hud-unit));
+  display: grid;
+  place-items: center;
+}
+.combat-heart img,
+.combat-heart strong {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+.combat-heart strong,
+.combat-points span,
+.combat-end span {
+  display: grid;
+  place-items: center;
+  font-family: CombatRowdies, system-ui, sans-serif;
+  font-weight: 800;
+  color: #fff;
+  text-shadow:
+    0 1px 3px black,
+    1px 0 2px black;
+}
+.fight-screen:not([data-art]) .combat-heart {
+  background: #9b293a;
+  border-radius: 50%;
+}
+.combat-heart strong {
+  font-size: calc(24 * var(--hud-unit));
+}
+.combat-points {
+  display: flex;
+  gap: calc(6 * var(--hud-unit));
+}
+.combat-points span {
+  width: calc(40 * var(--hud-unit));
+  height: calc(40 * var(--hud-unit));
+  font-size: calc(21 * var(--hud-unit));
+  background-size: contain;
+  background-position: center;
+  background-repeat: no-repeat;
+}
+.fight-screen:not([data-art]) .combat-points span {
+  background-color: #325886;
+  border-radius: 25%;
+}
+.fight-screen:not([data-art]) .combat-points span + span {
+  background-color: #4c6730;
+}
+.combat-spells {
+  width: calc(582 * var(--hud-unit));
+  min-height: calc(157 * var(--hud-unit));
+  padding: calc(4 * var(--hud-unit)) calc(7 * var(--hud-unit));
+  box-sizing: border-box;
+}
+.combat-spells h3 {
+  padding-bottom: 0.3em;
+}
+.combat-spellgrid {
+  display: grid;
+  grid-template-columns: var(--cell) 1fr;
+  gap: calc(5 * var(--hud-unit));
+}
+.combat-deck {
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  align-content: start;
+  gap: calc(2 * var(--hud-unit));
+  max-height: calc(132 * var(--hud-unit));
+  overflow: auto;
+  scrollbar-width: thin;
+}
+.combat-spellgrid .fight-spell {
+  display: block;
+  position: relative;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 1;
+  min-width: 0;
+  border: 2px solid #403327;
+  background: #392f23;
+  border-radius: calc(4 * var(--hud-unit));
+  overflow: hidden;
+}
+.combat-spellgrid .fight-spell img,
+.combat-book img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+.combat-spellgrid .fight-spell[aria-pressed="true"] {
+  border-color: #e6ad5f;
+}
+.combat-spellgrid .fight-spell[aria-disabled="true"] img {
+  opacity: 0.5;
+}
+.combat-endbox {
+  padding: calc(20 * var(--hud-unit)) calc(10 * var(--hud-unit)) 0;
+  min-width: calc(194 * var(--hud-unit));
+}
+.combat-end {
+  isolation: isolate;
+  position: relative;
+  border: 0;
+  width: 100%;
+  height: calc(58 * var(--hud-unit));
+  background: transparent;
+  color: white;
+  text-transform: uppercase;
+  font-size: calc(18 * var(--hud-unit));
+}
+.combat-end::before,
+.combat-end::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: calc(12 * var(--hud-unit));
+}
+.combat-end::before {
+  background: linear-gradient(#34251b, #120e09);
+  mask: var(--end-bg, none) center/100% 100% no-repeat;
+}
+.combat-end::after {
+  inset: 3px;
+  background: linear-gradient(#e9b879, #bd803e 55%, #99632c);
+  mask: var(--end-mask, none) center/100% 100% no-repeat;
+}
+.combat-end:hover {
+  filter: brightness(1.14);
+}
+.combat-tooltip {
+  position: absolute;
+  bottom: 1em;
+  right: 1em;
+  max-width: 25em;
+  padding: 1em;
+  border: 1px solid #665541;
+  background: #201b18;
+  z-index: 3;
+}
+.combat-dialog {
+  --hud-border: #50473a;
+  --ink: #fff6e4;
+  --ink-2: #d9cdbd;
+  --ink-3: #b4a89a;
+  --panel: #211f1d;
+  --cell-bg: #39322a;
+  color: #f6eadd !important;
+  background: #232222 !important;
+  max-height: 80dvh;
+  overflow: auto;
+  width: min(48rem, 90vw);
+  padding: 1rem;
+  border: 1px solid #685b4d;
+}
+.combat-dialog > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: #773f43;
+  color: white;
+  margin: -1rem -1rem 1rem;
+  padding: 0.4rem 0.7rem;
+}
+.combat-dialog > header h2 {
+  margin: 0;
+  font-weight: 700;
+}
+.combat-dialog > header button {
+  min-height: 1.5em;
+  padding: 0;
+  background: transparent;
+}
+.combat-settings section + section {
+  margin-top: 1.5em;
+}
+.combat-settings h3 {
+  margin: 0 0 0.5em;
+  font-weight: 700;
+}
+.combat-settings p {
+  margin: 0.4em 0 0.7em;
+}
+.combat-settings p small {
+  display: block;
+  overflow-wrap: anywhere;
+}
+.combat-import,
+.combat-map-picker {
+  display: flex;
+  gap: 0.5em;
+  flex-wrap: wrap;
+  margin: 0.7em 0;
+}
+.combat-settings [aria-pressed="true"],
+.combat-book [aria-pressed="true"] {
+  outline: 1px solid #e8aa53;
+}
+.combat-keygrid,
+.combat-book {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.4em 0.8em;
+}
+.combat-keygrid {
+  margin: 1em 0;
+}
+.combat-keygrid label,
+.combat-book button {
+  display: flex;
+  align-items: center;
+  gap: 0.6em;
+}
+.combat-keygrid label {
+  justify-content: space-between;
+}
+.combat-keygrid button {
+  min-width: 3em;
+}
+.combat-book img {
+  width: 2.4em;
+  height: 2.4em;
+  object-fit: contain;
+}
+.combat-book > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.2em;
+  align-content: start;
+}
+.combat-book button {
+  padding: 0.2em;
+  border-radius: 3px;
+  background: #393330;
+  color: #f4ebdd;
+}
+@media (max-width: 700px) {
+  .combat-top nav button span,
+  .combat-placement span {
+    display: none;
+  }
+  .combat-summary {
+    flex-wrap: wrap;
+    gap: 0 0.5em;
+  }
+  .combat-chat {
+    width: calc(148 * var(--hud-unit));
+  }
+  .combat-endbox {
+    min-width: 0;
+  }
+  .combat-end {
+    min-width: 5em;
+  }
+  .combat-spells {
+    min-width: 0;
+    flex: 1;
+  }
+  .combat-top nav {
+    gap: 2px;
+  }
+  .combat-dock {
+    gap: 2px;
+  }
+  .combat-deck {
+    grid-template-columns: repeat(8, minmax(0, 1fr));
+  }
+  .combat-vitals {
+    padding: 0;
+  }
+}
+.combat-stage .fight-board[data-room] {
+  width: min(calc(var(--room-width) * 0.84 * var(--scene-unit)), 125cqw);
+  max-width: none;
+  transform: translateY(calc(-36 * var(--scene-unit)));
+}
+.combat-stage .fight-board[data-room="192419850"] {
+  transform: translate(calc(32 * var(--scene-unit)), calc(-42 * var(--scene-unit)));
+}
+.combat-top nav button:has(> svg:only-child):not([aria-label]) {
+  width: auto;
+  padding: 0.25em 0.65em;
+}
+.combat-vitals {
+  width: calc(124 * var(--hud-unit));
+}
+.combat-stage .fight-order-cell:has(> svg) > svg {
+  width: 100%;
+  height: 100%;
+}
+.fight-screen .combat-spellgrid .fight-spell[aria-disabled="true"] img {
+  filter: none;
+}
+.combat-chat time {
+  color: #a7a298;
+  font-size: 0.82em;
+}
+.combat-chat b {
+  color: #d3a86d;
+  font-weight: 600;
+}
+.combat-chat em {
+  font-style: normal;
+  color: var(--tone);
+}
+.combat-summons {
+  position: absolute;
+  right: 0.4em;
+  top: 3em;
+  background: #191817;
+  border: 1px solid #3d3934;
+  border-radius: 4px;
+  width: calc(300 * var(--hud-unit));
+  overflow: hidden;
+}
+.combat-summons h3 {
+  margin: 0;
+  padding: 0.25em;
+  text-align: center;
+  font-family: CombatRowdies, sans-serif;
+  background: #2c2927;
+  text-transform: uppercase;
+  font-size: 0.85em;
+}
+.combat-summons button {
+  color: white;
+  display: flex;
+  align-items: center;
+  gap: 0.6em;
+  padding: 0.3em 0.5em;
+  width: 100%;
+  background: none;
+  border: none;
+  text-align: left;
+}
+.combat-summons svg {
+  width: 3.5em;
+  height: 3.5em;
+  flex: none;
+}
+.combat-summons small {
+  display: block;
+  margin-top: 0.2em;
+}
+.combat-stage .fight-board:focus-visible {
+  outline: none;
+}
+.fight-screen[data-art] .fight-zone[data-zone="range"] {
+  fill: url(#combat-cast-tile);
+  fill-opacity: 0.88;
+  stroke: #b09759;
+  stroke-width: 1;
+}
+.combat-round {
+  display: grid;
+  justify-items: center;
+  align-content: center;
+  gap: 0.1em;
+}
+.combat-round svg {
+  width: 1em;
+  height: 1.1em;
+}
+.combat-top nav .compact-chat {
+  display: none;
+}
+.combat-dialog .fight-log {
+  list-style: none;
+  padding: 0;
+}
+@media (max-width: 700px) {
+  .fight-screen {
+    --hud-unit: 0.8px;
+  }
+  .combat-top {
+    height: 5em;
+    display: grid;
+    align-content: center;
+    gap: 0.3em;
+  }
+  .combat-top nav {
+    justify-content: start;
+  }
+  .combat-top nav .compact-chat {
+    display: inline-flex;
+  }
+  .combat-summary span {
+    font-size: 0.9em;
+  }
+  .combat-summary {
+    max-width: 100vw;
+  }
+  .combat-stage {
+    inset: 4.1rem 0 10rem;
+    overflow: hidden;
+  }
+  .combat-stage .fight-board[data-room] {
+    width: 120cqw;
+    transform: none;
+  }
+  .combat-dock {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 3px;
+    bottom: 3px;
+  }
+  .combat-dock > .combat-chat {
+    display: none;
+  }
+  .combat-dock .combat-vitals {
+    align-self: center;
+    justify-self: start;
+    display: flex;
+    align-items: center;
+    width: auto;
+    background: none;
+    margin: 0;
+    grid-area: 1/1;
+  }
+  .combat-heart {
+    width: 3.2rem;
+    height: 3.2rem;
+  }
+  .combat-dock .combat-endbox {
+    grid-area: 1/2;
+    justify-self: end;
+    background: transparent;
+    padding: 0;
+    min-width: 7rem;
+    border: 0;
+  }
+  .combat-dock .combat-spells {
+    grid-area: 2/1/3/3;
+    width: 100%;
+    min-height: 0;
+  }
+  .combat-spellgrid {
+    grid-template-columns: 2.1rem minmax(0, 1fr);
+  }
+  .combat-deck {
+    grid-template-columns: repeat(12, minmax(1.83rem, 1fr));
+    max-height: 6.4rem;
+    overflow: auto;
+  }
+  .combat-order .fight-order-cell {
+    --cell: 2.4rem;
+    height: 2.7rem;
+  }
+  .combat-summons {
+    top: 3.25rem;
+    width: 10rem;
+  }
+  .combat-summons svg {
+    width: 2em;
+    height: 2em;
+  }
+  .combat-placement {
+    top: 3.4rem;
+  }
+}
+.combat-target-bg { fill: #1b1916; fill-opacity: .95; stroke: #554a3d; stroke-width: .8; }
+.combat-target-name, .combat-target-health { fill: #fff; font-weight: 700; }
+.combat-target-name { font-size: 12px; }
+.combat-target-health, .combat-target-loss { font-size: 10px; font-weight: 700; }
+.combat-target-loss { fill: #d9a769; }
+
+/* The combat viewport has its own navigation and exit control. */
+#root:has(.fight-screen) .topbar { display: none; }
+
+/* Keep the variant list and its preview visible while browsing long spell books. */
+.combat-dialog:has(.fight-book-window) {
+  width: min(68rem, 94vw);
+  max-height: 94dvh;
+}
+.fight-book-window { display: grid; gap: .7rem; min-width: 0; }
+.fight-book-window nav { display: flex; justify-content: center; border-bottom: 1px solid #514d46; }
+.fight-book-window button { color: inherit; font-family: inherit; }
+.fight-book-window nav button { min-width: 7rem; padding: .45rem 1rem; background: transparent; border: 0; }
+.fight-book-window nav [aria-pressed=true] { color: #ffcf83; border-bottom: 2px solid #dbad59; }
+.fight-book-controls { display: grid; gap: .5rem; }
+.fight-book-search {
+  display: flex; align-items: center; gap: .4rem; width: min(100%, 23rem); padding: .35rem .5rem;
+  background: #181817; border: 1px solid #766c60; border-radius: 3px;
+}
+.fight-book-search:focus-within { outline: 2px solid #ffcb64; }
+.fight-book-search svg { width: 1rem; height: 1rem; flex: none; }
+.fight-book-search input { width: 100%; min-width: 0; background: transparent; color: inherit; border: 0; outline: none; }
+.fight-book-search input::placeholder { color: #bcb3a9; }
+.fight-book-filters { display: flex; gap: .24rem; flex-wrap: wrap; }
+.fight-book-filters button, .fight-book-choice { border: 1px solid #655e54; border-radius: 3px; background: #393632; }
+.fight-book-filters button { padding: .25rem .44rem; font-size: .85rem; }
+.fight-book-filters [aria-pressed=true], .fight-book-choice[aria-pressed=true] { border-color: #d6ae69; background: #53483b; }
+.fight-book-body {
+  display: grid; grid-template-columns: minmax(0, 1.85fr) minmax(16rem, 1fr);
+  gap: .75rem; height: min(53dvh, 33rem); min-height: 0;
+}
+.fight-book-pairs {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 18rem), 1fr));
+  align-content: start; gap: .5rem .65rem; min-height: 0; padding: .25rem; overflow: auto; overscroll-behavior: contain;
+}
+.fight-book-pair { display: grid; grid-template-columns: 1fr 1fr; min-width: 0; }
+.fight-book-choice { display: flex; align-items: center; gap: .32rem; min-width: 0; position: relative; text-align: left; padding: .25rem; font-size: .91rem; }
+.fight-book-choice > span:not(.fight-book-levels) { overflow-wrap: anywhere; }
+.fight-book-choice:has(.fight-book-levels) { margin-top: .65rem; }
+.fight-book-choice img { width: 1.8rem; height: 1.8rem; flex: none; }
+.fight-book-choice[data-locked] { color: #c5bdb4; background: #292726; }
+.fight-book-choice svg { width: .86rem; height: .86rem; margin-left: auto; flex: none; }
+.fight-book-choice[aria-pressed=true] svg { color: #ffcf83; }
+.fight-book-levels { display: flex; position: absolute; left: 2rem; top: -.77rem; gap: 2px; }
+.fight-book-levels small { background: #d7cfc4; color: #211e19; padding: 0 .18rem; font-size: .65rem; }
+.fight-book-levels small[data-future] { background: #514c44; color: #e0d9d1; }
+.fight-book-check { display: flex; gap: .45rem; align-items: center; font-size: .91rem; }
+.fight-book-check input { accent-color: #d6ae69; }
+.fight-book-detail {
+  min-width: 0; min-height: 0; padding: .75rem; background: #1b1a19; border: 1px solid #55483c;
+  overflow: auto; overscroll-behavior: contain;
+}
+.fight-book-detail p { margin: .65rem 0 0; }
+@media (max-width: 700px) {
+  .fight-book-body {
+    grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) minmax(0, .64fr);
+    height: min(51dvh, 34rem); gap: .48rem;
+  }
+  .fight-book-search { width: 100%; }
+  .fight-book-filters button { padding: .23rem .4rem; }
+}
+.fight-screen {
+  --scene-unit: clamp(0.53px, min(0.069444vw, 0.11111dvh), 1.35px);
+}
+.fight-screen[data-rows="2"] .combat-deck {max-height:calc(88 * var(--hud-unit))}
+.fight-screen[data-rows="2"] .combat-spells {min-height:calc(114 * var(--hud-unit))}
+.combat-setting-tabs,.setting-line,.setting-volume,.setting-volume label {display:flex;align-items:center;gap:.6rem}
+.combat-setting-tabs {margin-bottom:.7rem}
+.combat-settings input[type=search] {width:100%;margin-bottom:.6rem}
+.combat-settings section {padding:.55rem 0}
+.setting-line,.setting-volume {justify-content:space-between;margin:.45rem 0}
+.setting-volume label {flex:1;justify-content:space-between}
+.setting-line input[type=range],.setting-volume input[type=range] {width:min(36%,12rem);accent-color:#98b663}
+.setting-volume input[type=number] {width:3.8rem}
+.combat-chat-options {display:grid;gap:.4rem;max-width:32rem}
+.combat-chat h3 {display:flex;align-items:center;justify-content:space-between}
+.combat-chat h3 button {padding:0 .6em;background:transparent;color:inherit;cursor:pointer}
+.combat-dock .combat-chat {background-color:rgb(25 24 23 / var(--chat-opacity,.92))}
+.combat-chat .fight-log li {font-size:calc(var(--chat-size,14)*var(--hud-unit));line-height:var(--chat-leading,1.25)}
+.fight-log details ol {padding-left:1em;list-style:none}
+.fight-log summary {cursor:pointer}
+.fight-screen[data-exiting] {pointer-events:none}
+.fight-screen[data-exiting]::after {content:"";position:absolute;inset:0;background:black;z-index:15;animation:fight-exit .85s both}
+@keyframes fight-exit {0%,55%{opacity:0}100%{opacity:1}}
+@media (max-width:700px) {.fight-screen{--scene-unit:.8px}.fight-screen[data-rows="2"] .combat-deck{max-height:4.2rem}.fight-screen[data-rows="2"] .combat-spells{min-height:0}}
+.combat-dialog .combat-popup-log {padding:.65em .8em;max-height:48dvh;overflow:auto}
+.combat-dialog .combat-popup-log li {font-size:inherit;line-height:inherit}
+
+/* Frame the imported Astrub backdrop without moving its interactive grid. */
+.fight-board[data-room="192419850"] .combat-room-art {
+  clip-path: inset(0 8.3% 0 2.3%);
+  transform-box: fill-box;
+}
+
+@media (min-width: 701px) {
+  .combat-dock {
+    --dock-size: var(--dock-preference, clamp(.45px, round(nearest, min(.05556vw, .1dvh), .05px), 1.35px));
+    /* Leave room to open the chat at the largest manual interface size. */
+    --dock-unit: min(var(--dock-size), calc((100vw - 126px) / 1100));
+    left: 0;
+    right: 0;
+    bottom: calc(8 * var(--dock-unit));
+    justify-content: center;
+    gap: calc(10 * var(--dock-unit));
+  }
+  .combat-dock .combat-chat {
+    position: absolute;
+    bottom: 0;
+    left: calc(8 * var(--dock-unit));
+    width: min(calc(300 * var(--dock-unit)), max(0px, calc(50% - 565 * var(--dock-unit))));
+    height: calc(220 * var(--dock-unit));
+  }
+  .combat-chat .fight-log li {font-size:calc(var(--chat-size,14) * 1.2 * var(--dock-unit))}
+  .combat-dock .combat-vitals {
+    box-sizing: border-box;
+    padding: 0;
+    width: calc(164 * var(--dock-unit));
+    height: calc(144 * var(--dock-unit));
+    margin-bottom: calc(34 * var(--dock-unit));
+    align-content: center;
+  }
+  .combat-points span {width:calc(50 * var(--dock-unit));height:calc(50 * var(--dock-unit))}
+  .combat-heart {width:calc(96 * var(--dock-unit));height:calc(96 * var(--dock-unit))}
+  .combat-dock .combat-spells {
+    --cell: calc(49 * var(--dock-unit));
+    width: calc(685 * var(--dock-unit));
+    min-height: calc(186 * var(--dock-unit));
+    padding: calc(4 * var(--dock-unit)) calc(8 * var(--dock-unit));
+  }
+  .combat-deck {grid-template-columns:repeat(12,minmax(0,1fr));max-height:calc(156 * var(--dock-unit))}
+  .fight-screen[data-rows="2"] .combat-dock .combat-spells {min-height:calc(134 * var(--dock-unit))}
+  .fight-screen[data-rows="2"] .combat-deck {max-height:calc(104 * var(--dock-unit))}
+  .combat-endbox {
+    box-sizing: border-box;
+    width: calc(227 * var(--dock-unit));
+    min-width: 0;
+    height: calc(94 * var(--dock-unit));
+    padding: calc(24 * var(--dock-unit)) calc(10 * var(--dock-unit)) 0;
+  }
+}
+
+.combat-chat h3 {position:relative;justify-content:center}
+.combat-chat h3 button {position:absolute;right:0}

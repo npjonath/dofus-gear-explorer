@@ -23,6 +23,7 @@ export interface Platform {
   kind: "web" | "desktop"
   apiBaseUrl: string
   version: string
+  fightAssets?: { import(pick: boolean): Promise<boolean>; stage(): Promise<string> }
   updates?: UpdateBridge
 }
 

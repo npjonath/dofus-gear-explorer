@@ -4,6 +4,12 @@ import type {
   DamageResult,
   DataStatus,
   Evaluation,
+  FightAction,
+  FightAim,
+  FightDummies,
+  FightBookSpell,
+  FightState,
+  FightView,
   ItemDetail,
   ItemList,
   ItemQuery,
@@ -27,6 +33,8 @@ export class ApiError extends Error {
 export interface ApiClient {
   baseUrl: string
   imageUrl(path: string): string
+  fightBook(lang:Lang, breedId:number, signal?:AbortSignal):Promise<FightBookSpell[]>
+  fightAssets(): Promise<{ maps: number[]; pack:string }>
   status(): Promise<DataStatus>
   checkForUpdate(): Promise<DataStatus>
   startUpdate(): Promise<DataStatus>
@@ -42,6 +50,23 @@ export interface ApiClient {
     mastery: boolean,
     signal?: AbortSignal
   ): Promise<DamageResult>
+  /** Starts a fight (no state) or plays one action of it. */
+  fight(
+    lang: Lang,
+    build: BuildInput,
+    breedId: number | null,
+    body: { dummies: FightDummies } | { state: FightState; action: FightAction },
+    signal?: AbortSignal
+  ): Promise<FightView>
+  /** Lists where a spell can be aimed, with what each cast would do. */
+  fightAim(
+    lang: Lang,
+    build: BuildInput,
+    breedId: number | null,
+    state: FightState,
+    spell: number,
+    signal?: AbortSignal
+  ): Promise<FightAim>
   /** Runs a search and returns its first page of stuffs. */
   solve(lang: Lang, request: SolverRequest, limit: number, signal?: AbortSignal): Promise<SolverResponse>
   /** Reads another page of a search's stuffs; fails with `results_expired` once the server dropped them. */
@@ -77,6 +102,8 @@ export function createApiClient(baseUrl: string): ApiClient {
   return {
     baseUrl: root,
     imageUrl: (path) => root + path,
+    fightBook:(lang,breedId,signal)=>request(`/api/fight/book?lang=${lang}&breed=${breedId}`,{signal}),
+    fightAssets: () => request("/api/fight/assets"),
     status: () => request("/api/data/status"),
     checkForUpdate: () => post("/api/data/check", {}),
     startUpdate: () => post("/api/data/update", {}),
@@ -99,6 +126,10 @@ export function createApiClient(baseUrl: string): ApiClient {
     evaluate: (lang, build, signal) => post(`/api/builds/evaluate?lang=${lang}`, build, signal),
     damage: (lang, build, breedId, range, mastery, signal) =>
       post(`/api/builds/damage?lang=${lang}`, { ...build, breedId: breedId ?? 0, range, mastery }, signal),
+    fight: (lang, build, breedId, body, signal) =>
+      post(`/api/fight?lang=${lang}`, { ...build, breedId: breedId ?? 0, ...body }, signal),
+    fightAim: (lang, build, breedId, state, spell, signal) =>
+      post(`/api/fight/aim?lang=${lang}`, { ...build, breedId: breedId ?? 0, state, spell }, signal),
     solve: (lang, body, limit, signal) => post(`/api/solver/search?lang=${lang}&limit=${limit}`, body, signal),
     results: (id, offset, limit) =>
       request(`/api/solver/results/${encodeURIComponent(id)}?offset=${offset}&limit=${limit}`),

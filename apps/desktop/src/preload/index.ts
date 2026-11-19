@@ -7,6 +7,10 @@ interface AppUpdate {
 
 contextBridge.exposeInMainWorld("dde", {
   config: (): Promise<{ apiBaseUrl: string; version: string }> => ipcRenderer.invoke("dde:config"),
+  fightAssets: {
+    import: (pick: boolean): Promise<boolean> => ipcRenderer.invoke("dde:fight-assets:import", pick),
+    stage: (): Promise<string> => ipcRenderer.invoke("dde:fight-assets:stage"),
+  },
   updates: {
     last: (): Promise<AppUpdate | null> => ipcRenderer.invoke("dde:update:last"),
     subscribe(listener: (update: AppUpdate | null) => void): () => void {

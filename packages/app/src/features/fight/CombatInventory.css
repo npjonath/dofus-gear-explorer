@@ -1,0 +1,142 @@
+.combat-inventory-backdrop[data-slot="dialog-backdrop"] {
+  background: transparent;
+  backdrop-filter: none;
+}
+
+.combat-inventory-window[data-slot="dialog-content"] {
+  --gear-unit: clamp(0.62px, min(0.067vw, 0.108dvh), 1px);
+  position: fixed;
+  inset: calc(24 * var(--gear-unit)) auto auto calc(60 * var(--gear-unit));
+  margin: 0;
+  padding: 0;
+  transform: none;
+  display: block;
+  width: min(calc(520 * var(--gear-unit)), 96vw);
+  max-height: calc(100dvh - 32 * var(--gear-unit));
+  border: 1px solid #46403b;
+  border-radius: 8px;
+  background: #211c1b !important;
+  color: #f2e6d8;
+  font-family: CombatLexend, system-ui, sans-serif;
+}
+
+.combat-inventory-window[data-slot="dialog-content"] > header {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  place-items: center;
+  height: calc(44 * var(--gear-unit));
+  margin: 0;
+  padding: 0 2.4rem;
+  border-bottom: 2px solid #9c6472;
+  background: var(--inventory-header), var(--inventory-highlight), linear-gradient(90deg,#4a3436,#823c51,#4a3436);
+  background-position: center;
+  background-blend-mode: screen, soft-light, normal;
+  background-repeat: no-repeat;
+  background-size: auto 100%, 100% 100%, cover;
+}
+.combat-inventory-window[data-slot="dialog-content"] > header h2 {
+  display: flex;
+  align-items: center;
+  gap: 0.35em;
+  font-family: CombatRowdies, CombatLexend, system-ui, sans-serif;
+  font-size: calc(21 * var(--gear-unit));
+  line-height: 1;
+}
+.combat-inventory-window[data-slot="dialog-content"] > header img { width: 1.35em; height: 1.35em; object-fit: contain; }
+.combat-inventory-window[data-slot="dialog-content"] > header button { position: absolute; right: 0.75em; border: 0; }
+.combat-paperdoll-stage {
+  position: relative;
+  display: grid;
+  grid-template-columns: 14% 1fr 14%;
+  height: calc(610 * var(--gear-unit));
+  padding: 9.5% 3.6% 3.5%;
+  background: radial-gradient(ellipse at 50% 54%, #ab6954 0%,#8b4c40 26%,#51332f 51%,#2a2221 83%);
+  isolation: isolate;
+}
+.combat-paperdoll-stage::before, .combat-paperdoll-stage::after {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  left: 0;
+  right: 0;
+  height: 5%;
+  opacity: 0.37;
+  background-position: center;
+  background-size: 100% 100%;
+  pointer-events: none;
+}
+.combat-paperdoll-stage::before { top: 0; background-image: var(--inventory-top); }
+.combat-paperdoll-stage::after { bottom: -1px; background-image: var(--inventory-bottom); }
+.combat-paperdoll-hint {
+  position: absolute;
+  z-index: 2;
+  top: 5.5%;
+  left: 20%;
+  right: 20%;
+  margin: 0;
+  text-align: center;
+  font-size: calc(13 * var(--gear-unit));
+  line-height: 1.4;
+  text-shadow: 0 1px 2px #21100d;
+}
+.combat-paperdoll-model { position: absolute; width: 70%; inset: 18% 15% 0; pointer-events: none; }
+.combat-paperdoll-model > .combat-pedestal { position: absolute; bottom: 0; width: 100%; height: 42%; object-fit: contain; }
+.combat-paperdoll-model > .combat-paperdoll-actor {
+  position: absolute; bottom: 9%; width: 100%; height: 86%;
+  overflow: visible; pointer-events: none;
+}
+.combat-paperdoll-model > .combat-paperdoll-head { position: absolute; width: 47%; left: 26.5%; top: 31%; object-fit: contain; }
+.combat-inventory-rotate {
+  position: absolute; inset: auto 19% 3%;
+  display: flex; justify-content: space-between; pointer-events: none;
+}
+.combat-inventory-rotate > button {
+  border: 0; background: transparent; padding: 0.3em;
+  color: #ffe4b0; pointer-events: auto;
+}
+.combat-inventory-rotate svg { width: calc(22 * var(--gear-unit)); height: auto; }
+.combat-gear-stack { display: flex; min-width: 0; flex-direction: column; gap: calc(5 * var(--gear-unit)); }
+.combat-gear-left { grid-column: 1; }
+.combat-gear-right { grid-column: 3; }
+.combat-gear-left > [data-place="weapon"] { margin-top: auto; }
+.combat-gear-left > [data-place="pet"] { margin-top: calc(67 * var(--gear-unit)); }
+.combat-gear-slot {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 100%;
+  aspect-ratio: 1;
+  padding: 13%;
+  border: 1px solid #352a25;
+  border-radius: 2px;
+  color: #c1b5a0;
+  background: #251d1c78 center / 75% no-repeat;
+  box-shadow: inset 0 1px 3px #17110eb5;
+}
+.combat-gear-slot::after { content: ""; position: absolute; inset: -1px; background: var(--inventory-slot) center/100% 100%; pointer-events: none; }
+.combat-gear-slot > img { width: 100%; height: 100%; object-fit: contain; }
+.combat-empty-glyph { width: 75%; height: 75%; opacity: 0.55; }
+[data-art] .combat-gear-slot[data-empty] .combat-empty-glyph { opacity: 0.13; }
+.combat-gear-slot:hover,.combat-gear-slot:focus-visible,.combat-gear-slot[data-changed] { outline: 2px solid #e9b963; outline-offset: -2px; }
+.combat-forged-mark { position: absolute; bottom: 2px; right: 3px; font-size: 0.75em; color: #efcb8e; }
+.combat-gear-dofus {
+  display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 2%;
+  padding: 4.5% 7%; background: linear-gradient(90deg, #242223, #423c3c 48%, #242223);
+}
+.combat-gear-actions { padding: 0.7em 1em; border-top: 1px solid #48423d; font-size: max(12px, calc(13 * var(--gear-unit))); }
+.combat-gear-actions p { margin: 0; color: #d2c8bb; }
+.combat-gear-actions strong { display: block; margin-top: 0.55em; }
+.combat-gear-actions ul,.combat-inventory-confirm ul { margin: 0.45em 0; padding-inline-start: 1.3em; }
+.combat-gear-actions li strong { display: inline; }
+.combat-gear-actions button { margin: 0.4em 0.4em 0 0; }
+.combat-gear-editor[data-slot="dialog-content"] { height: min(84dvh, 45rem); width: min(36rem, 96vw); display: flex; flex-direction: column; overflow: hidden; }
+.combat-trial-hint { margin: 0 0 0.55em; font-size: 0.88em; color: var(--ink-2); }
+.combat-gear-editor aside { min-height: 0; }
+.combat-forge-content { overflow: auto; min-height: 0; }
+.combat-editor-tools { display: flex; flex-wrap: wrap; gap: 0.45em; margin-bottom: 0.55em; }
+.combat-editor-tools [aria-pressed="true"] { outline: 2px solid #f4bf6a; }
+.combat-inventory-confirm[data-slot="dialog-content"] { width: min(28rem, 94vw); }
+@media(max-width: 640px) {
+  .combat-inventory-window[data-slot="dialog-content"] { --gear-unit: min(0.185vw, 0.105dvh); left: 50%; transform: translateX(-50%); }
+}
