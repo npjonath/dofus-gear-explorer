@@ -157,6 +157,7 @@ const messages: Messages = {
   "fight.board": "Fight board",
   "fight.boardHint": "Arrow keys aim at a cell, Enter acts, Escape puts the spell away.",
   "fight.placement": "Placement",
+  "fight.alliedDummy": "Ally",
   "fight.allies": "Allies",
   "fight.armor": "{n} damage reduction",
   "fight.shield": "{n} shield points",

@@ -516,6 +516,8 @@ function ChatOptions({
 
 function DummySettings({ dummies, onChange }: { dummies: FightDummies; onChange(next: FightDummies): void }) {
   const { t } = useI18n()
+  const allies = dummies.allies ?? 0
+  const enemies = dummies.count - allies
   const setStat = (id: number, value: number) => onChange({ ...dummies, stats: { ...dummies.stats, [id]: value } })
   return (
     <Popover>
@@ -529,23 +531,21 @@ function DummySettings({ dummies, onChange }: { dummies: FightDummies; onChange(
           <span className="text-ink-2">{t("fight.dummies.count")}</span>
           <NumberField
             label={t("fight.dummies.count")}
-            value={dummies.count}
+            value={enemies}
             min={1}
             max={4}
-            onChange={(count) => onChange({ ...dummies, count, allies: Math.min(count - 1, dummies.allies ?? 0) })}
+            onChange={(count) => onChange({ ...dummies, count: count + allies })}
           />
-          {dummies.count > 1 && (
-            <>
-              <span className="text-ink-2">{t("fight.allies")}</span>
-              <NumberField
-                label={t("fight.allies")}
-                value={dummies.allies ?? 0}
-                min={0}
-                max={dummies.count - 1}
-                onChange={(allies) => onChange({ ...dummies, allies })}
-              />
-            </>
-          )}
+
+          <span className="text-ink-2">{t("fight.allies")}</span>
+          <NumberField
+            label={t("fight.allies")}
+            value={allies}
+            min={0}
+            max={3}
+            onChange={(newCount) => onChange({ ...dummies, allies: newCount, count: enemies + newCount })}
+          />
+
           <span className="text-ink-2">{t("fight.dummies.hp")}</span>
           <NumberField
             label={t("fight.dummies.hp")}
@@ -727,7 +727,10 @@ export function FightPanel({
   function nameOf(entity: FightEntity): string {
     if (entity.kind === "summon") return entity.name ?? t("fight.actors")
     if (entity.kind === "player") return breedName ?? t("fight.you")
-    return entity.id === 2 ? "Poutch Ingball" : `Poutch Ingball ${entity.id - 1}`
+    const team = view?.state.entities.filter((e) => e.kind === "dummy" && Boolean(e.ally) === Boolean(entity.ally)) ?? []
+    const rank = team.findIndex((e) => e.id === entity.id) + 1
+    const label = entity.ally ? t("fight.alliedDummy") : "Poutch Ingball"
+    return rank > 1 ? `${label} ${rank}` : label
   }
 
   function restart() {
@@ -1052,7 +1055,7 @@ export function FightPanel({
               {state.turn || 1}
             </li>
             {[...state.entities]
-              .sort((a, b) => Number(a.kind === "dummy" && !a.ally) - Number(b.kind === "dummy" && !b.ally))
+              .sort((a, b) => Number(a.kind === "dummy") - Number(b.kind === "dummy"))
               .map((entity) => (
                 <li key={entity.id}>
                   <button

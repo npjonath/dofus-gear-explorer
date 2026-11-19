@@ -93,6 +93,44 @@ func TestSpeedrushEffectsWithInstalledGameData(t *testing.T) {
 			t.Fatalf("next turn: HP=%d", hp)
 		}
 	})
+	t.Run("Transfusion", func(t *testing.T) {
+		const transfusion, flame = 12738, 24006
+		r := newSpeedrushReplay(t, 11, astrub, 2, 50000)
+		r.act(fightAction{Type: "place", Entity: 1, Cell: 63})
+		r.act(fightAction{Type: "begin"})
+		r.act(fightAction{Type: "cast", Spell: transfusion, Cell: 63})
+		if r.view.State.TotalDamage != 396 || r.view.State.Player().HP != 2210 {
+			t.Fatalf("enemy pair: %+v", r.view.State.Entities)
+		}
+
+		req := r.req
+		req.State = nil
+		req.Action = nil
+		req.Dummies = &fight.Dummies{Count: 3, Allies: 1, HP: 50000, MapID: astrub}
+		var fresh fightDTO
+		r.post("/api/fight", req, &fresh)
+		r.view = fresh
+		if ally := r.view.State.Entities[3]; !ally.Ally || ally.Cell != 115 {
+			t.Fatalf("ally placement: %+v", ally)
+		}
+		r.act(fightAction{Type: "begin"})
+		r.act(fightAction{Type: "cast", Spell: flame, Cell: 115})
+		ally := r.view.State.Entities[3]
+		lost := 50000 - ally.HP
+		if lost <= 0 || ally.MaxHP != 50000-lost/10 {
+			t.Fatalf("damage and erosion: %+v", ally)
+		}
+		r.act(fightAction{Type: "cast", Spell: transfusion, Cell: 116})
+		if p := r.view.State.Player(); p.HP != 2012 || p.MaxHP != 2210 || r.view.AP != 8 {
+			t.Fatalf("transfer cost: %+v, AP %d", p, r.view.AP)
+		}
+		for _, event := range r.view.Events {
+			if event.Type == fight.EventHeal && event.Entity == ally.ID && event.Value == ally.MaxHP-ally.HP {
+				return
+			}
+		}
+		t.Fatalf("missing heal for lost HP net of erosion (%d): %+v", ally.MaxHP-ally.HP, r.view.Events)
+	})
 	t.Run("Vitalité", func(t *testing.T) {
 		const vitality = 13120
 		r := newSpeedrushReplay(t, 8, astrub, 2, 1200)

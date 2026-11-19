@@ -156,6 +156,7 @@ const messages = {
   "fight.board": "Plateau de combat",
   "fight.boardHint": "Flèches pour viser une case, Entrée pour agir, Échap pour ranger le sort.",
   "fight.placement": "Placement",
+  "fight.alliedDummy": "Allié",
   "fight.allies": "Alliés",
   "fight.armor": "{n} dommages réduits",
   "fight.shield": "{n} points de bouclier",

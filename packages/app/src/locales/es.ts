@@ -160,6 +160,7 @@ const messages: Messages = {
   "fight.board": "Tablero de combate",
   "fight.boardHint": "Flechas para apuntar a una casilla, Intro para actuar, Escape para guardar el hechizo.",
   "fight.placement": "Colocación",
+  "fight.alliedDummy": "Aliado",
   "fight.allies": "Aliados",
   "fight.armor": "{n} de reducción de daños",
   "fight.shield": "{n} puntos de escudo",

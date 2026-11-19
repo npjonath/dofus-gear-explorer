@@ -3,6 +3,7 @@ package fight
 import (
 	"maps"
 	"math/rand/v2"
+	"slices"
 
 	"dofusdb/api/internal/engine"
 	"dofusdb/api/internal/game"
@@ -115,6 +116,8 @@ type Entity struct {
 
 // Use counts the casts of a spell.
 type Use struct {
+	// ReadyTurn overrides the remaining cooldown until the next cast.
+	ReadyTurn int `json:"readyTurn,omitempty"`
 	// Turn is the number of casts this turn and Last the turn of the latest.
 	Turn int `json:"turn"`
 	Last int `json:"last"`
@@ -275,23 +278,38 @@ func (s *Sim) StartOn(d Dummies, board Board) *State {
 		playerCell = board.Blue[0]
 	}
 	st.Entities = append(st.Entities, Entity{ID: 1, Kind: KindPlayer, Cell: playerCell, HP: health, MaxHP: health, Buffs: []Buff{}})
-	count := min(4, max(1, d.Count))
+	// Count includes allied dummies in the HTTP contract. The arena menu
+	// configures its one to four enemies and zero to three allies independently.
+	total := min(7, max(1, d.Count))
+	allies := min(3, max(0, d.Allies), total-1)
+	enemies := min(4, total-allies)
+	blue := slices.Clone(board.Blue)
+	slices.SortStableFunc(blue, func(a, b int) int { return board.Distance(playerCell, a) - board.Distance(playerCell, b) })
 	hp := min(1_000_000, max(1, d.HP))
 	spots := [][2]int{{9, mid}, {9, mid - 1}, {9, mid + 1}, {10, mid}}
-	for i := 0; i < count; i++ {
+	for i := 0; i < enemies+allies; i++ {
 		stats := map[int]int{}
 		for _, id := range ResistStats() {
 			if v := d.Stats[id]; v != 0 {
 				stats[id] = v
 			}
 		}
-		dummyCell := board.cell(spots[i][0], spots[i][1])
-		ally := i >= count-min(count-1, max(0, d.Allies))
-		if len(board.Red) > i {
-			dummyCell = board.Red[i]
-		}
-		if ally && len(board.Blue) > i+1 {
-			dummyCell = board.Blue[i+1]
+		ally := i >= enemies
+		var dummyCell int
+		if ally {
+			rank := i - enemies
+			dummyCell = board.cell(2, mid+rank-1)
+			for _, cell := range blue {
+				if st.free(cell) {
+					dummyCell = cell
+					break
+				}
+			}
+		} else {
+			dummyCell = board.cell(spots[i][0], spots[i][1])
+			if i < len(board.Red) {
+				dummyCell = board.Red[i]
+			}
 		}
 		st.Entities = append(st.Entities, Entity{
 			ID: i + 2, Kind: KindDummy, Ally: ally, Cell: dummyCell, HP: hp, MaxHP: hp, Stats: stats, Buffs: []Buff{},
@@ -513,10 +531,17 @@ const (
 
 // cooldown is the number of turns before the spell can be cast again.
 func (st *State) cooldown(a *attack) int {
+	return cooldownLeft(a, st.counters()[a.id], st.Turn)
+}
+
+func cooldownLeft(a *attack, use *Use, turn int) int {
+	if use != nil && use.ReadyTurn > 0 {
+		return max(0, use.ReadyTurn-max(1, turn))
+	}
 	// Before the first turn, the wait is the one that turn will start with.
-	left := a.rules.InitialCooldown - max(1, st.Turn) + 1
-	if use := st.counters()[a.id]; use != nil && use.Last > 0 && a.rules.Interval > 0 {
-		left = max(left, a.rules.Interval-(st.Turn-use.Last))
+	left := a.rules.InitialCooldown - max(1, turn) + 1
+	if use != nil && use.Last > 0 && a.rules.Interval > 0 {
+		left = max(left, a.rules.Interval-(turn-use.Last))
 	}
 	return max(0, left)
 }
@@ -923,6 +948,7 @@ func (s *Sim) spend(st *State, a *attack, cell int) {
 		use.Targets = map[int]int{}
 	}
 	use.Turn++
+	use.ReadyTurn = 0
 	use.Last = st.Turn
 	if occupant := st.at(cell); occupant != nil {
 		use.Targets[occupant.ID]++

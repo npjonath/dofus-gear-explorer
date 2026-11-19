@@ -55,7 +55,7 @@ func (s *Sim) rewardProjection(st *State, c *casting, id, entry int) {
 		}
 		kind, ref := BuffStat, statFinalDamage
 		if e.Action == 2971 {
-			kind, ref = "finalHeal", 0
+			kind, ref = buffFinalHeal, 0
 		}
 		count, oldest := 0, -1
 		for i, b := range entity.Buffs {
@@ -87,7 +87,7 @@ func (s *Sim) projectedHeal(st *State, c *casting, at place, amount int) int {
 	bonus := 0
 	if caster := st.entity(at.caster); caster != nil {
 		for _, b := range caster.Buffs {
-			if b.Kind == "finalHeal" {
+			if b.Kind == buffFinalHeal {
 				bonus += b.Value
 			}
 		}

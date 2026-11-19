@@ -77,3 +77,68 @@ func TestTransferCostsCasterHealthAndVitalityExpires(t *testing.T) {
 		t.Fatalf("expiry: %+v", st.Player())
 	}
 }
+
+func TestArenaPlacesAlliesAndEnemiesIndependently(t *testing.T) {
+	sim := newSim(map[int]int{})
+	b := Board{Width: 10, Height: 15, Blue: []int{116, 23, 24, 25, 26, 53, 63, 73, 83, 113, 114, 115}, Red: []int{52, 62, 72, 82}}
+	for _, room := range []Board{b, DefaultBoard()} {
+		st := sim.StartOn(Dummies{Count: 7, Allies: 3, HP: 50000}, room)
+		if len(st.Entities) != 8 || !ValidPositions(st) {
+			t.Fatalf("invalid full teams: %+v", st.Entities)
+		}
+		for i, e := range st.Entities[1:] {
+			if e.Ally != (i >= 4) {
+				t.Fatalf("wrong team at %d: %+v", i, e)
+			}
+		}
+		if len(room.Blue) > 0 && st.Entities[5].Cell != 115 {
+			t.Errorf("allied poutch starts at %d, expected 115", st.Entities[5].Cell)
+		}
+	}
+}
+
+func TestSetAndReduceCurrentSpellCooldown(t *testing.T) {
+	s := newSim(map[int]int{})
+	st := fightAt(s, Dummies{}, [2]int{4, 6})
+	spell := s.Cat.SpellByID[spellHaste]
+	spell.Levels[0].Effects = []game.SpellEffect{{Action: 1045, Min: spellBlast, Value: 3, Targets: "C", Zone: point()}}
+	if _, why := s.Cast(st, spellHaste, st.Player().Cell); why != "" {
+		t.Fatal(why)
+	}
+	if got := s.Slot(st, spellBlast).Cooldown; got != 3 {
+		t.Fatalf("set to 3: %d", got)
+	}
+	spell.Levels[0].Effects[0].Action = 1036
+	spell.Levels[0].Effects[0].Value = 2
+	s.Aim(st, spellHaste)
+	if got := s.Slot(st, spellBlast).Cooldown; got != 3 {
+		t.Fatalf("preview changed cooldown: %d", got)
+	}
+	s.Cast(st, spellHaste, st.Player().Cell)
+	if got := s.Slot(st, spellBlast).Cooldown; got != 1 {
+		t.Fatalf("reduce by 2: %d", got)
+	}
+	s.EndTurn(st)
+	if _, why := s.Cast(st, spellBlast, st.Entities[1].Cell); why != "" {
+		t.Fatal(why)
+	}
+	if got := s.Slot(st, spellBlast).Cooldown; got != 2 {
+		t.Fatalf("restore ordinary cooldown: %d", got)
+	}
+}
+
+func TestFinalHealingBuffAppliesToOutgoingHeals(t *testing.T) {
+	s := newSim(map[int]int{})
+	st := fightAt(s, Dummies{}, [2]int{4, 6})
+	spell := s.Cat.SpellByID[spellHaste]
+	spell.Levels[0].Effects = []game.SpellEffect{{Action: 2971, Min: 50, Targets: "C", Duration: 1, Zone: point()}}
+	s.Cast(st, spellHaste, st.Player().Cell)
+	st.Entities[1].HP -= 500
+	spell = s.Cat.SpellByID[spellBolt]
+	spell.Levels[0].Effects = []game.SpellEffect{{Action: 108, Min: 100, Targets: "A", Zone: point()}}
+	spell.Levels[0].CritEffects = nil
+	s.Cast(st, spellBolt, st.Entities[1].Cell)
+	if st.Entities[1].HP != 9650 {
+		t.Fatalf("final heal %+v", st.Entities[1])
+	}
+}

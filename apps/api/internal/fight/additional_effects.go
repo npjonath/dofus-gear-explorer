@@ -11,6 +11,7 @@ const (
 	buffMinRoll       = "minimum"
 	buffMaxRoll       = "maximum"
 	buffHealBase      = "healBase"
+	buffFinalHeal     = "finalHeal"
 	buffStateDisabled = "stateDisabled"
 )
 
@@ -128,6 +129,12 @@ func (s *Sim) extraEffect(st *State, c *casting, at place, a *attack, e game.Spe
 		s.heal(st, c, at, target, heal.Min)
 	case 2935:
 		s.buff(st, c, at, target, a, Buff{Kind: buffHealBase, Ref: e.Min, Value: e.Value, Turns: e.Duration}, false)
+	case 2971, 2972:
+		amount := c.amount(caster, target, lo, hi)
+		if e.Action == 2972 {
+			amount = -amount
+		}
+		s.buff(st, c, at, target, a, Buff{Kind: buffFinalHeal, Value: amount, Turns: e.Duration}, false)
 	case 2973:
 		// Distribution is cast by a damage trigger. Each invocation uses the
 		// individual hit absorbed by its bearer, including during multi-line attacks.
@@ -172,14 +179,31 @@ func (s *Sim) extraEffect(st *State, c *casting, at place, a *attack, e game.Spe
 		if target.ID == st.Active().ID {
 			c.finishTurn = true
 		}
-	case 1036:
+	case 1036, 1045:
+		spell := s.attack(e.Min, 0)
+		if spell == nil || target.Kind == KindDummy {
+			return true
+		}
 		counters := st.Uses
 		if target.Kind == KindSummon {
+			if target.Uses == nil {
+				target.Uses = map[int]*Use{}
+			}
 			counters = target.Uses
+		} else if counters == nil {
+			st.Uses = map[int]*Use{}
+			counters = st.Uses
 		}
-		if use := counters[e.Min]; use != nil {
-			use.Last = max(0, use.Last-e.Value)
+		use := counters[e.Min]
+		remaining := e.Value
+		if e.Action == 1036 {
+			remaining = max(0, cooldownLeft(s.tuned(target, spell), use, st.Turn)-e.Value)
 		}
+		if use == nil {
+			use = &Use{}
+			counters[e.Min] = use
+		}
+		use.ReadyTurn = max(1, st.Turn) + max(0, remaining)
 	case 1013, 1016, 1014, 1015:
 		maxMP := s.StatOf(caster)(game.StatMP)
 		if maxMP <= 0 {

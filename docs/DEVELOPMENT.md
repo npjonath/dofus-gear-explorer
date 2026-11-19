@@ -251,7 +251,7 @@ Checked, on the Enutrof of the Damage section:
 
 ### Reference replays
 
-The HTTP replays use a level-150 SPEEDRUSH build, DOFUS 3.7.14.18 data and locally imported rooms. They check the following observations from DoPoutch through the same endpoints the app uses. Damage rolls stay random. A cast assertion uses the normal or critical reference according to the returned cast event.
+The HTTP replays use a level-150 SPEEDRUSH build, DOFUS 3.7.14.18 data and locally imported rooms. The DoPoutch reference displayed client data 3.7.13.17. These tests check the following observations through the same endpoints the app uses. The catalog replay also casts all 862 spells and the equipped weapon at level 200. It uses another starting cell or a carried fighter when required, checks the cast and the following turn for skipped effects, and exercises both training rooms. Damage rolls stay random. A cast assertion uses the normal or critical reference according to the returned cast event.
 
 | Scenario | Observations exercised |
 |---|---|
@@ -259,6 +259,7 @@ The HTTP replays use a level-150 SPEEDRUSH build, DOFUS 3.7.14.18 data and local
 | Eliotrope in Astrub | Portals on cells 106 and 134 project Flamèche onto cell 124. That route spans five cells for a 10% bonus. The replay also checks the four-portal limit and the MP cost of stepping through a portal. |
 | Masqueraider in Astrub | With the caster on cell 63, aiming Martelo at empty cell 73 previews 216–232 normal or 286–309 critical on cell 62. Aiming directly at 62 gives 271–290 or 358–387. |
 | Sram in Astrub | Invisibilité leaves 10 AP and 7 MP, with one turn of invisibility and two turns of extra MP. Casting Flamèche into an empty cell and placing Piège Sournois preserve invisibility. A direct hit reveals the Sram. |
+| Sacrier with two enemies and an ally | Transfusion from 63 hits both enemies for 198 each. In a fresh fight with the player at 116 and the ally at 115, a critical Flamèche rolled 103. Erosion removed 10 maximum HP, then Transfusion cost the caster 198 HP and restored the remaining 93 to the ally. The regression accepts the actual Flamèche roll. |
 | Sacrier in Astrub | Mutilation grants 150 Power. The reference HP sequence is 2,210 before casting, 1,989 on cast and 1,791 at the start of the next turn. |
 | Iop in Astrub | Vitalité takes both current and maximum HP from 2,210 to 2,563 on a normal cast or 2,607 on a critical cast. |
 
