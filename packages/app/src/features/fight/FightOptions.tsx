@@ -16,6 +16,7 @@ export function FightOptions({
   onMap,
   keys,
   onKeys,
+  stage,
   onImported,
 }: {
   prefs: CombatPreferences
@@ -26,6 +27,7 @@ export function FightOptions({
   onMap: (id: number) => void
   keys: string[]
   onKeys: (keys: string[]) => void
+  stage: string
   onImported: () => Promise<unknown>
 }) {
   const { t } = useI18n()
@@ -37,34 +39,24 @@ export function FightOptions({
   const matches = (...labels: string[]) => labels.some((label) => norm(label).includes(norm(search.trim())))
   const channels = Object.keys(defaultLevels) as VolumeKey[]
   const [binding, setBinding] = React.useState<number | null>(null)
-  const [running, setRunning] = React.useState(false)
+  const [requesting, setRequesting] = React.useState(false)
   const [failed, setFailed] = React.useState("")
-  const [stage, setStage] = React.useState("")
-  React.useEffect(() => {
-    if (!running || !fightAssets) return
-    const id = window.setInterval(() => {
-      void fightAssets
-        .stage()
-        .then(setStage)
-        .catch(() => {})
-    }, 700)
-    return () => window.clearInterval(id)
-  }, [running, fightAssets])
+  const running = requesting || Boolean(stage)
+  const importLabel = t(maps.length ? "fight.reimport" : "fight.import")
   function change(next: string[]) {
     onKeys(next)
     saveFightKeys(next)
   }
   async function importArt(pick: boolean) {
     if (!fightAssets || running) return
-    setRunning(true)
+    setRequesting(true)
     setFailed("")
-    setStage("")
     try {
       if (await fightAssets.import(pick)) await onImported()
     } catch (error) {
       setFailed(error instanceof Error ? error.message : String(error))
     } finally {
-      setRunning(false)
+      setRequesting(false)
     }
   }
   const commands = [
@@ -83,7 +75,7 @@ export function FightOptions({
     showReach: matches(t("fight.opt.reach")),
     skipExit: matches(t("fight.opt.exit")),
     sound: matches(t("fight.opt.sound"), t("fight.opt.poutch"), ...channels.map((key) => t(`fight.opt.${key}`))),
-    arena: matches(t("fight.arena"), t("fight.import")),
+    arena: matches(t("fight.arena"), t("fight.import"), importLabel),
   }
   const keyName = (i: number) => (i < 12 ? t("fight.keyslot", { n: i + 1 }) : (commands[i - 12] ?? ""))
   const visibleKeys = keys.map((code, i) => matches(keyName(i), keyLabel(code)))
@@ -218,6 +210,7 @@ export function FightOptions({
           {sections.arena && (
             <section>
               <h3>{t("fight.arena")}</h3>
+              {maps.length > 0 && !running && <p role="status">{t("fight.assetsReady")}</p>}
               {maps.length > 0 && (
                 <div className="combat-map-picker">
                   {maps.map((id) => (
@@ -231,7 +224,7 @@ export function FightOptions({
                 <>
                   <div className="combat-import">
                     <button type="button" disabled={running} onClick={() => void importArt(false)}>
-                      {t("fight.import")}
+                      {importLabel}
                     </button>
                     <button type="button" disabled={running} onClick={() => void importArt(true)}>
                       {t("fight.directory")}

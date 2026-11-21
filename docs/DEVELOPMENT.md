@@ -25,7 +25,7 @@ To run the desktop app instead:
 pnpm dev:desktop
 ```
 
-Development runs keep their stuffs, settings and game data in their own folder, `Dofus Gear Explorer Dev` (next to the installed app's `Dofus Gear Explorer`), so they never share storage with an installed copy. Set `DDE_DATA_DIR` to reuse game data you already imported, for example `DDE_DATA_DIR=$PWD/apps/api/data pnpm dev:desktop`. Only one copy of the app runs at a time: opening it again brings back the window already open.
+Development runs keep their stuffs, settings and database in `Dofus Gear Explorer Dev`, next to the installed app's `Dofus Gear Explorer`. Each default profile reads the other's combat pack if its own pack is unavailable. A custom `--user-data-dir` or `DDE_DATA_DIR` uses its own combat cache. To reuse a specific data directory, run `DDE_DATA_DIR=$PWD/apps/api/data pnpm dev:desktop`. Opening the same profile again brings its window forward.
 
 ### Packaging the desktop app
 
@@ -130,6 +130,7 @@ cd apps/api && go run ./cmd/dde-api sync --source /path/to/doduda/output
 | --- | --- | --- | --- |
 | `--addr` | `DDE_ADDR` | `127.0.0.1:8787` | Listen address. Port `0` picks a free port. |
 | `--data-dir` | `DDE_DATA_DIR` | `data` | SQLite database and icons. |
+| `--fight-assets-fallback-dir` | | | Read-only location for a published combat pack when `data-dir/fight-assets` has none. |
 | `--langs` | `DDE_LANGS` | `fr,en,es,pt` | Languages to import. A language missing from the installed data is imported again from the same release at the next start. |
 | `--repo` | `DDE_RELEASE_REPO` | `dofusdude/dofus3-main` | Repository publishing the releases. |
 | `--check-interval` | | `6h` | Delay between release checks. |
@@ -279,7 +280,7 @@ pnpm data:fight-assets --source "/path/to/DOFUS" --output apps/api/data/fight-as
 
 The pack contains the available room geometry and artwork, actor skins, interface textures and fonts, spell sequences and combat sounds. The sound importer follows the maps' playlists, animation events and interface event IDs into the client's FEV/FSB5 banks and remuxes supported Vorbis samples as Ogg. Its `audio/index.json` identifies the available channels. Music and ambience follow the selected room. Animation and interface cues use the same local pack during playback. One 3.7.14.18 import occupied 2.1 GB and included 3,327 Ogg files (64 MB) for 2,065 sound events across five channels.
 
-An import writes into a staging directory and switches the `current` pointer once the pack is complete. Reimporting reuses an existing generation when its extraction format, client catalogs, audio bank signatures and local skin overrides match. The importer keeps the previous generation for reads already in progress. An optional local `fight-assets/equipment-skins.json` can associate an item ID with a skin ID when the client omits that link. The equipment still contributes its stats when a skin is unavailable.
+An import writes into a staging directory and switches the `current` pointer once the pack is complete. Reopening or reloading Combat uses the published pack from disk. Reloading the desktop window during an import reconnects to its progress. Reimporting reuses an existing generation when its extraction format, client catalogs, audio bank signatures and local skin overrides match. The importer keeps the previous generation for reads already in progress. An optional local `fight-assets/equipment-skins.json` can associate an item ID with a skin ID when the client omits that link. The equipment still contributes its stats when a skin is unavailable.
 
 The installer ships the importer and its dependency licences. The player's local pack holds all extracted artwork, fonts, animations and sounds. Native packaging builds a missing importer with uv. Release CI builds and self-tests separate artifacts for Windows x64, Linux x64, macOS Intel and macOS Apple Silicon. For cross-packaging, unpack the matching artifact under `apps/desktop/fight-import/`. The target directory names are `win-x64`, `linux-x64`, `mac-x64` and `mac-arm64`. To verify an unpacked artifact, run its `fight-import --self-test` executable (`fight-import.exe --self-test` on Windows).
 

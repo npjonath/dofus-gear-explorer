@@ -131,7 +131,7 @@ export function useDamage(
 }
 
 /** A new fight for a stuff; `round` asks for another one with the same settings. */
-export function useFightStart(build: BuildInput, breedId: number | null, dummies: FightDummies, round: number) {
+export function useFightStart(build: BuildInput, breedId: number | null, dummies: FightDummies, round: number, assetsChecked: boolean) {
   const api = useApi()
   const lang = useStore((s) => s.lang)
   const version = useDataKey()
@@ -139,7 +139,7 @@ export function useFightStart(build: BuildInput, breedId: number | null, dummies
     queryKey: ["fight", "start", lang, version, build, breedId, dummies, round],
     queryFn: ({ signal }) => api.fight(lang, build, breedId, { dummies }, signal),
     placeholderData: keepPreviousData,
-    enabled: version !== undefined,
+    enabled: version !== undefined && assetsChecked,
     staleTime: Infinity,
   })
 }

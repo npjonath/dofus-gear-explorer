@@ -186,6 +186,8 @@ const messages: Messages = {
   "fight.inventory.missing": "Aparência indisponível no personagem: {items}.",
   "fight.inventory.back": "Voltar ao inventário",
   "fight.import": "Importar os gráficos de DOFUS",
+  "fight.reimport": "Reimportar recursos",
+  "fight.assetsReady": "Recursos de combate carregados do disco.",
   "fight.directory": "Escolher a pasta do jogo",
   "fight.importing": "Importando…",
   "fight.actors": "Personagens",

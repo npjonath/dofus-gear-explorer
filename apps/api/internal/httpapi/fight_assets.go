@@ -23,7 +23,20 @@ func (s *Server) assetPack() (string, error) {
 	if s.updater == nil {
 		return "", fs.ErrNotExist
 	}
-	root := s.updater.FightAssetsDir()
+	var primaryError error
+	for _, root := range s.updater.FightAssetsDirs() {
+		dir, err := publishedFightPack(root)
+		if err == nil {
+			return dir, nil
+		}
+		if primaryError == nil {
+			primaryError = err
+		}
+	}
+	return "", primaryError
+}
+
+func publishedFightPack(root string) (string, error) {
 	raw, err := os.ReadFile(filepath.Join(root, "current"))
 	if err != nil {
 		return "", err
@@ -32,17 +45,29 @@ func (s *Server) assetPack() (string, error) {
 	if !strings.HasPrefix(name, "pack-") || !filepath.IsLocal(name) || strings.ContainsAny(name, `/\`) {
 		return "", fs.ErrInvalid
 	}
-	return filepath.Join(root, name), nil
+	dir := filepath.Join(root, name)
+	marker, err := os.Stat(filepath.Join(dir, "complete.json"))
+	if err != nil {
+		return "", err
+	}
+	if !marker.Mode().IsRegular() {
+		return "", fs.ErrInvalid
+	}
+	return dir, nil
 }
 
 func (s *Server) fightBoard(id int) (fight.Board, error) {
+	dir, err := s.assetPack()
+	if err != nil {
+		return fight.Board{}, err
+	}
+	return fightBoardIn(dir, id)
+}
+
+func fightBoardIn(dir string, id int) (fight.Board, error) {
 	var b fight.Board
 	if !slices.Contains(trainingMaps, id) {
 		return b, fs.ErrNotExist
-	}
-	dir, err := s.assetPack()
-	if err != nil {
-		return b, err
 	}
 	file, err := os.Open(filepath.Join(dir, "maps", strconv.Itoa(id)+".json"))
 	if err != nil {
@@ -91,17 +116,16 @@ func (s *Server) fightBoard(id int) (fight.Board, error) {
 
 func (s *Server) handleFightAssets(w http.ResponseWriter, _ *http.Request) {
 	maps := []int{}
-	for _, id := range trainingMaps {
-		if _, err := s.fightBoard(id); err == nil {
-			maps = append(maps, id)
+	id := ""
+	if dir, err := s.assetPack(); err == nil {
+		id = filepath.Base(dir)
+		for _, mapID := range trainingMaps {
+			if _, err := fightBoardIn(dir, mapID); err == nil {
+				maps = append(maps, mapID)
+			}
 		}
 	}
 	w.Header().Set("Cache-Control", "no-store")
-	dir, _ := s.assetPack()
-	id := ""
-	if dir != "" {
-		id = filepath.Base(dir)
-	}
 	writeJSON(w, http.StatusOK, map[string]any{"maps": maps, "pack": id})
 }
 

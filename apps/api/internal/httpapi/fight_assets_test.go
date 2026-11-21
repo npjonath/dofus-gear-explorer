@@ -3,10 +3,12 @@ package httpapi
 import (
 	"bytes"
 	"compress/gzip"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
 
 	"dofusdb/api/internal/updater"
@@ -22,6 +24,9 @@ func TestImportedAtlasServesBothEncodings(t *testing.T) {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(filepath.Join(root, "current"), []byte("pack-test"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "..", "complete.json"), []byte(`{"format":1,"id":"pack-test"}`), 0644); err != nil {
 		t.Fatal(err)
 	}
 	var compressed bytes.Buffer
@@ -46,6 +51,69 @@ func TestImportedAtlasServesBothEncodings(t *testing.T) {
 			t.Fatalf("encoding %q: %d %q", accept, out.Code, out.Body.String())
 		}
 	}
+}
+
+func TestFightAssetsReusePublishedPacksAfterRestart(t *testing.T) {
+	dir := t.TempDir()
+	primary := filepath.Join(dir, "fight-assets")
+	fallback := filepath.Join(t.TempDir(), "fight-assets")
+	write := func(path, content string) {
+		t.Helper()
+		if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte(content), 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	publish := func(root, id string) {
+		pack := filepath.Join(root, id)
+		write(filepath.Join(pack, "maps", "192419850.json"), `{"id":192419850,"width":3,"height":3,"blue":[0,1,2,3],"red":[4,5,6,7],"imageWidth":30,"imageHeight":30,"halfCellWidth":5,"halfCellHeight":3}`)
+		write(filepath.Join(pack, "hud", "sample.json"), id)
+		write(filepath.Join(pack, "complete.json"), `{"format":1,"id":"`+id+`"}`)
+		write(filepath.Join(root, "current"), id)
+	}
+	open := func(fallbackDir string) http.Handler {
+		s := new(Server)
+		s.SetUpdater(updater.New(nil, nil, updater.Options{DataDir: dir, FightAssetsFallbackDir: fallbackDir}, nil, nil))
+		return s.Handler()
+	}
+	check := func(handler http.Handler, expected string) {
+		t.Helper()
+		result := httptest.NewRecorder()
+		handler.ServeHTTP(result, httptest.NewRequest(http.MethodGet, "/api/fight/assets", nil))
+		var data struct {
+			Pack string `json:"pack"`
+			Maps []int  `json:"maps"`
+		}
+		if err := json.Unmarshal(result.Body.Bytes(), &data); err != nil || result.Code != http.StatusOK || data.Pack != expected {
+			t.Fatalf("asset discovery: %d %s (%v), want %q", result.Code, result.Body.String(), err, expected)
+		}
+		if expected == "" {
+			if len(data.Maps) != 0 {
+				t.Fatalf("unexpected maps with no published pack: %v", data.Maps)
+			}
+			return
+		}
+		if !slices.Equal(data.Maps, []int{192419850}) {
+			t.Fatalf("maps for %q: %v", expected, data.Maps)
+		}
+		result = httptest.NewRecorder()
+		handler.ServeHTTP(result, httptest.NewRequest(http.MethodGet, "/fight-assets/hud/sample.json", nil))
+		if result.Code != http.StatusOK || result.Body.String() != expected {
+			t.Fatalf("read pack %q: %d %s", expected, result.Code, result.Body.String())
+		}
+	}
+	publish(fallback, "pack-other-profile")
+	write(filepath.Join(primary, "current"), "pack-incomplete")
+	write(filepath.Join(primary, "pack-incomplete", "hud", "sample.json"), "incomplete")
+	check(open(""), "")
+	server := open(fallback)
+	check(server, "pack-other-profile")
+	check(open(fallback), "pack-other-profile")
+	publish(primary, "pack-this-profile")
+	check(server, "pack-this-profile")
+	check(open(fallback), "pack-this-profile")
 }
 
 func TestDesktopCanUseImportedFontsAndMasks(t *testing.T) {

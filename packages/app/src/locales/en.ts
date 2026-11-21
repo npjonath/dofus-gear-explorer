@@ -183,6 +183,8 @@ const messages: Messages = {
   "fight.inventory.missing": "Appearance unavailable on the character: {items}.",
   "fight.inventory.back": "Back to inventory",
   "fight.import": "Import DOFUS graphics",
+  "fight.reimport": "Reimport assets",
+  "fight.assetsReady": "Combat assets loaded from disk.",
   "fight.directory": "Choose game folder",
   "fight.importing": "Importing…",
   "fight.actors": "Characters",

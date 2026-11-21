@@ -1,5 +1,4 @@
 import { Dialog, DialogBackdrop, DialogContent, DialogTitle } from "@ui-sdk/react/dialog"
-import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { loadFightKeys, keyLabel } from "../../lib/fightKeys"
 import { GameActor } from "./GameActor"
 import { useGameSpellCatalog } from "./GameSpellEffects"
@@ -47,6 +46,7 @@ import { elementTone, FightBoardView } from "./FightBoard"
 import { FigurePortrait } from "./FightFigures"
 import { useFightPlayback } from "./useFightPlayback"
 import { useFightAudio } from "./useFightAudio"
+import { useFightAssets } from "./useFightAssets"
 
 interface LogLine {
   id: number
@@ -622,9 +622,9 @@ export function FightPanel({
   const evaluation =
     applied.isPlaceholderData || !applied.data ? (input === savedInput ? savedEvaluation : undefined) : applied.data
   const api = useApi()
-  const cache = useQueryClient()
-  const assetQuery = useQuery({ queryKey: ["fight-assets", api.baseUrl], queryFn: () => api.fightAssets(), staleTime: 60000 })
+  const { assets: assetQuery, stage: importStage, refresh: refreshAssets } = useFightAssets()
   const maps = assetQuery.data?.maps
+  const assetsChecked = !assetQuery.isPending && (!assetQuery.isFetching || Boolean(maps?.length))
   const [mapChoice, setMapChoice] = React.useState(99222029)
   const mapId = maps?.includes(mapChoice) ? mapChoice : (maps?.[0] ?? 0)
   const [panel, setPanel] = React.useState<Panel>(null)
@@ -672,7 +672,7 @@ export function FightPanel({
   }, [meta, t])
   const [dummies, setDummies] = React.useState<FightDummies>({ count: 1, hp: 50_000, stats: {} })
   const [round, setRound] = React.useState(0)
-  const start = useFightStart(input, build.breedId, { ...dummies, mapId }, round)
+  const start = useFightStart(input, build.breedId, { ...dummies, mapId }, round, assetsChecked)
   const action = useFightAction(input, build.breedId)
 
   // A fight belongs to the stuff, the class and the dummies it started with:
@@ -1135,7 +1135,7 @@ export function FightPanel({
                   ))}
                 </select>
               ) : (
-                <button onClick={() => setPanel("settings")}>{t("fight.import")}</button>
+                <button onClick={() => setPanel("settings")}>{t(importStage ? "fight.importing" : "fight.import")}</button>
               )}
             </div>
           )}
@@ -1247,10 +1247,8 @@ export function FightPanel({
                 onMap={changeMap}
                 keys={keys}
                 onKeys={setKeys}
-                onImported={async () => {
-                  await cache.invalidateQueries({ queryKey: ["fight-actors"] })
-                  return assetQuery.refetch()
-                }}
+                stage={importStage}
+                onImported={refreshAssets}
               />
             )}
             {panel === "chat" && (

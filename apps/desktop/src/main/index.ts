@@ -11,10 +11,15 @@ app.setName(appName)
 // Two apps sharing one folder cannot both open its storage: the second one would
 // silently forget the stuffs and settings it saves. Development runs get their own.
 const profile = app.commandLine.getSwitchValue("user-data-dir")
-const userData = profile ? resolve(profile) : join(app.getPath("appData"), app.isPackaged ? appName : `${appName} Dev`)
+const appData = app.getPath("appData")
+const userData = profile ? resolve(profile) : join(appData, app.isPackaged ? appName : `${appName} Dev`)
+const dataDir = process.env.DDE_DATA_DIR ?? join(userData, "data")
+const fightAssetsFallback = profile || process.env.DDE_DATA_DIR !== undefined
+  ? undefined
+  : join(appData, app.isPackaged ? `${appName} Dev` : appName, "data", "fight-assets")
 
 // The app was called Dofus Database Explorer before 0.1.0: keep its stuffs and game data.
-const legacyData = join(app.getPath("appData"), "Dofus Database Explorer")
+const legacyData = join(appData, "Dofus Database Explorer")
 if (!profile && app.isPackaged && existsSync(legacyData) && !existsSync(userData)) {
   try {
     renameSync(legacyData, userData)
@@ -66,7 +71,6 @@ function startApi(): Promise<string> {
   if (!existsSync(binary)) {
     return Promise.reject(new Error(`API binary not found at ${binary}. Run "pnpm --filter @dde/api build" first.`))
   }
-  const dataDir = process.env.DDE_DATA_DIR ?? join(app.getPath("userData"), "data")
   return new Promise((resolveUrl, reject) => {
     const child = spawn(
       binary,
@@ -76,6 +80,7 @@ function startApi(): Promise<string> {
         "127.0.0.1:0",
         "--data-dir",
         dataDir,
+        ...(fightAssetsFallback ? ["--fight-assets-fallback-dir", fightAssetsFallback] : []),
         "--exit-with-stdin",
         // The bundled file:// pages send no Origin; only the dev server's pages need allowing.
         ...(devUrl ? ["--cors-origin", new URL(devUrl).origin] : []),
@@ -138,7 +143,7 @@ app.whenReady().then(async () => {
     app.quit()
     return
   }
-  registerFightAssets(process.env.DDE_DATA_DIR ?? join(app.getPath("userData"), "data"))
+  registerFightAssets(dataDir)
   createWindow()
   startUpdates(() => BrowserWindow.getAllWindows()[0] ?? null)
   app.on("activate", () => {

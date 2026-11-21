@@ -23,10 +23,11 @@ import (
 )
 
 type Options struct {
-	DataDir       string
-	Langs         []string
-	ImageSize     int
-	CheckInterval time.Duration
+	DataDir                string
+	FightAssetsFallbackDir string
+	Langs                  []string
+	ImageSize              int
+	CheckInterval          time.Duration
 	// AutoUpdate imports new releases as soon as they are detected.
 	// When false the updater only reports that an update is available.
 	AutoUpdate bool
@@ -105,7 +106,14 @@ func New(st *store.Store, client *release.Client, opts Options, log *slog.Logger
 // ImagesDir is where item icons are extracted.
 func (u *Updater) ImagesDir() string { return filepath.Join(u.opts.DataDir, "images", "items") }
 
-func (u *Updater) FightAssetsDir() string { return filepath.Join(u.opts.DataDir, "fight-assets") }
+// FightAssetsDirs lists the local combat cache, followed by a read-only fallback if configured.
+func (u *Updater) FightAssetsDirs() []string {
+	primary := filepath.Join(u.opts.DataDir, "fight-assets")
+	if fallback := u.opts.FightAssetsFallbackDir; fallback != "" && fallback != primary {
+		return []string{primary, fallback}
+	}
+	return []string{primary}
+}
 
 // SpellImagesDir and BreedImagesDir hold the spell icons and the class
 // portraits the fight simulator shows.
