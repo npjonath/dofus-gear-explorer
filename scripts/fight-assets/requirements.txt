@@ -1,3 +1,4 @@
 UnityPy==1.25.4
 Pillow==13.0.0
-fsb5 @ https://codeload.github.com/HearthSim/python-fsb5/tar.gz/5acfaed9b44167eeebbd5f0414745cc23a2104a7#sha256=f3c443d95a1587e2f3fa408c287aa932c0a5af37c53be97b610ad60b0692563a
+# uv infers the archive format from the URL's .tar.gz suffix before following the redirect.
+fsb5 @ https://github.com/HearthSim/python-fsb5/archive/5acfaed9b44167eeebbd5f0414745cc23a2104a7.tar.gz#sha256=f3c443d95a1587e2f3fa408c287aa932c0a5af37c53be97b610ad60b0692563a
