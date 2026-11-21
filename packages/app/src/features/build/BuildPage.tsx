@@ -9,6 +9,7 @@ import {
   CheckIcon,
   CopyIcon,
   LinkIcon,
+  SearchIcon,
   SparklesIcon,
   Trash2Icon,
   TriangleAlertIcon,
@@ -367,13 +368,14 @@ export function BuildPage({ meta }: { meta: Meta }) {
   const platform = usePlatform()
   const shareByLink = platform.kind === "web" && window.location.protocol.startsWith("http")
   const stuffTab = useStore((s) => s.stuffTab)
+  const searchRevision = useStore((s) => s.searchRevision)
   const [creating, setCreating] = React.useState(false)
   const [comparing, setComparing] = React.useState(false)
   const builds = useStore((s) => s.builds)
   // The search keeps its form and results while other tabs show.
   const [searchSeen, setSearchSeen] = React.useState(stuffTab === "search")
   if (stuffTab === "search" && !searchSeen) setSearchSeen(true)
-  const { addBuild, updateBuild, removeBuild, equip, setMods } = useStore.getState()
+  const { addBuild, updateBuild, removeBuild, equip, setMods, reopenSearch } = useStore.getState()
   const breakpoint = useBreakpoint()
   const [selectedKey, setSelectedKey] = React.useState<string | null>(null)
   const [selectedIn, setSelectedIn] = React.useState(build.id)
@@ -517,6 +519,17 @@ export function BuildPage({ meta }: { meta: Meta }) {
           <SegmentedControlItem value="damage">{t("build.view.damage")}</SegmentedControlItem>
           <SegmentedControlItem value="fight" id="build-open-fight">{t("build.view.fight")}</SegmentedControlItem>
         </SegmentedControl>
+        {build.savedSearch && (
+          <Button
+            onClick={() => {
+              reopenSearch(build.id)
+              requestAnimationFrame(() => document.getElementById("solver-title")?.focus())
+            }}
+          >
+            <SearchIcon aria-hidden="true" className="size-4" />
+            {t("build.reopenSearch")}
+          </Button>
+        )}
         <Button onClick={() => setComparing(true)}>
           <ArrowRightLeftIcon aria-hidden="true" className="size-4" />
           {t("compare.open")}
@@ -535,6 +548,7 @@ export function BuildPage({ meta }: { meta: Meta }) {
               scrolls: build.scrolls,
               items: build.items,
               mods: build.mods,
+              savedSearch: build.savedSearch,
             })
           }
         >
@@ -702,7 +716,7 @@ export function BuildPage({ meta }: { meta: Meta }) {
       </div>
       {searchSeen && (
         <div className="min-h-0 flex-1" hidden={stuffTab !== "search"}>
-          <SolverPage meta={meta} />
+          <SolverPage key={searchRevision} meta={meta} />
         </div>
       )}
       <NewBuildDialog meta={meta} open={creating} onOpenChange={setCreating} />

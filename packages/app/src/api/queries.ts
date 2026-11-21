@@ -1,6 +1,6 @@
 import { keepPreviousData, useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { useApi } from "../platform"
-import { useStore } from "../store"
+import { useStore, type SavedSearch } from "../store"
 import type {
   AttackRange,
   BuildInput,
@@ -175,6 +175,6 @@ export function useSolver() {
   const api = useApi()
   const lang = useStore((s) => s.lang)
   return useMutation({
-    mutationFn: (request: SolverRequest) => api.solve(lang, request, RESULTS_PAGE),
+    mutationFn: ({ request }: { request: SolverRequest; search: SavedSearch }) => api.solve(lang, request, RESULTS_PAGE),
   })
 }

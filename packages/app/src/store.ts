@@ -26,6 +26,7 @@ export interface Build {
   items: Record<string, number>
   /** Forgemagic of the worn items, by position. */
   mods: Record<string, ItemMods>
+  savedSearch?: SavedSearch
   updatedAt: number
 }
 
@@ -51,6 +52,13 @@ export interface SolverDraft {
   excluded: number[]
   /** Attacks that must hit for at least a value. */
   damage: DamageGoal[]
+}
+
+export type SolverSource = Pick<Build, "level" | "breedId" | "base" | "scrolls" | "items">
+
+export interface SavedSearch {
+  draft: SolverDraft
+  source: SolverSource
 }
 
 // Brings a saved draft to today's shape. Before version 5 it carried a
@@ -162,10 +170,15 @@ export function toBuildInput(build: Build): BuildInput {
 // PA, PM, Portée, Vitalité, Sagesse, Force, Intelligence, Chance, Agilité
 export const defaultStatColumns = [1, 23, 19, 11, 12, 10, 15, 13, 14]
 
-/** What undo restores: the items of a stuff and their forgemagic. */
 interface Snapshot {
   items: Record<string, number>
   mods: Record<string, ItemMods>
+  applied?: Pick<Build, "base" | "scrolls" | "savedSearch">
+}
+
+function snapshot(build: Build, includeSearch: boolean): Snapshot {
+  const { items, mods, base, scrolls, savedSearch } = build
+  return { items, mods, applied: includeSearch ? { base, scrolls, savedSearch } : undefined }
 }
 
 const HISTORY_LIMIT = 50
@@ -182,6 +195,8 @@ interface State {
   stuffTab: StuffTab
   statColumns: number[]
   solver: SolverDraft
+  solverSource: SolverSource | null
+  searchRevision: number
   /** Side panel widths in pixels, per screen. */
   panelWidths: Record<string, { left?: number; right?: number }>
 
@@ -190,6 +205,8 @@ interface State {
   setTheme(theme: ThemeChoice): void
   setStatColumns(ids: number[]): void
   updateSolver(patch: Partial<SolverDraft>): void
+  setSolverSource(source: SolverSource): void
+  reopenSearch(id: string): void
 
   /** Saves a new stuff and opens it in a tab. */
   addBuild(build: Build): void
@@ -206,7 +223,7 @@ interface State {
   /** Puts an item at a position, with its forgemagic when it comes with some. */
   equip(id: string, position: string, itemId: number | null, mods?: ItemMods): void
   /** Replaces the gear of a stuff, and its points and scrolls, in one undoable step. */
-  replaceGear(id: string, gear: Pick<Build, "items" | "mods" | "base" | "scrolls">): void
+  replaceGear(id: string, gear: Pick<Build, "items" | "mods" | "base" | "scrolls">, savedSearch?: SavedSearch): void
   setMods(id: string, position: string, mods: ItemMods | null): void
 
   /** Earlier and undone states of each stuff's items, for this session only. */
@@ -230,13 +247,12 @@ export const useStore = create<State>()(
         builds: state.builds.map((b) => (b.id === id ? { ...change(b), updatedAt: Date.now() } : b)),
       })
       // Changes to items go through here so they can be undone.
-      const patchItems = (state: State, id: string, change: (build: Build) => Build) => {
+      const patchItems = (state: State, id: string, change: (build: Build) => Build, includeSearch = false) => {
         const current = state.builds.find((b) => b.id === id)
         if (!current) return {}
-        const snapshot: Snapshot = { items: current.items, mods: current.mods }
         return {
           ...patchBuild(state, id, change),
-          past: { ...state.past, [id]: [...(state.past[id] ?? []), snapshot].slice(-HISTORY_LIMIT) },
+          past: { ...state.past, [id]: [...(state.past[id] ?? []), snapshot(current, includeSearch)].slice(-HISTORY_LIMIT) },
           future: { ...state.future, [id]: [] },
         }
       }
@@ -246,10 +262,11 @@ export const useStore = create<State>()(
         const current = state.builds.find((b) => b.id === id)
         const target = stack[stack.length - 1]
         if (!current || !target) return false
+        const { applied, ...gear } = target
         set({
-          ...patchBuild(state, id, (b) => ({ ...b, ...target })),
+          ...patchBuild(state, id, (b) => ({ ...b, ...gear, ...applied })),
           [from]: { ...state[from], [id]: stack.slice(0, -1) },
-          [to]: { ...state[to], [id]: [...(state[to][id] ?? []), { items: current.items, mods: current.mods }] },
+          [to]: { ...state[to], [id]: [...(state[to][id] ?? []), snapshot(current, applied !== undefined)] },
         } as Partial<State>)
         return true
       }
@@ -262,6 +279,8 @@ export const useStore = create<State>()(
         stuffTab: "build",
         statColumns: defaultStatColumns,
         solver: defaultSolver,
+        solverSource: null,
+        searchRevision: 0,
         panelWidths: {},
 
         setLang: (lang) => set({ lang }),
@@ -269,6 +288,21 @@ export const useStore = create<State>()(
         setTheme: (theme) => set({ theme }),
         setStatColumns: (statColumns) => set({ statColumns }),
         updateSolver: (patch) => set((state) => ({ solver: { ...state.solver, ...patch } })),
+        setSolverSource: (solverSource) => set({ solverSource }),
+        reopenSearch: (id) =>
+          set((state) => {
+            const saved = state.builds.find((b) => b.id === id)?.savedSearch
+            if (!saved) return {}
+            const { draft, source } = structuredClone(saved)
+            return {
+              solver: draft,
+              solverSource: source,
+              searchRevision: state.searchRevision + 1,
+              activeBuildId: id,
+              openBuildIds: state.openBuildIds.includes(id) ? state.openBuildIds : [...state.openBuildIds, id],
+              stuffTab: "search",
+            }
+          }),
 
         addBuild: (build) =>
           set((state) => ({
@@ -276,6 +310,7 @@ export const useStore = create<State>()(
             activeBuildId: build.id,
             openBuildIds: [...state.openBuildIds, build.id],
             stuffTab: "build",
+            solverSource: null,
           })),
         selectBuild: (id) =>
           set((state) =>
@@ -284,6 +319,7 @@ export const useStore = create<State>()(
                   activeBuildId: id,
                   openBuildIds: state.openBuildIds.includes(id) ? state.openBuildIds : [...state.openBuildIds, id],
                   stuffTab: "build",
+                  solverSource: state.activeBuildId === id ? state.solverSource : null,
                 }
               : {}
           ),
@@ -293,6 +329,7 @@ export const useStore = create<State>()(
               ? {
                   activeBuildId: id,
                   openBuildIds: state.openBuildIds.includes(id) ? state.openBuildIds : [...state.openBuildIds, id],
+                  solverSource: null,
                 }
               : {}
           ),
@@ -304,7 +341,7 @@ export const useStore = create<State>()(
             if (state.activeBuildId !== id) return { openBuildIds }
             // The neighbour takes over; with no tab left the list shows.
             const next = openBuildIds[Math.max(0, at - 1)]
-            if (next) return { openBuildIds, activeBuildId: next }
+            if (next) return { openBuildIds, activeBuildId: next, solverSource: null }
             return { openBuildIds, stuffTab: state.stuffTab === "build" ? "list" : state.stuffTab }
           }),
         showTab: (stuffTab) => set({ stuffTab }),
@@ -320,6 +357,7 @@ export const useStore = create<State>()(
               builds,
               openBuildIds,
               activeBuildId: next ?? builds[0]!.id,
+              solverSource: null,
               stuffTab: next || state.stuffTab !== "build" ? state.stuffTab : "list",
             }
           }),
@@ -330,7 +368,8 @@ export const useStore = create<State>()(
 
         equip: (id, position, itemId, forged) =>
           set((state) => patchItems(state, id, (b) => withEquipment(b, position, itemId, forged))),
-        replaceGear: (id, gear) => set((state) => patchItems(state, id, (b) => ({ ...b, ...gear }))),
+        replaceGear: (id, gear, savedSearch) =>
+          set((state) => patchItems(state, id, (b) => ({ ...b, ...gear, savedSearch: savedSearch ?? b.savedSearch }), true)),
         setMods: (id, position, next) =>
           set((state) => patchItems(state, id, (b) => withForge(b, position, next))),
       }
@@ -367,6 +406,7 @@ export const useStore = create<State>()(
         stuffTab,
         statColumns,
         solver,
+        solverSource,
         panelWidths,
       }) => ({
         lang,
@@ -377,6 +417,7 @@ export const useStore = create<State>()(
         stuffTab,
         statColumns,
         solver,
+        solverSource,
         panelWidths,
       }),
     }

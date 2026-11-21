@@ -24,7 +24,7 @@ import { useAddToBuild } from "../../lib/useAddToBuild"
 import { useBreakpoint } from "../../lib/useBreakpoint"
 import { maximizedAttack, weaponElements } from "../../lib/maximize"
 import { AP_STAT, HP_STAT, MP_STAT, RANGE_STAT, statLabel, toneOf } from "../../lib/stats"
-import { newBuild, useActiveBuild, useStore } from "../../store"
+import { newBuild, useActiveBuild, useStore, type SavedSearch } from "../../store"
 import { nextBuildName } from "../build/BuildTabs"
 import { CompareDialog, savedOption, type CompareOption } from "../compare/CompareDialog"
 import { ElementGoalOptions } from "./ElementGoal"
@@ -394,6 +394,10 @@ export function SolverPage({ meta }: { meta: Meta }) {
   const { t, number, colon } = useI18n()
   const build = useActiveBuild()
   const draft = useStore((s) => s.solver)
+  const restoredSource = useStore((s) => s.solverSource)
+  const source = restoredSource ?? build
+  const { breedId, level } = source
+  const setSolverSource = useStore((s) => s.setSolverSource)
   const updateSolver = useStore((s) => s.updateSolver)
   const builds = useStore((s) => s.builds)
   const addBuild = useStore((s) => s.addBuild)
@@ -402,10 +406,7 @@ export function SolverPage({ meta }: { meta: Meta }) {
   const solver = useSolver()
   const addToBuild = useAddToBuild(meta)
   const breakpoint = useBreakpoint()
-  const [lastRequest, setLastRequest] = React.useState<SolverRequest | null>(null)
-  // The pages of stuffs read after the first one, which comes with the search.
-  const [morePages, setMorePages] = React.useState<Solution[]>([])
-  const [loadingMore, setLoadingMore] = React.useState(false)
+  const [pages, setPages] = React.useState<{ id: string; solutions: Solution[]; loading: boolean } | null>(null)
   // The result being compared, by its place in the list.
   const [comparing, setComparing] = React.useState<number | null>(null)
   const api = useApi()
@@ -414,23 +415,23 @@ export function SolverPage({ meta }: { meta: Meta }) {
   const byId = new Map(meta.stats.map((s) => [s.id, s]))
   const usedStats = draft.constraints.map((c) => c.statId)
   const firstFree = meta.stats.find((s) => !usedStats.includes(s.id) && s.id !== HP_STAT)
-  const equippedCount = Object.keys(build.items).length
+  const equippedCount = Object.keys(source.items).length
   const canRun = draft.constraints.length > 0 || draft.maximize.length > 0 || draft.damage.length > 0
   const spellOptions = React.useCallback(
     (taken: Set<number>) => {
-      const options = (breedId: number) =>
+      const options = (classId: number) =>
         meta.spells
-          .filter((spell) => spell.breedId === breedId && spell.damage && !taken.has(spell.id))
+          .filter((spell) => spell.breedId === classId && spell.damage && !taken.has(spell.id))
           .map((spell) => ({ value: String(spell.id), label: spell.name }))
-      const breed = meta.breeds.find((b) => b.id === build.breedId)
+      const breed = meta.breeds.find((b) => b.id === breedId)
       return [
         ...(breed ? [{ label: breed.name, options: options(breed.id) }] : []),
         { label: t("damage.common"), options: options(0) },
       ]
     },
-    [meta, build.breedId, t]
+    [meta, breedId, t]
   )
-  const breedOfBuild = meta.breeds.find((b) => b.id === build.breedId)
+  const breedOfBuild = meta.breeds.find((b) => b.id === breedId)
 
   // A forbidden item cannot also be required.
   function exclude(item: Item) {
@@ -447,51 +448,56 @@ export function SolverPage({ meta }: { meta: Meta }) {
   )
   const spellGroups = React.useMemo(() => {
     const taken = new Set(draft.damage.filter((g) => g.kind === "spell").map((g) => g.id))
-    const options = (breedId: number) =>
+    const options = (classId: number) =>
       meta.spells
-        .filter((spell) => spell.breedId === breedId && spell.damage && !taken.has(spell.id))
+        .filter((spell) => spell.breedId === classId && spell.damage && !taken.has(spell.id))
         .map((spell) => ({ value: String(spell.id), label: spell.name }))
-    const breed = meta.breeds.find((b) => b.id === build.breedId)
+    const breed = meta.breeds.find((b) => b.id === breedId)
     return [
       ...(breed ? [{ label: breed.name, options: options(breed.id) }] : []),
       { label: t("damage.common"), options: options(0) },
     ]
-  }, [meta, build.breedId, draft.damage, t])
+  }, [meta, breedId, draft.damage, t])
 
   function run() {
+    if (solver.isPending) return
+    const search: SavedSearch = structuredClone({
+      draft,
+      source: { level, breedId, base: source.base, scrolls: source.scrolls, items: source.items },
+    })
+    const { draft: criteria, source: origin } = search
     const request: SolverRequest = {
       character: {
-        level: build.level,
-        base: build.base,
-        scrolls: draft.fullScrolls
+        level: origin.level,
+        base: origin.base,
+        scrolls: criteria.fullScrolls
           ? { vitality: 100, wisdom: 100, strength: 100, intelligence: 100, chance: 100, agility: 100 }
-          : build.scrolls,
+          : origin.scrolls,
       },
-      autoPoints: draft.autoPoints,
-      constraints: draft.constraints,
-      maximize: draft.maximize.map((entry) =>
+      autoPoints: criteria.autoPoints,
+      constraints: criteria.constraints,
+      maximize: criteria.maximize.map((entry) =>
         entry.kind === "stat" ? { statId: entry.statId, weight: 1 } : { statId: 0, weight: 1, damage: maximizedAttack(entry) }
       ),
-      breedId: build.breedId ?? 0,
-      damage: draft.damage,
-      locked: draft.keepEquipped ? build.items : {},
-      required: draft.required,
-      excluded: draft.excluded,
+      breedId: origin.breedId ?? 0,
+      damage: criteria.damage,
+      locked: criteria.keepEquipped ? origin.items : {},
+      required: criteria.required,
+      excluded: criteria.excluded,
       maxResults: MAX_RESULTS,
       forge: {
         exos: [
-          ...(draft.exoAp ? [AP_STAT] : []),
-          ...(draft.exoMp ? [MP_STAT] : []),
-          ...(draft.exoRange ? [RANGE_STAT] : []),
+          ...(criteria.exoAp ? [AP_STAT] : []),
+          ...(criteria.exoMp ? [MP_STAT] : []),
+          ...(criteria.exoRange ? [RANGE_STAT] : []),
         ],
-        transcendence: draft.transcendence,
-        draco: draft.draco,
-        raiseCritical: draft.raiseCritical,
+        transcendence: criteria.transcendence,
+        draco: criteria.draco,
+        raiseCritical: criteria.raiseCritical,
       },
     }
-    setLastRequest(request)
-    setMorePages([])
-    solver.mutate(request, {
+    setPages(null)
+    solver.mutate({ request, search }, {
       // On narrow layouts the results sit below the form: bring them into view.
       onSuccess: () => {
         if (window.matchMedia("(max-width: 63.99rem)").matches) {
@@ -506,7 +512,7 @@ export function SolverPage({ meta }: { meta: Meta }) {
 
   // The stuff picked takes the points and scrolls the search counted, so its
   // stats are the ones shown in the result.
-  async function apply(solution: Solution) {
+  async function apply(solution: Solution, search: SavedSearch) {
     const target = await pickBuild({
       title: t("solver.applyTitle"),
       hint: t("solver.applyHint"),
@@ -514,35 +520,38 @@ export function SolverPage({ meta }: { meta: Meta }) {
     })
     if (!target) return
     const { replaceGear, selectBuild } = useStore.getState()
-    replaceGear(target.id, {
-      items: solution.items,
-      mods: solution.mods ?? {},
-      base: solution.character.base,
-      scrolls: solution.character.scrolls,
-    })
+    replaceGear(
+      target.id,
+      { items: solution.items, mods: solution.mods ?? {}, base: solution.character.base, scrolls: solution.character.scrolls },
+      search
+    )
     toaster(t("solver.applied", { name: target.name }))
     selectBuild(target.id)
   }
 
-  function open(solution: Solution) {
+  function open(solution: Solution, search: SavedSearch) {
     const created = newBuild(
       nextBuildName(
         (n) => t("build.numbered", { n }),
         builds.map((b) => b.name)
       )
     )
-    created.breedId = build.breedId
-    created.level = build.level
+    created.breedId = search.source.breedId
+    created.level = solution.character.level
     created.base = solution.character.base
     created.scrolls = solution.character.scrolls
     created.items = solution.items
     created.mods = solution.mods ?? {}
+    created.savedSearch = search
     addBuild(created)
     toaster(t("solver.opened", { name: created.name }))
   }
 
   const response = solver.data
-  const list = [...(response?.solutions ?? []), ...morePages]
+  const lastRequest = solver.variables?.request
+  const lastSearch = solver.variables?.search
+  const currentPages = pages?.id === response?.id ? pages : null
+  const list = [...(response?.solutions ?? []), ...(currentPages?.solutions ?? [])]
 
   // A result is compared with the stuff the search targets, then with any
   // saved stuff or any other result the player picks.
@@ -566,15 +575,18 @@ export function SolverPage({ meta }: { meta: Meta }) {
   ]
 
   async function loadMore() {
-    if (!response || loadingMore) return
-    setLoadingMore(true)
+    if (!response || currentPages?.loading) return
+    const id = response.id
+    setPages({ id, solutions: currentPages?.solutions ?? [], loading: true })
     try {
-      const page = await api.results(response.id, list.length, RESULTS_PAGE)
-      setMorePages((pages) => [...pages, ...page.solutions])
+      const page = await api.results(id, list.length, RESULTS_PAGE)
+      setPages((previous) =>
+        previous?.id === id ? { ...previous, solutions: [...previous.solutions, ...page.solutions] } : previous
+      )
     } catch (error) {
       toaster(error instanceof ApiError && error.code === "results_expired" ? t("solver.expired") : t("solver.error"))
     } finally {
-      setLoadingMore(false)
+      setPages((previous) => (previous?.id === id ? { ...previous, loading: false } : previous))
     }
   }
 
@@ -587,7 +599,9 @@ export function SolverPage({ meta }: { meta: Meta }) {
         }}
       >
         <div>
-          <h1 className="m-0 text-xl font-bold">{t("solver.title")}</h1>
+          <h1 id="solver-title" className="m-0 text-xl font-bold" tabIndex={-1}>
+            {t("solver.title")}
+          </h1>
           <p className="m-0 mt-1.5 max-w-[60ch] text-ink-2">{t("solver.intro")}</p>
         </div>
 
@@ -737,7 +751,7 @@ export function SolverPage({ meta }: { meta: Meta }) {
                       </div>
                     )}
                     {entry.kind === "element" && (
-                      <ElementGoalOptions meta={meta} breedId={build.breedId ?? 0} entry={entry} onChange={replace} />
+                      <ElementGoalOptions meta={meta} breedId={breedId ?? 0} entry={entry} onChange={replace} />
                     )}
                   </li>
                 )
@@ -858,19 +872,27 @@ export function SolverPage({ meta }: { meta: Meta }) {
                 ))}
               </SelectContent>
             </Select>
-            <p className="m-0 text-ink-2">{t("solver.targetHint")}</p>
+            <p className="m-0 text-ink-2">{t(restoredSource ? "solver.savedSourceHint" : "solver.targetHint")}</p>
+            {restoredSource && (
+              <Button className="justify-self-start" onClick={() => targetBuild(build.id)}>
+                {t("solver.useCurrentBuild")}
+              </Button>
+            )}
           </div>
           <div className="flex items-center justify-between gap-3">
             <span>
-              <span className="block font-semibold">{t("solver.level")}</span>
+              <span className="block font-semibold">{t(restoredSource ? "solver.searchLevel" : "solver.level")}</span>
               <span className="text-ink-2">{t("solver.levelHint")}</span>
             </span>
             <NumberField
-              label={t("solver.level")}
-              value={build.level}
+              label={t(restoredSource ? "solver.searchLevel" : "solver.level")}
+              value={level}
               min={1}
               max={meta.maxLevel}
-              onChange={(level) => updateBuild(build.id, { level })}
+              onChange={(nextLevel) => {
+                if (restoredSource) setSolverSource({ ...restoredSource, level: nextLevel })
+                else updateBuild(build.id, { level: nextLevel })
+              }}
             />
           </div>
           <label className="flex cursor-pointer items-start gap-3">
@@ -880,7 +902,7 @@ export function SolverPage({ meta }: { meta: Meta }) {
             <span>
               <span className="block font-semibold">{t("solver.autoPoints")}</span>
               <span className="text-ink-2">
-                {draft.autoPoints ? t("solver.autoPointsHint", { total: (build.level - 1) * 5 }) : t("solver.manualPointsHint")}
+                {draft.autoPoints ? t("solver.autoPointsHint", { total: (level - 1) * 5 }) : t("solver.manualPointsHint")}
               </span>
             </span>
           </label>
@@ -953,7 +975,7 @@ export function SolverPage({ meta }: { meta: Meta }) {
               <div key={i} className="skeleton h-24" />
             ))}
           </div>
-        ) : response && lastRequest ? (
+        ) : response && lastRequest && lastSearch ? (
           <>
             <header className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 border-b border-line bg-panel-2 px-5 py-3">
               {response.feasible > 0 ? (
@@ -993,8 +1015,8 @@ export function SolverPage({ meta }: { meta: Meta }) {
                   rank={index + 1}
                   solution={solution}
                   request={lastRequest}
-                  onApply={() => void apply(solution)}
-                  onOpen={() => open(solution)}
+                  onApply={() => void apply(solution, lastSearch)}
+                  onOpen={() => open(solution, lastSearch)}
                   onCompare={() => setComparing(index)}
                   onAdd={(item, from) => void addToBuild(item, from)}
                   onExclude={(item) => {
@@ -1007,8 +1029,8 @@ export function SolverPage({ meta }: { meta: Meta }) {
             {response.total > list.length && (
               <div className="flex flex-wrap items-center justify-center gap-3 p-4">
                 <span className="text-ink-2">{t("build.shown", { count: list.length, total: response.total })}</span>
-                <Button disabled={loadingMore} onClick={() => void loadMore()}>
-                  {loadingMore
+                <Button disabled={currentPages?.loading} onClick={() => void loadMore()}>
+                  {currentPages?.loading
                     ? t("common.loading")
                     : t("build.showMore", { count: Math.min(RESULTS_PAGE, response.total - list.length) })}
                 </Button>
@@ -1018,11 +1040,13 @@ export function SolverPage({ meta }: { meta: Meta }) {
         ) : (
           <div className="board grid h-full place-items-center p-6">
             <div className="grid max-w-md justify-items-start gap-3 rounded-lg border border-line bg-panel p-6">
-              <h2 className="m-0 text-base font-bold">{t("solver.idle.title")}</h2>
-              <p className="m-0 text-ink-2">{t("solver.idle.body")}</p>
-              <Button onClick={() => updateSolver({ constraints: example.constraints, maximize: example.maximize })}>
-                {t("solver.example")}
-              </Button>
+              <h2 className="m-0 text-base font-bold">{t(restoredSource ? "solver.saved.title" : "solver.idle.title")}</h2>
+              <p className="m-0 text-ink-2">{t(restoredSource ? "solver.saved.body" : "solver.idle.body")}</p>
+              {!restoredSource && (
+                <Button onClick={() => updateSolver({ constraints: example.constraints, maximize: example.maximize })}>
+                  {t("solver.example")}
+                </Button>
+              )}
             </div>
           </div>
         )}

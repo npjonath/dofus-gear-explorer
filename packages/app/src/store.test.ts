@@ -86,6 +86,20 @@ describe("stuff tabs", () => {
     useStore.getState().undo(a.id)
     expect(useStore.getState().builds[0]!.items).toEqual({ hat: 1 })
   })
+
+  it("undoes and redoes the search and character changes together with its equipment", () => {
+    const { level, breedId, base, scrolls, items } = a
+    const savedSearch = {
+      draft: { ...useStore.getInitialState().solver, required: [2] },
+      source: { level, breedId, base, scrolls, items },
+    }
+    useStore.getState().replaceGear(a.id, { items: { ring1: 2 }, mods: {}, base: { ...base, strength: 100 }, scrolls }, savedSearch)
+    useStore.getState().undo(a.id)
+    expect(useStore.getState().builds[0]).toMatchObject({ items, base, scrolls })
+    expect(useStore.getState().builds[0]?.savedSearch).toBeUndefined()
+    useStore.getState().redo(a.id)
+    expect(useStore.getState().builds[0]).toMatchObject({ items: { ring1: 2 }, base: { strength: 100 }, savedSearch })
+  })
 })
 
 describe("saved state", () => {
