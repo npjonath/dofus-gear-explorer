@@ -37,6 +37,14 @@ func (s *Server) guard(next http.Handler) http.Handler {
 		}
 		w.Header().Add("Vary", "Origin")
 		origin := r.Header.Get("Origin")
+		// Chromium loads fonts and CSS masks from a packaged file:// page in
+		// anonymous CORS mode. The artwork routes contain only game resources.
+		art := r.Method == http.MethodGet && strings.HasPrefix(r.URL.Path, "/fight-assets/")
+		if art && (origin == "" || origin == "null" || origin == "file://") {
+			w.Header().Set("Access-Control-Allow-Origin", "*")
+			next.ServeHTTP(w, r)
+			return
+		}
 		switch {
 		case origin == "":
 		case allowed["*"] || allowed[origin]:

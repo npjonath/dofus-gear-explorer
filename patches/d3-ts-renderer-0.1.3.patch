@@ -1,0 +1,15 @@
+diff --git a/dist/shared.js b/dist/shared.js
+--- a/dist/shared.js
++++ b/dist/shared.js
+@@ -321,6 +321,11 @@
+ }
+ var _loader;
+ function setLoader(loader) {
++  if (_loader !== loader) {
++    _bodiesPromise = void 0;
++    _breedsPromise = void 0;
++    _skinSlotsPromise = void 0;
++  }
+   _loader = loader;
+   return loader;
+ }

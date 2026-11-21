@@ -1,6 +1,9 @@
 package game
 
-import "strings"
+import (
+	"strconv"
+	"strings"
+)
 
 // Elements of an attack line, numbered as in the game data.
 const (
@@ -132,6 +135,134 @@ func TargetsEnemy(mask string) bool {
 	return len(names) == 0
 }
 
+// BreedTriggered files the spells no character casts directly: those another
+// spell casts in turn. They belong to no class and are never listed.
+const BreedTriggered = -1
+
+// Actions through which a spell casts another one: the spell cast is the
+// effect's Min and its grade the effect's Max. They differ in who casts and
+// where: the target is who the effect applies to, the source who set the
+// effect off (the caster, or for an effect that waits, whoever triggered it).
+const (
+	// ActionTargetCasts has the target cast the spell on its own cell.
+	ActionTargetCasts = 792
+	// ActionTargetExecutes and ActionTargetExecutesShown do the same.
+	ActionTargetExecutes      = 1017
+	ActionTargetExecutesShown = 1018
+	// ActionTargetCastsOnSource has the target cast it on the source.
+	ActionTargetCastsOnSource = 1019
+	// ActionCastSpell has the caster cast the spell on the target's cell.
+	ActionCastSpell = 1160
+	// ActionSourceCasts has the source cast it on the target's cell.
+	ActionSourceCasts = 2160
+	// ActionTargetCastsOnCell has the named fighter cast it on the originally
+	// aimed cell, including an empty one.
+	ActionTargetCastsOnCell = 2794
+	// ActionCastsOnCell has the caster cast it on the aimed cell, whether
+	// anyone stands there or not.
+	ActionCastsOnCell = 2960
+)
+
+// CastsSpell reports whether an action casts another spell.
+func CastsSpell(action int) bool {
+	switch action {
+	case ActionTargetCasts, ActionTargetExecutes, ActionTargetExecutesShown, ActionTargetCastsOnSource,
+		ActionCastSpell, ActionSourceCasts, ActionTargetCastsOnCell, ActionCastsOnCell:
+		return true
+	}
+	return false
+}
+
+// PlacesMark identifies effects whose first two arguments specify the payload
+// spell and its grade. The importer retains it even when no breed casts it.
+func PlacesMark(action int) bool {
+	switch action {
+	case 400, 401, 402, 1091, 1165, 2022:
+		return true
+	}
+	return false
+}
+
+// Zone is the cells an effect covers around the cell a spell is aimed at.
+type Zone struct {
+	NativeCells []int `json:"nativeCells,omitempty"`
+	Direction   int   `json:"direction,omitempty"` // Native direction plus one; zero follows the caster.
+	Sight       bool  `json:"sight,omitempty"`
+
+	ExcludeCarried bool `json:"excludeCarried,omitempty"`
+	// Shape is the game's letter for the shape: "P" a single cell, "C" a
+	// circle, "X" a cross, "L" a line, and so on.
+	Shape string `json:"shape,omitempty"`
+	// Size is how far the shape reaches and Min the distance it starts at.
+	Size int `json:"size,omitempty"`
+	Min  int `json:"min,omitempty"`
+	// Decrease is the percentage of damage lost per cell away from the
+	// centre of the zone, at most Steps times.
+	Decrease int `json:"decrease,omitempty"`
+	Steps    int `json:"steps,omitempty"`
+}
+
+// SpellEffect is one effect of a spell grade as the game data gives it,
+// which the fight simulator applies.
+type SpellEffect struct {
+	Dispellable bool `json:"dispellable,omitempty"`
+	// Action is the game's effect number; Min, Max and Value are its
+	// parameters: a roll, a number of cells, a state, another spell.
+	Action int `json:"action"`
+	// Stat and Sign are set on an effect that raises (1) or lowers (-1) a
+	// characteristic.
+	Stat  int `json:"stat,omitempty"`
+	Sign  int `json:"sign,omitempty"`
+	Min   int `json:"min,omitempty"`
+	Max   int `json:"max,omitempty"`
+	Value int `json:"value,omitempty"`
+	// Targets is the game's mask of who the effect applies to.
+	Targets string `json:"targets,omitempty"`
+	// Duration is the number of turns the effect lasts, zero for an effect
+	// applied once, -1 for one that never ends.
+	Duration int `json:"duration,omitempty"`
+	Delay    int `json:"delay,omitempty"`
+	// Trigger is empty for an effect applied as the spell is cast, or the
+	// game's triggers otherwise: the effect waits on its target and applies
+	// each time one of them happens, for TriggerTurns turns (63 and more is
+	// for the whole fight).
+	Trigger      string `json:"trigger,omitempty"`
+	TriggerTurns int    `json:"triggerTurns,omitempty"`
+	Zone         Zone   `json:"zone"`
+	// Random is the weight of an effect drawn among those of its Group.
+	Random float64 `json:"random,omitempty"`
+	Group  int     `json:"group,omitempty"`
+	// Shown says the game lists the effect in the spell's description, and
+	// Described that the spell only describes it: something it sets up
+	// applies it later.
+	Shown     bool `json:"shown,omitempty"`
+	Described bool `json:"described,omitempty"`
+}
+
+// CastRules is how a spell grade is aimed and how often it can be cast.
+type CastRules struct {
+	// Line and Diagonal restrict the cells it can be aimed at; with both,
+	// either is allowed.
+	Line     bool `json:"line,omitempty"`
+	Diagonal bool `json:"diagonal,omitempty"`
+	// Sight says the caster must see the cell.
+	Sight        bool `json:"sight,omitempty"`
+	FreeCell     bool `json:"freeCell,omitempty"`
+	TakenCell    bool `json:"takenCell,omitempty"`
+	NoPortal     bool `json:"noPortal,omitempty"`
+	NoProjection bool `json:"noProjection,omitempty"`
+	// BoostRange says the caster's Range adds to the spell's.
+	BoostRange bool `json:"boostRange,omitempty"`
+	// PerTurn and PerTarget cap the casts in a turn; zero is no cap.
+	PerTurn   int `json:"perTurn,omitempty"`
+	PerTarget int `json:"perTarget,omitempty"`
+	// Interval is the number of turns between two casts.
+	Interval        int `json:"interval,omitempty"`
+	InitialCooldown int `json:"initialCooldown,omitempty"`
+	// MaxStack caps how many times the spell's effects pile up on a target.
+	MaxStack int `json:"maxStack,omitempty"`
+}
+
 // SpellLevel is a spell at one of its grades.
 type SpellLevel struct {
 	Grade      int          `json:"grade"`
@@ -141,13 +272,18 @@ type SpellLevel struct {
 	RangeMax   int          `json:"rangeMax"`
 	CritChance int          `json:"critChance"`
 	Lines      []AttackLine `json:"lines"`
+	// Cast, Effects and CritEffects are what the fight simulator reads.
+	Cast        CastRules     `json:"cast"`
+	Effects     []SpellEffect `json:"effects,omitempty"`
+	CritEffects []SpellEffect `json:"critEffects,omitempty"`
 }
 
 // Spell is a class spell or a common spell. Only the lines the damage panel
 // computes are kept: damage, steals, heals and pushbacks.
 type Spell struct {
-	ID     int
-	IconID int
+	Description Texts
+	ID          int
+	IconID      int
 	// BreedID is the class the spell belongs to; zero for a common spell.
 	BreedID int
 	// Order sorts the spells of a class as the game lists them, each variant
@@ -155,6 +291,9 @@ type Spell struct {
 	Order int
 	// VariantOf is the spell this one replaces, or zero.
 	VariantOf int
+	// StartsFor is the class whose fights start with this spell cast on the
+	// character: what sets its states and passive effects. Zero for others.
+	StartsFor int
 	Name      Texts
 	Levels    []SpellLevel
 }
@@ -210,4 +349,41 @@ var AttackStats = []int{
 	StatStrength, StatIntel, StatChance, StatAgility, StatPower,
 	StatDamage, StatDamageEarth, StatDamageFire, StatDamageWater, StatDamageAir, StatDamageNeutral,
 	StatCritDamage, StatRangedDamage, StatWeaponDamage, StatSpellDamage, StatMeleeDamage,
+}
+
+// SummonsCreature identifies direct creation of a creature on the aimed cell.
+func SummonsCreature(action int) bool {
+	switch action {
+	case 181, 405, 1008, 1011, 2796:
+		return true
+	default:
+		return false
+	}
+}
+
+// WeaponZone reads the area attached to the weapon type. The cross's compact
+// game notation includes an inner radius before its damage falloff fields.
+func (t *ItemType) WeaponZone() Zone {
+	if t == nil || t.RawZone == "" {
+		return Zone{Shape: "P"}
+	}
+	z := Zone{Shape: t.RawZone[:1]}
+	params := strings.Split(t.RawZone[1:], ",")
+	read := func(i int) int {
+		if i >= len(params) {
+			return 0
+		}
+		n, _ := strconv.Atoi(params[i])
+		return n
+	}
+	z.Size = read(0)
+	if z.Shape == "X" {
+		z.Min = read(1)
+		z.Decrease = read(2)
+		z.Steps = read(3)
+	} else {
+		z.Decrease = read(1)
+		z.Steps = read(2)
+	}
+	return z
 }

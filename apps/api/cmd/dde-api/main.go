@@ -28,19 +28,20 @@ import (
 )
 
 type config struct {
-	addr          string
-	dataDir       string
-	langs         string
-	repo          string
-	imageSize     int
-	checkInterval time.Duration
-	autoUpdate    bool
-	keepCache     bool
-	corsOrigin    string
-	webDir        string
-	version       string
-	source        string
-	followStdin   bool
+	addr                   string
+	dataDir                string
+	fightAssetsFallbackDir string
+	langs                  string
+	repo                   string
+	imageSize              int
+	checkInterval          time.Duration
+	autoUpdate             bool
+	keepCache              bool
+	corsOrigin             string
+	webDir                 string
+	version                string
+	source                 string
+	followStdin            bool
 }
 
 func env(key, fallback string) string {
@@ -55,6 +56,7 @@ func parseFlags(name string, args []string) (*config, error) {
 	fs := flag.NewFlagSet(name, flag.ContinueOnError)
 	fs.StringVar(&cfg.addr, "addr", env("DDE_ADDR", "127.0.0.1:8787"), "address to listen on (use port 0 for a free port)")
 	fs.StringVar(&cfg.dataDir, "data-dir", env("DDE_DATA_DIR", "data"), "directory for the SQLite database and item icons")
+	fs.StringVar(&cfg.fightAssetsFallbackDir, "fight-assets-fallback-dir", "", "other local combat cache to read when the primary cache is unavailable")
 	fs.StringVar(&cfg.langs, "langs", env("DDE_LANGS", "fr,en,es,pt"), "languages to import, comma separated")
 	fs.StringVar(&cfg.repo, "repo", env("DDE_RELEASE_REPO", release.DefaultRepo), "GitHub repository publishing the game data")
 	fs.IntVar(&cfg.imageSize, "image-size", 128, "item icon size to import: 64 or 128")
@@ -117,7 +119,8 @@ func run(command string, cfg *config, log *slog.Logger) error {
 	client := release.NewClient(cfg.repo, os.Getenv("GITHUB_TOKEN"))
 	up := updater.New(st, client, updater.Options{
 		DataDir: cfg.dataDir, Langs: langs, ImageSize: cfg.imageSize,
-		CheckInterval: cfg.checkInterval, AutoUpdate: cfg.autoUpdate, KeepCache: cfg.keepCache,
+		FightAssetsFallbackDir: cfg.fightAssetsFallbackDir,
+		CheckInterval:          cfg.checkInterval, AutoUpdate: cfg.autoUpdate, KeepCache: cfg.keepCache,
 	}, log, server.SetDataset)
 	server.SetUpdater(up)
 

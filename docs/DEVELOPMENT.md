@@ -25,7 +25,7 @@ To run the desktop app instead:
 pnpm dev:desktop
 ```
 
-Development runs keep their stuffs, settings and game data in their own folder, `Dofus Gear Explorer Dev` (next to the installed app's `Dofus Gear Explorer`), so they never share storage with an installed copy. Set `DDE_DATA_DIR` to reuse game data you already imported, for example `DDE_DATA_DIR=$PWD/apps/api/data pnpm dev:desktop`. Only one copy of the app runs at a time: opening it again brings back the window already open.
+Development runs keep their stuffs, settings and database in `Dofus Gear Explorer Dev`, next to the installed app's `Dofus Gear Explorer`. Each default profile reads the other's combat pack if its own pack is unavailable. A custom `--user-data-dir` or `DDE_DATA_DIR` uses its own combat cache. To reuse a specific data directory, run `DDE_DATA_DIR=$PWD/apps/api/data pnpm dev:desktop`. Opening the same profile again brings its window forward.
 
 ### Packaging the desktop app
 
@@ -82,7 +82,7 @@ A stuff travels as a code: base64url JSON of positional arrays (version, name, l
 
 ## Game data
 
-Data comes from the JSON files that [doduda](https://github.com/dofusdude/doduda) publishes in the [dofusdude/dofus3-main releases](https://github.com/dofusdude/dofus3-main/releases). The API reads `items.json`, `item_sets.json`, `item_types.json`, `item_super_types.json`, `effects.json`, `characteristics.json`, `chars_categories.json`, `spells.json` and one translation file per language, then writes them to `apps/api/data/dofus.db`. Item icons are extracted to `apps/api/data/images`.
+Data comes from the JSON files that [doduda](https://github.com/dofusdude/doduda) publishes in the [dofusdude/dofus3-main releases](https://github.com/dofusdude/dofus3-main/releases). The API reads `items.json`, `item_sets.json`, `item_types.json`, `item_super_types.json`, `effects.json`, `characteristics.json`, `chars_categories.json`, `spells.json`, `spell_types.json` and one translation file per language, then writes them to `apps/api/data/dofus.db`. Item icons are extracted to `apps/api/data/images/items`, and the fight simulator's spell icons and class portraits (`spell_images_96.tar.gz`, `class_head_images_64.tar.gz`) to `images/spells` and `images/breeds`; a release without them leaves the app with initials.
 
 Only equipment is imported: amulets, rings, belts, boots, hats, cloaks, weapons, shields, pets and mounts, Dofus, trophies and prysmaradites. Items no player can equip (game master items, disabled items) and items without any effect are left out.
 
@@ -91,7 +91,7 @@ Three more things come from the same files:
 - **Forgemagic weights**: each characteristic's rune weight (`effectPowerRate`), which sets how high a line can be forged.
 - **Transcendence runes**: the 81 runes, the bonus each gives and its density (effect 2826: 40, 60 or 80).
 - **Passive effects**: Dofus, prysmaradites and legendary items point at a spell whose description is their passive.
-- **Classes and spells**: the 19 classes, their spells and variants and the 12 common spells (`breeds.json`, `spell_variants.json`, `spell_levels.json`), with the direct damage lines of each grade.
+- **Classes and spells**: the 19 classes, their spells and variants and the 12 common spells (`breeds.json`, `spell_variants.json`, `spell_levels.json`), with the direct damage lines of each grade. For the fight simulator, each grade also keeps how it is cast and every effect as the game lists it, and the spells a castable spell casts in turn are imported with it (filed under no class, never listed).
 
 ### Updating
 
@@ -130,6 +130,7 @@ cd apps/api && go run ./cmd/dde-api sync --source /path/to/doduda/output
 | --- | --- | --- | --- |
 | `--addr` | `DDE_ADDR` | `127.0.0.1:8787` | Listen address. Port `0` picks a free port. |
 | `--data-dir` | `DDE_DATA_DIR` | `data` | SQLite database and icons. |
+| `--fight-assets-fallback-dir` | | | Read-only location for a published combat pack when `data-dir/fight-assets` has none. |
 | `--langs` | `DDE_LANGS` | `fr,en,es,pt` | Languages to import. A language missing from the installed data is imported again from the same release at the next start. |
 | `--repo` | `DDE_RELEASE_REPO` | `dofusdude/dofus3-main` | Repository publishing the releases. |
 | `--check-interval` | | `6h` | Delay between release checks. |
@@ -160,6 +161,10 @@ When it listens on a loopback address (the default), it also rejects requests ad
 | `GET /api/sets/{id}` | One set with its bonuses |
 | `POST /api/builds/evaluate` | Characteristics, set bonuses and validity of a stuff, with the forgemagic in `mods` |
 | `POST /api/builds/damage` | What the stuff's weapon and the spells of `breedId` do: each line with its targets, whether it counts in the total, and heals and pushbacks; `range` forces `melee` or `ranged` |
+| `POST /api/fight` | The fight simulator: without `state`, a new fight against `dummies` for the stuff; with `state` and an `action` (`place`, `begin`, `move`, `cast`, `end`), the fight after that action, with what happened, the points left, the cells in reach and each spell's availability |
+| `POST /api/fight/aim` | Aimable cells with the area, normal and critical damage ranges, and predicted displacements. A cast projected through an Eliotrope portal includes the projected cell. |
+| `GET /api/fight/book?breed=ID` | Class and common spells with translated descriptions, variant IDs, unlock levels and tags for the spellbook filters. Breed zero returns common spells. |
+| `GET /api/fight/assets` | Training room IDs and the identifier of the currently imported local pack |
 | `POST /api/solver/search` | Stuffs that meet constraints; `forge` says which exos, runes and dracorunes are allowed, `required` lists items every stuff must wear, `excluded` those none may wear, `damage` lists attacks that must hit for a value, and an entry of `maximize` can be an attack too, over several elements if need be. Answers the first `limit` stuffs (5 by default, 20 at most) with `total` and an `id` |
 | `GET /api/solver/results/{id}` | The next stuffs of a search: `offset`, `limit`. The API keeps the last 8 searches in memory and answers 404 `results_expired` past that |
 
@@ -218,6 +223,66 @@ A weapon is counted with its mastery (+300 Power) unless the request says `maste
 These numbers were checked against dofusbook on a full stuff: stats, spell lines and the weapon's lines, total, critical rate and average are identical.
 
 The search reads one of three measures on that sum, `normal`, `crit` or `mean` (the average hit). Besides a weapon or a spell, a goal can be of kind `element`: the average of the measure over the spells of the class (`breedId`) that hit in that element, with no spell named. Left without an element, it gets a rough search in each of the four, then the full search in the one that came out on top. An entry of `damage` asks that it reaches a value; an entry of `maximize` with a `damage` field pushes it up, at its rank among the stats to maximize. Either way, a weapon is worn by the stuff.
+
+## Fight simulator
+
+The Fight view of a stuff plays turns against training dummies (`apps/api/internal/fight`). The server keeps nothing: the interface holds the fight and sends it back with each action, so a fight is plain data and every step is a pure function of it.
+
+- **Board**: the imported Village and Astrub Kanojedos use their own movement cells, sight obstacles and starting camps. Without an art pack the tactical arena uses a 13 × 13 grid with four pillars. Range counts cells along rows and columns. A cell is in sight when the straight line to it crosses no wall and no entity; a line through the exact corner of four cells crosses none.
+- **Casting**: a spell grade's flags in `spell_levels.json` (`m_flags`: 1 in line, 2 diagonal, 4 needs sight, 8 a free cell, 16 a taken cell, 64 range follows the caster's Range) and its `maxCastPerTurn`, `maxCastPerTarget`, `minCastInterval`, `initialCooldown` and `maxStack`. The weapon is cast in sight, at one cell, within its range.
+- **Effects** are applied in the order of the data. Who an effect is meant for is read from its zone and its target mask as things stood when the spell was cast: where everyone stood, and the states everyone was in. So a push does not make the next effect miss, and a spell that puts its caster in a state and has another effect for casters in that state applies one of the two. A mask names who (`a` allies, `A` enemies, `C` the caster wherever it stands, `g` allies but the caster) then conditions that must all hold: `E`/`e` in a state or not, `V`/`v` at or under a share of its health or above, `B`/`b` of a class or not, starred when asked of the caster. The other letters ask what a player or a dummy never is (a given monster, a summon, carried): the upper-case one fails, its lower-case opposite passes. An effect kept for monster 50000 is how the data shows a line in a spell's description without applying it.
+- **Spells cast in turn**: most class spells work through others. Actions 792, 1017 and 1018 have the target cast one on its own cell, 1019 on the source, 1160 has the caster cast it on the target's cell, 2160 the source, 2794 the target on the originally aimed cell and 2960 the caster on that cell whoever stands there.
+- **Effects that wait**: an effect with a trigger stays on its target and applies each time the trigger happens (`TB` and `TE` the start and end of its turn, `EON<id>` and `EOFF<id>` a state gained or lost, `CC` a critical cast, `D` a hit taken, with `DM`/`DR` from the next cell or from afar, `DE`/`DF`/`DW`/`DA`/`DN` by element, `DBE`/`DBA` from an enemy or an ally, `H` a heal received) for `duration` turns, or `effectTriggerDuration` when the duration is zero (63 is the whole fight). An effect with a `delay` counts for nothing until that many turns have passed: without a trigger it then applies once, with one it starts waiting. A compound trigger such as `I|TB` applies on cast and at subsequent starts of turn. Mutilation uses this sequence for its current-HP cost. Damage with a trigger and a duration is a poison.
+- **What opens a fight**: each class has starting spells, filed in the data under a spell type named after it ("Sorts initiaux Pandawa", "Pandawa Starting Spells") with the admin name "Sort initial"; they are cast on the character as the fight starts and set its states and what waits on it (a Pandawa starts sober, a Forgelance armed). So is the first grade of the passive of each item worn (an item's grades are its phases: the Ochre Dofus's second grade is the state a hit leaves, its third what a turn's start gives).
+- **Lasting effects**: characteristics raised or lowered, states, damage taken or heals received multiplied, and what changes one spell: its base damage, range, cost, critical chance, casts per turn or per target, cooldown and aiming rules (actions 280 to 299, 314, 2905, 2906). Final damage in percent (107), Power for spells or for weapons (98, 103) and resistance in percent (101) are read when a hit is dealt.
+- **Random outcomes**: effects with a `random` weight are drawn as one lottery per spell; effects sharing a `group` happen together, and the weights are chances in percent. The preview gives the least and the most over every outcome.
+- **Damage**: the formula of the Damage section, with melee decided by the distance when the spell was cast; then the hit loses 10% per cell away from the centre of a zone (the zone's own figures), then the target's fixed resistance comes off, then its percentage. A push stopped short deals `floor((level / 2 + 32 + Pushback damage) × cells left / 4)`, and half of it to whoever blocks the way.
+- **Eliotrope portals** use the same route for highlighting, movement and spell projection. Each side keeps four gates in placement order. A new gate displaces the oldest. Walking through a gate spends the step to its entrance, closes the two ends for the current turn and lands the fighter at the exit. Projection translates the vector from the caster to the entrance onto the exit. The entry grade supplies the flat bonus and bonus per cell of the complete route; a projected cast can then grant the Eliotrope’s final damage and healing buffs. The optional local replay pins both Flamèche ranges on the tested Astrub network.
+- **Additional spell effects.** `additional_effects.go` keeps percentage-of-current-HP costs, temporary maximum HP and damage based on missing or eroded HP separate from ordinary elemental hits. It also resolves heals based on damage just inflicted, characteristic theft, forced minimum or maximum rolls, and MP-dependent damage. A fighter keeps the cell where its turn began and a bounded history of previous cells for rewind effects.
+- **Directional zones.** Martelo's two arms point back towards the caster. Forks extend through the aimed cell and rectangles have independent width and length. The engine uses an explicit orientation when the effect specifies one. Effects with a list of native map cells use the room's imported grid origin. The aiming preview and resolution use the same cells.
+- **Invisibility.** The engine records the invisibility duration separately from the MP buff. A direct hit reveals the attacker. An empty cast or a trap placement can leave them invisible. Revelation also has its own effect and log event.
+- **Ground effects and creatures**: glyphs, traps and runes retain their cell masks and execute the referenced spell when a fighter enters, starts or ends a turn, as specified by the effect. The local art import also links creature grades, starting spells, AP, MP, appearances and spell bars. Controllable summons take a turn before the dummies. Carrying and throwing retain the passenger’s identity on the shared tile. Symmetric teleports and telefrag target masks use the positions preceding the effect. Fixed reductions and shields are applied before health loss. Tackle, weapon areas and some class-specific effects still have incomplete coverage. Unsupported visible actions are recorded in the combat log.
+- **Dummies** do nothing on their turn and stand back up at full health when defeated. Their resistances are characteristics like any other (33 to 37 in percent, 54 to 58 fixed, 87 critical).
+
+Checked, on the Enutrof of the Damage section:
+
+- the preview of each Enutrof spell on a dummy without resistance gives dofusbook's figures (Roulage de Pelle 364 to 417, 597 to 663 critical; Coup de Grisou 510 to 562 at the centre and 80% of it two cells away);
+- against DoPoutch with the same stuff: pushback damage (55 for one cell left, 111 for two at level 200 with 90 Pushback damage), and what the stuff's item passives do turn after turn (Prynyang, Dofus Nébuleux and Dofus Ocre: +30% final damage and -10% resistance on the first turn, -7% and +3% and one more AP on the second), down to Flamèche on the second turn, 86 to 95 and 254 to 264 critical on both sides;
+- every class spell was cast once on a dummy and its preview compared with the Damage view's total: 401 of 836 spells give the same figures, 27 differ by the falloff of a zone, 361 deal no direct damage on either side, and 12 deal none in the fight where the Damage view lists some (summons, runes, poisons). The 33 others differ because the Damage view adds lines that are alternatives (a Pandawa's sober and drunk lines, a hit that grows with a state) where the fight applies the one that holds.
+
+### Reference replays
+
+The HTTP replays use a level-150 SPEEDRUSH build, DOFUS 3.7.14.18 data and locally imported rooms. The DoPoutch reference displayed client data 3.7.13.17. These tests check the following observations through the same endpoints the app uses. The catalog replay also casts all 862 spells and the equipped weapon at level 200. It uses another starting cell or a carried fighter when required, checks the cast and the following turn for skipped effects, and exercises both training rooms. Damage rolls stay random. A cast assertion uses the normal or critical reference according to the returned cast event.
+
+| Scenario | Observations exercised |
+|---|---|
+| Ecaflip in the Village | Sword name and cast, summoned Chaton Enragé at 528 HP, 6 AP and 4 MP, then the third-turn Pile ou Face preview of 278 normal or 373 critical. |
+| Eliotrope in Astrub | Portals on cells 106 and 134 project Flamèche onto cell 124. That route spans five cells for a 10% bonus. The replay also checks the four-portal limit and the MP cost of stepping through a portal. |
+| Masqueraider in Astrub | With the caster on cell 63, aiming Martelo at empty cell 73 previews 216–232 normal or 286–309 critical on cell 62. Aiming directly at 62 gives 271–290 or 358–387. |
+| Sram in Astrub | Invisibilité leaves 10 AP and 7 MP, with one turn of invisibility and two turns of extra MP. Casting Flamèche into an empty cell and placing Piège Sournois preserve invisibility. A direct hit reveals the Sram. |
+| Sacrier with two enemies and an ally | Transfusion from 63 hits both enemies for 198 each. In a fresh fight with the player at 116 and the ally at 115, a critical Flamèche rolled 103. Erosion removed 10 maximum HP, then Transfusion cost the caster 198 HP and restored the remaining 93 to the ally. The regression accepts the actual Flamèche roll. |
+| Sacrier in Astrub | Mutilation grants 150 Power. The reference HP sequence is 2,210 before casting, 1,989 on cast and 1,791 at the start of the next turn. |
+| Iop in Astrub | Vitalité takes both current and maximum HP from 2,210 to 2,563 on a normal cast or 2,607 on a critical cast. |
+
+Run the API with the matching data directory and set its loopback address for the tests.
+
+```sh
+DDE_FIGHT_TEST_URL=http://127.0.0.1:8787 go -C apps/api test ./internal/httpapi -run 'TestSpeedrush.*WithInstalledGameData' -count=1 -v
+```
+
+### Importing combat graphics and sound
+
+In **Combat → Options → General**, the desktop importer can detect DOFUS 3 or open a directory chooser. It reads the installation and writes under the local API's `fight-assets/` directory. For web development, run the same import from the repository root with uv and Python 3.13.
+
+```sh
+pnpm data:fight-assets --source "/path/to/DOFUS" --output apps/api/data/fight-assets
+```
+
+The pack contains the available room geometry and artwork, actor skins, interface textures and fonts, spell sequences and combat sounds. The sound importer follows the maps' playlists, animation events and interface event IDs into the client's FEV/FSB5 banks and remuxes supported Vorbis samples as Ogg. Its `audio/index.json` identifies the available channels. Music and ambience follow the selected room. Animation and interface cues use the same local pack during playback. One 3.7.14.18 import occupied 2.1 GB and included 3,327 Ogg files (64 MB) for 2,065 sound events across five channels.
+
+An import writes into a staging directory and switches the `current` pointer once the pack is complete. Reopening or reloading Combat uses the published pack from disk. Reloading the desktop window during an import reconnects to its progress. Reimporting reuses an existing generation when its extraction format, client catalogs, audio bank signatures and local skin overrides match. The importer keeps the previous generation for reads already in progress. An optional local `fight-assets/equipment-skins.json` can associate an item ID with a skin ID when the client omits that link. The equipment still contributes its stats when a skin is unavailable.
+
+The installer ships the importer and its dependency licences. The player's local pack holds all extracted artwork, fonts, animations and sounds. Native packaging builds a missing importer with uv. Release CI builds and self-tests separate artifacts for Windows x64, Linux x64, macOS Intel and macOS Apple Silicon. For cross-packaging, unpack the matching artifact under `apps/desktop/fight-import/`. The target directory names are `win-x64`, `linux-x64`, `mac-x64` and `mac-arm64`. To verify an unpacked artifact, run its `fight-import --self-test` executable (`fight-import.exe --self-test` on Windows).
 
 ## How the solver works
 

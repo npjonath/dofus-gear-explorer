@@ -9,6 +9,7 @@ import {
   CheckIcon,
   CopyIcon,
   LinkIcon,
+  SearchIcon,
   SparklesIcon,
   Trash2Icon,
   TriangleAlertIcon,
@@ -35,6 +36,7 @@ import { SlotGlyph } from "../../ui/SlotGlyph"
 import { toaster } from "../../ui/toaster"
 import { BuildList } from "./BuildList"
 import { BuildTabs } from "./BuildTabs"
+import { FightPanel } from "../fight/FightPanel"
 import { DamagePanel } from "./DamagePanel"
 import { ForgePanel } from "./ForgePanel"
 import { ItemPicker } from "./ItemPicker"
@@ -366,18 +368,19 @@ export function BuildPage({ meta }: { meta: Meta }) {
   const platform = usePlatform()
   const shareByLink = platform.kind === "web" && window.location.protocol.startsWith("http")
   const stuffTab = useStore((s) => s.stuffTab)
+  const searchRevision = useStore((s) => s.searchRevision)
   const [creating, setCreating] = React.useState(false)
   const [comparing, setComparing] = React.useState(false)
   const builds = useStore((s) => s.builds)
   // The search keeps its form and results while other tabs show.
   const [searchSeen, setSearchSeen] = React.useState(stuffTab === "search")
   if (stuffTab === "search" && !searchSeen) setSearchSeen(true)
-  const { addBuild, updateBuild, removeBuild, equip, setMods } = useStore.getState()
+  const { addBuild, updateBuild, removeBuild, equip, setMods, reopenSearch } = useStore.getState()
   const breakpoint = useBreakpoint()
   const [selectedKey, setSelectedKey] = React.useState<string | null>(null)
   const [selectedIn, setSelectedIn] = React.useState(build.id)
   const [tab, setTab] = React.useState<SlotTab>("items")
-  const [view, setView] = React.useState<"gear" | "damage">("gear")
+  const [view, setView] = React.useState<"gear" | "damage" | "fight">("gear")
   // A slot chosen in one stuff says nothing about the next one.
   if (selectedIn !== build.id) {
     setSelectedIn(build.id)
@@ -397,7 +400,7 @@ export function BuildPage({ meta }: { meta: Meta }) {
   // fields keep their own undo.
   const visible = useLocation().route === "build"
   React.useEffect(() => {
-    if (!visible) return
+    if (!visible || view === "fight") return
     const onKeyDown = (event: KeyboardEvent) => {
       const key = event.key.toLowerCase()
       if (!(event.ctrlKey || event.metaKey) || (key !== "z" && key !== "y")) return
@@ -410,7 +413,7 @@ export function BuildPage({ meta }: { meta: Meta }) {
     }
     window.addEventListener("keydown", onKeyDown)
     return () => window.removeEventListener("keydown", onKeyDown)
-  }, [visible, build.id, t])
+  }, [visible, view, build.id, t])
 
   const act = (key: string, action: SlotAction) => {
     if (action === "remove") {
@@ -509,12 +512,24 @@ export function BuildPage({ meta }: { meta: Meta }) {
         <SegmentedControl
           aria-label={t("build.view")}
           value={view}
-          onValueChange={(next) => setView(next === "damage" ? "damage" : "gear")}
+          onValueChange={(next) => setView(next === "damage" || next === "fight" ? next : "gear")}
         >
           <SegmentedControlIndicator />
           <SegmentedControlItem value="gear">{t("build.view.gear")}</SegmentedControlItem>
           <SegmentedControlItem value="damage">{t("build.view.damage")}</SegmentedControlItem>
+          <SegmentedControlItem value="fight" id="build-open-fight">{t("build.view.fight")}</SegmentedControlItem>
         </SegmentedControl>
+        {build.savedSearch && (
+          <Button
+            onClick={() => {
+              reopenSearch(build.id)
+              requestAnimationFrame(() => document.getElementById("solver-title")?.focus())
+            }}
+          >
+            <SearchIcon aria-hidden="true" className="size-4" />
+            {t("build.reopenSearch")}
+          </Button>
+        )}
         <Button onClick={() => setComparing(true)}>
           <ArrowRightLeftIcon aria-hidden="true" className="size-4" />
           {t("compare.open")}
@@ -533,6 +548,7 @@ export function BuildPage({ meta }: { meta: Meta }) {
               scrolls: build.scrolls,
               items: build.items,
               mods: build.mods,
+              savedSearch: build.savedSearch,
             })
           }
         >
@@ -649,6 +665,12 @@ export function BuildPage({ meta }: { meta: Meta }) {
   // characteristics beside a stuff, the picker once a slot is chosen.
   const showSlot = selected !== null && view === "gear"
   let workspace: React.ReactNode
+  if (visible && view === "fight" && stuffTab !== "list" && stuffTab !== "search") {
+    return <FightPanel key={build.id} meta={meta} build={build} input={input} evaluation={evaluation} onExit={() => {
+      setView("gear")
+      requestAnimationFrame(() => document.getElementById("build-open-fight")?.focus())
+    }} />
+  }
   if (stuffTab === "list") {
     workspace = <BuildList meta={meta} onNew={() => setCreating(true)} />
   } else if (stuffTab === "search") {
@@ -673,7 +695,8 @@ export function BuildPage({ meta }: { meta: Meta }) {
         leftSize={20}
         right={showSlot ? slotPanel : undefined}
       >
-        {breakpoint === "xl" ? (
+        {/* A fight needs the height: under xl the characteristics stay with the Equipment view. */}
+        {breakpoint === "xl" || view === "fight" ? (
           board
         ) : (
           <div className="flex h-full min-h-0 flex-col">
@@ -693,7 +716,7 @@ export function BuildPage({ meta }: { meta: Meta }) {
       </div>
       {searchSeen && (
         <div className="min-h-0 flex-1" hidden={stuffTab !== "search"}>
-          <SolverPage meta={meta} />
+          <SolverPage key={searchRevision} meta={meta} />
         </div>
       )}
       <NewBuildDialog meta={meta} open={creating} onOpenChange={setCreating} />

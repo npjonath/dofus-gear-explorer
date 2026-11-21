@@ -15,3 +15,7 @@ apps/api/data/
 
 # Design review captures
 .impeccable/review/
+
+# Generated combat asset tooling
+scripts/fight-assets/__pycache__/
+apps/desktop/fight-import/

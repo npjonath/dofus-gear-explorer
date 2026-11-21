@@ -218,3 +218,17 @@ func TestTotalCountsWhatHitsAnEnemy(t *testing.T) {
 		t.Errorf("regen = %+v", steal.Regen)
 	}
 }
+
+func TestCombatDamageForSpeedrushAtRange(t *testing.T) {
+	stats := map[int]int{game.StatStrength: 730, game.StatPower: 160, game.StatDamageEarth: 70, game.StatCritDamage: 45, game.StatSpellDamage: 6, game.StatRangedDamage: 6}
+	for _, test := range []struct {
+		base     int
+		critical bool
+		want     int
+	}{{18, false, 278}, {22, true, 373}} {
+		amount, element := (&AttackSpec{Level: 150}).CombatHit(test.base, game.ElementEarth, test.critical, func(id int) int { return stats[id] })
+		if amount != test.want || element != game.ElementEarth {
+			t.Fatalf("hit=%d element=%d, want %d earth", amount, element, test.want)
+		}
+	}
+}

@@ -1,62 +1,78 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-11-16T21:41:20Z",
+  "generatedAt": "2026-11-19T05:38:08Z",
   "title": "Design System: Dofus Gear Explorer",
   "extensions": {
     "colorMeta": {
       "ground": {
         "role": "neutral",
-        "displayName": "Board Sage",
-        "canonical": "oklch(0.955 0.012 258)",
-        "dark": "oklch(0.2 0.018 258)",
+        "displayName": "Board Slate",
+        "canonical": "oklch(0.955 0.006 258)",
+        "dark": "oklch(0.19 0.014 264)",
         "tonalRamp": [
-          "oklch(0.15 0.012 258)",
-          "oklch(0.27 0.012 258)",
-          "oklch(0.38 0.012 258)",
-          "oklch(0.5 0.012 258)",
-          "oklch(0.62 0.012 258)",
-          "oklch(0.74 0.012 258)",
-          "oklch(0.85 0.012 258)",
-          "oklch(0.95 0.012 258)"
+          "oklch(0.15 0.006 258)",
+          "oklch(0.27 0.006 258)",
+          "oklch(0.38 0.006 258)",
+          "oklch(0.5 0.006 258)",
+          "oklch(0.62 0.006 258)",
+          "oklch(0.74 0.006 258)",
+          "oklch(0.85 0.006 258)",
+          "oklch(0.95 0.006 258)"
         ]
       },
       "tile": {
         "role": "neutral",
-        "displayName": "Checker Sage",
-        "canonical": "oklch(0.928 0.018 258)",
-        "dark": "oklch(0.245 0.022 258)",
+        "displayName": "Checker Slate",
+        "canonical": "oklch(0.925 0.011 258)",
+        "dark": "oklch(0.235 0.018 264)",
         "tonalRamp": [
-          "oklch(0.15 0.018 258)",
-          "oklch(0.27 0.018 258)",
-          "oklch(0.38 0.018 258)",
-          "oklch(0.5 0.018 258)",
-          "oklch(0.62 0.018 258)",
-          "oklch(0.74 0.018 258)",
-          "oklch(0.85 0.018 258)",
-          "oklch(0.95 0.018 258)"
+          "oklch(0.15 0.011 258)",
+          "oklch(0.27 0.011 258)",
+          "oklch(0.38 0.011 258)",
+          "oklch(0.5 0.011 258)",
+          "oklch(0.62 0.011 258)",
+          "oklch(0.74 0.011 258)",
+          "oklch(0.85 0.011 258)",
+          "oklch(0.95 0.011 258)"
         ]
       },
       "panel": {
         "role": "neutral",
         "displayName": "Sheet",
-        "canonical": "oklch(0.99 0.004 258)",
-        "dark": "oklch(0.255 0.02 258)",
+        "canonical": "oklch(0.992 0.002 258)",
+        "dark": "oklch(0.245 0.017 264)",
         "tonalRamp": [
-          "oklch(0.15 0.004 258)",
-          "oklch(0.27 0.004 258)",
-          "oklch(0.38 0.004 258)",
-          "oklch(0.5 0.004 258)",
-          "oklch(0.62 0.004 258)",
-          "oklch(0.74 0.004 258)",
-          "oklch(0.85 0.004 258)",
-          "oklch(0.95 0.004 258)"
+          "oklch(0.15 0.002 258)",
+          "oklch(0.27 0.002 258)",
+          "oklch(0.38 0.002 258)",
+          "oklch(0.5 0.002 258)",
+          "oklch(0.62 0.002 258)",
+          "oklch(0.74 0.002 258)",
+          "oklch(0.85 0.002 258)",
+          "oklch(0.95 0.002 258)"
         ]
       },
       "panel-2": {
         "role": "neutral",
         "displayName": "Sheet Shade",
-        "canonical": "oklch(0.968 0.009 258)",
-        "dark": "oklch(0.225 0.018 258)",
+        "canonical": "oklch(0.968 0.005 258)",
+        "dark": "oklch(0.215 0.015 264)",
+        "tonalRamp": [
+          "oklch(0.15 0.005 258)",
+          "oklch(0.27 0.005 258)",
+          "oklch(0.38 0.005 258)",
+          "oklch(0.5 0.005 258)",
+          "oklch(0.62 0.005 258)",
+          "oklch(0.74 0.005 258)",
+          "oklch(0.85 0.005 258)",
+          "oklch(0.95 0.005 258)"
+        ]
+      },
+      "line": {
+        "role": "neutral",
+        "displayName": "Cell Line",
+        "canonical": "oklch(0.885 0.009 258)",
+        "dark": "oklch(0.33 0.018 264)",
         "tonalRamp": [
           "oklch(0.15 0.009 258)",
           "oklch(0.27 0.009 258)",
@@ -68,117 +84,149 @@
           "oklch(0.95 0.009 258)"
         ]
       },
-      "line": {
-        "role": "neutral",
-        "displayName": "Cell Line",
-        "canonical": "oklch(0.885 0.014 258)",
-        "dark": "oklch(0.33 0.02 258)",
-        "tonalRamp": [
-          "oklch(0.15 0.014 258)",
-          "oklch(0.27 0.014 258)",
-          "oklch(0.38 0.014 258)",
-          "oklch(0.5 0.014 258)",
-          "oklch(0.62 0.014 258)",
-          "oklch(0.74 0.014 258)",
-          "oklch(0.85 0.014 258)",
-          "oklch(0.95 0.014 258)"
-        ]
-      },
       "line-strong": {
         "role": "neutral",
         "displayName": "Cell Edge",
-        "canonical": "oklch(0.72 0.025 258)",
-        "dark": "oklch(0.5 0.03 258)",
+        "canonical": "oklch(0.72 0.018 260)",
+        "dark": "oklch(0.5 0.025 264)",
         "tonalRamp": [
-          "oklch(0.15 0.025 258)",
-          "oklch(0.27 0.025 258)",
-          "oklch(0.38 0.025 258)",
-          "oklch(0.5 0.025 258)",
-          "oklch(0.62 0.025 258)",
-          "oklch(0.74 0.025 258)",
-          "oklch(0.85 0.025 258)",
-          "oklch(0.95 0.025 258)"
+          "oklch(0.15 0.018 260)",
+          "oklch(0.27 0.018 260)",
+          "oklch(0.38 0.018 260)",
+          "oklch(0.5 0.018 260)",
+          "oklch(0.62 0.018 260)",
+          "oklch(0.74 0.018 260)",
+          "oklch(0.85 0.018 260)",
+          "oklch(0.95 0.018 260)"
         ]
       },
       "ink": {
         "role": "neutral",
         "displayName": "Slate Ink",
-        "canonical": "oklch(0.25 0.03 220)",
-        "dark": "oklch(0.95 0.008 160)",
+        "canonical": "oklch(0.24 0.025 264)",
+        "dark": "oklch(0.95 0.005 258)",
         "tonalRamp": [
-          "oklch(0.15 0.03 220)",
-          "oklch(0.27 0.03 220)",
-          "oklch(0.38 0.03 220)",
-          "oklch(0.5 0.03 220)",
-          "oklch(0.62 0.03 220)",
-          "oklch(0.74 0.03 220)",
-          "oklch(0.85 0.03 220)",
-          "oklch(0.95 0.03 220)"
+          "oklch(0.15 0.025 264)",
+          "oklch(0.27 0.025 264)",
+          "oklch(0.38 0.025 264)",
+          "oklch(0.5 0.025 264)",
+          "oklch(0.62 0.025 264)",
+          "oklch(0.74 0.025 264)",
+          "oklch(0.85 0.025 264)",
+          "oklch(0.95 0.025 264)"
         ]
       },
       "ink-2": {
         "role": "neutral",
         "displayName": "Slate Ink Soft",
-        "canonical": "oklch(0.42 0.03 215)",
-        "dark": "oklch(0.82 0.015 180)",
+        "canonical": "oklch(0.42 0.025 262)",
+        "dark": "oklch(0.82 0.012 260)",
         "tonalRamp": [
-          "oklch(0.15 0.03 215)",
-          "oklch(0.27 0.03 215)",
-          "oklch(0.38 0.03 215)",
-          "oklch(0.5 0.03 215)",
-          "oklch(0.62 0.03 215)",
-          "oklch(0.74 0.03 215)",
-          "oklch(0.85 0.03 215)",
-          "oklch(0.95 0.03 215)"
+          "oklch(0.15 0.025 262)",
+          "oklch(0.27 0.025 262)",
+          "oklch(0.38 0.025 262)",
+          "oklch(0.5 0.025 262)",
+          "oklch(0.62 0.025 262)",
+          "oklch(0.74 0.025 262)",
+          "oklch(0.85 0.025 262)",
+          "oklch(0.95 0.025 262)"
         ]
       },
       "ink-3": {
         "role": "neutral",
         "displayName": "Slate Ink Quiet",
-        "canonical": "oklch(0.5 0.027 210)",
-        "dark": "oklch(0.7 0.02 190)",
+        "canonical": "oklch(0.5 0.022 260)",
+        "dark": "oklch(0.7 0.016 262)",
         "tonalRamp": [
-          "oklch(0.15 0.027 210)",
-          "oklch(0.27 0.027 210)",
-          "oklch(0.38 0.027 210)",
-          "oklch(0.5 0.027 210)",
-          "oklch(0.62 0.027 210)",
-          "oklch(0.74 0.027 210)",
-          "oklch(0.85 0.027 210)",
-          "oklch(0.95 0.027 210)"
+          "oklch(0.15 0.022 260)",
+          "oklch(0.27 0.022 260)",
+          "oklch(0.38 0.022 260)",
+          "oklch(0.5 0.022 260)",
+          "oklch(0.62 0.022 260)",
+          "oklch(0.74 0.022 260)",
+          "oklch(0.85 0.022 260)",
+          "oklch(0.95 0.022 260)"
         ]
       },
       "cell-bg": {
         "role": "neutral",
         "displayName": "Cell Ground",
-        "canonical": "oklch(0.928 0.018 258)",
+        "canonical": "oklch(0.925 0.011 258)",
         "dark": "oklch(0.47 0.02 264)",
         "tonalRamp": [
-          "oklch(0.15 0.018 258)",
-          "oklch(0.27 0.018 258)",
-          "oklch(0.38 0.018 258)",
-          "oklch(0.5 0.018 258)",
-          "oklch(0.62 0.018 258)",
-          "oklch(0.74 0.018 258)",
-          "oklch(0.85 0.018 258)",
-          "oklch(0.95 0.018 258)"
+          "oklch(0.15 0.011 258)",
+          "oklch(0.27 0.011 258)",
+          "oklch(0.38 0.011 258)",
+          "oklch(0.5 0.011 258)",
+          "oklch(0.62 0.011 258)",
+          "oklch(0.74 0.011 258)",
+          "oklch(0.85 0.011 258)",
+          "oklch(0.95 0.011 258)"
         ]
       },
       "slot-bg": {
         "role": "neutral",
         "displayName": "Slot Face",
-        "canonical": "oklch(0.99 0.004 258)",
-        "dark": "oklch(0.47 0.02 264)",
+        "canonical": "oklch(0.992 0.002 258)",
+        "dark": "oklch(0.245 0.017 264)",
         "tonalRamp": [
-          "oklch(0.15 0.004 258)",
-          "oklch(0.27 0.004 258)",
-          "oklch(0.38 0.004 258)",
-          "oklch(0.5 0.004 258)",
-          "oklch(0.62 0.004 258)",
-          "oklch(0.74 0.004 258)",
-          "oklch(0.85 0.004 258)",
-          "oklch(0.95 0.004 258)"
+          "oklch(0.15 0.002 258)",
+          "oklch(0.27 0.002 258)",
+          "oklch(0.38 0.002 258)",
+          "oklch(0.5 0.002 258)",
+          "oklch(0.62 0.002 258)",
+          "oklch(0.74 0.002 258)",
+          "oklch(0.85 0.002 258)",
+          "oklch(0.95 0.002 258)"
         ]
+      },
+      "slab-top": {
+        "role": "neutral",
+        "displayName": "Pillar Top",
+        "canonical": "oklch(0.875 0.012 258)",
+        "tonalRamp": [
+          "oklch(0.15 0.012 258)",
+          "oklch(0.27 0.012 258)",
+          "oklch(0.38 0.012 258)",
+          "oklch(0.5 0.012 258)",
+          "oklch(0.62 0.012 258)",
+          "oklch(0.74 0.012 258)",
+          "oklch(0.85 0.012 258)",
+          "oklch(0.95 0.012 258)"
+        ],
+        "dark": "oklch(0.36 0.02 264)"
+      },
+      "slab-side": {
+        "role": "neutral",
+        "displayName": "Slab Side",
+        "canonical": "oklch(0.8 0.015 260)",
+        "tonalRamp": [
+          "oklch(0.15 0.015 260)",
+          "oklch(0.27 0.015 260)",
+          "oklch(0.38 0.015 260)",
+          "oklch(0.5 0.015 260)",
+          "oklch(0.62 0.015 260)",
+          "oklch(0.74 0.015 260)",
+          "oklch(0.85 0.015 260)",
+          "oklch(0.95 0.015 260)"
+        ],
+        "dark": "oklch(0.15 0.012 264)"
+      },
+      "slab-shade": {
+        "role": "neutral",
+        "displayName": "Slab Shade",
+        "canonical": "oklch(0.71 0.018 260)",
+        "tonalRamp": [
+          "oklch(0.15 0.018 260)",
+          "oklch(0.27 0.018 260)",
+          "oklch(0.38 0.018 260)",
+          "oklch(0.5 0.018 260)",
+          "oklch(0.62 0.018 260)",
+          "oklch(0.74 0.018 260)",
+          "oklch(0.85 0.018 260)",
+          "oklch(0.95 0.018 260)"
+        ],
+        "dark": "oklch(0.115 0.01 264)"
       },
       "accent": {
         "role": "primary",
@@ -483,6 +531,38 @@
           "oklch(0.85 0.12 88)",
           "oklch(0.95 0.12 88)"
         ]
+      },
+      "combat-ping": {
+        "role": "secondary",
+        "displayName": "Marked Cell Outline",
+        "canonical": "oklch(0.86869 0.14735 85.804)",
+        "tonalRamp": [
+          "oklch(0.15 0.14735 85.804)",
+          "oklch(0.27 0.14735 85.804)",
+          "oklch(0.38 0.14735 85.804)",
+          "oklch(0.5 0.14735 85.804)",
+          "oklch(0.62 0.14735 85.804)",
+          "oklch(0.74 0.14735 85.804)",
+          "oklch(0.85 0.14735 85.804)",
+          "oklch(0.95 0.14735 85.804)"
+        ],
+        "dark": "#ffcc52"
+      },
+      "combat-ping-fill": {
+        "role": "secondary",
+        "displayName": "Marked Cell Fill",
+        "canonical": "oklch(0.86869 0.14735 85.804 / 0.4)",
+        "tonalRamp": [
+          "oklch(0.15 0.14735 85.804 / 0.4)",
+          "oklch(0.27 0.14735 85.804 / 0.4)",
+          "oklch(0.38 0.14735 85.804 / 0.4)",
+          "oklch(0.5 0.14735 85.804 / 0.4)",
+          "oklch(0.62 0.14735 85.804 / 0.4)",
+          "oklch(0.74 0.14735 85.804 / 0.4)",
+          "oklch(0.85 0.14735 85.804 / 0.4)",
+          "oklch(0.95 0.14735 85.804 / 0.4)"
+        ],
+        "dark": "#ffcc5266"
       }
     },
     "typographyMeta": {
@@ -513,6 +593,14 @@
       "numeral": {
         "displayName": "Numeral",
         "purpose": "The four vital figures of a stuff (HP, AP, MP, range) and nothing else."
+      },
+      "combat-body": {
+        "displayName": "Combat HUD text",
+        "purpose": "Lexend from the local client for menus, labels and the combat log."
+      },
+      "combat-display": {
+        "displayName": "Combat HUD display",
+        "purpose": "Rowdies from the local client for the stuff name, gauge values and turn button."
       }
     },
     "shadows": [
@@ -628,8 +716,8 @@
       "name": "Top Strip Navigation",
       "kind": "nav",
       "refersTo": "nav-link",
-      "description": "Brand mark of four pips and the three destinations; the current one gets a blue bar on the strip's bottom edge.",
-      "html": "<header class=\"ds-topbar\"><span class=\"ds-brand\"><span class=\"ds-brand-mark\" aria-hidden=\"true\"><i></i><i></i><i></i><i></i></span>Dofus Gear Explorer</span><nav class=\"ds-nav\"><a href=\"#\" aria-current=\"page\">Objets</a><a href=\"#\">Stuff</a><a href=\"#\">Recherche de stuffs</a></nav></header>",
+      "description": "The four-pip brand mark sits beside Items and Stuff. A blue underline marks the active destination.",
+      "html": "<header class=\"ds-topbar\"><span class=\"ds-brand\"><span class=\"ds-brand-mark\" aria-hidden=\"true\"><i></i><i></i><i></i><i></i></span>Dofus Gear Explorer</span><nav class=\"ds-nav\"><a href=\"#\" aria-current=\"page\">Objets</a><a href=\"#\">Stuff</a></nav></header>",
       "css": ".ds-topbar { display: flex; align-items: center; gap: 0.75rem; height: 3.5rem; padding: 0 1rem; background: var(--panel); border-bottom: 1px solid var(--line); color: var(--ink); font-family: 'Figtree Variable', ui-sans-serif, system-ui, sans-serif; font-feature-settings: 'tnum' 1; } .ds-brand { display: flex; align-items: center; gap: 0.6rem; font-weight: 700; letter-spacing: -0.01em; white-space: nowrap; } .ds-brand-mark { display: grid; grid-template-columns: repeat(2, 0.6rem); gap: 2px; } .ds-brand-mark i { width: 0.6rem; height: 0.6rem; border-radius: 2px; background: var(--accent); } .ds-brand-mark i:nth-child(2) { background: var(--ok); } .ds-brand-mark i:nth-child(3) { background: var(--bad); } .ds-brand-mark i:nth-child(4) { background: var(--line-strong); } .ds-nav { display: flex; align-items: stretch; gap: 0.25rem; height: 100%; margin-left: 0.75rem; } .ds-nav a { position: relative; display: flex; align-items: center; padding: 0 0.85rem; color: var(--ink-2); font-weight: 600; text-decoration: none; white-space: nowrap; transition: color 160ms cubic-bezier(0.16, 1, 0.3, 1); } .ds-nav a:hover { color: var(--ink); } .ds-nav a::after { content: ''; position: absolute; inset: auto 0.6rem 0; height: 3px; border-radius: 3px 3px 0 0; background: var(--accent); transform: scaleX(0); transition: transform 220ms cubic-bezier(0.16, 1, 0.3, 1); } .ds-nav a[aria-current=\"page\"] { color: var(--ink); } .ds-nav a[aria-current=\"page\"]::after { transform: scaleX(1); } .ds-nav a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }"
     },
     {
@@ -667,14 +755,14 @@
   ],
   "narrative": {
     "northStar": "The Combat Board",
-    "namingNote": "Naming note: the North Star and the descriptive colour names in this file (Range Blue, Movement Green, Impact Red, Board Sage and the rest) were derived from the build's direction contract. The user has not confirmed them yet; the token names in `styles.css` are the stable reference.",
-    "overview": "The interface borrows the surface a Dofus player already stares at in a fight: a tinted ground laid out in a two-tone checker, square cells, and the three zone colours the game uses to say what a cell means. Blue is where the player's hand is (the game's spell range), green is what is valid (movement), red is what fails (impact). Characteristics are read in the colour of their element. Nothing else on the screen carries hue, so every colour a player sees is information they already know how to read.\n\nIt is a working tool, dense on purpose. The root size is small (14px), rows are fixed and compact, numbers are tabular and bold, and labels step back to a softer ink so that values are what the eye lands on. The three screens share one frame: a top strip with the three destinations and the data release, then columns that fill the window and scroll on their own. There is no page chrome, no hero, no marketing voice.\n\nIt refuses two looks by construction: the dark neon gamer dashboard (no glow, no gradients on controls, the dark theme is the same sage board at night, not black) and the white SaaS admin table (the ground is tinted, state is carried by game colours, item cells and slots are the recurring shape instead of cards).\n\nTokens live in one place, `packages/app/src/styles.css`: the light theme on `:root`, the dark theme on `:root[data-theme=\"dark\"]`. That file is normative. The frontmatter above is the light theme as it stood when this was written; if a value there and the stylesheet disagree, the stylesheet is right and the role described here still holds.",
+    "namingNote": "Naming note: the North Star and the descriptive colour names in this file (Range Blue, Movement Green, Impact Red, Board Slate and the rest) were derived from the build's direction contract. The user has not confirmed them yet; the token names in `styles.css` are the stable reference.",
+    "overview": "The interface borrows the surface a Dofus player already stares at in a fight: a tinted ground laid out in a two-tone checker, square cells, and the three zone colours the game uses to say what a cell means. Blue is where the player's hand is (the game's spell range), green is what is valid (movement), red is what fails (impact). Characteristics are read in the colour of their element. Nothing else on the screen carries hue, so every colour a player sees is information they already know how to read.\n\nIt is a working tool, dense on purpose. The root size is small (14px), rows are fixed and compact, numbers are tabular and bold, and labels step back to a softer ink so that values are what the eye lands on. The two screens, Items and Stuff, share one frame: a top strip with the two destinations, the data release and the app controls, then columns that fill the window and scroll on their own. The Stuff screen holds the stuff list, the stuff search and every open stuff as tabs of one full-width bar. There is no page chrome, no hero, no marketing voice.\n\nIt refuses two looks by construction: the dark neon gamer dashboard (no glow, no gradients on controls, the dark theme is the same slate board at night, not black) and the white SaaS admin table (the ground is tinted, state is carried by game colours, item cells and slots are the recurring shape instead of cards).\n\nThe Items and Stuff themes live in `packages/app/src/styles.css`, with light tokens on `:root` and dark tokens on `:root[data-theme=\"dark\"]`. The combat viewport uses the local client’s fonts and its own targeting indicators. The frontmatter records the light theme and the combat roles shared across themes.",
     "keyCharacteristics": [
-      "A sage board ground in both themes: plain under the rails that hold controls, in a two-tone checker wherever pieces are placed or nothing has been picked or asked yet.",
+      "A slate board ground in both themes, with no green in the neutrals (user decision): plain under the rails that hold controls, in a two-tone checker wherever pieces are placed or nothing has been picked or asked yet.",
       "Square cells for every item image and every equipment slot, in three sizes of the same shape.",
       "Three zone colours used only as state: blue selected, green valid, red failing.",
       "Twelve stat tones, resolved from the stat itself, shown as a cell-shaped pip or as the colour of the number.",
-      "One typeface, four weights, tabular numerals everywhere.",
+      "Figtree with tabular numerals on Items and Stuff. The combat HUD uses the fonts imported from DOFUS.",
       "Flat panels separated by one-pixel lines; shadow only under things that float.",
       "Light and dark themes with the same roles; both are first-class."
     ],
@@ -711,12 +799,12 @@
       },
       {
         "name": "The Four Weights Rule",
-        "body": "400 for prose, 600 for labels and controls, 700 for values and titles, 800 for vitals. No italics, no tracked uppercase labels, no letter-spacing other than a slight tightening on the product name.",
+        "body": "On Items and Stuff, use 400 for prose, 600 for labels and controls, 700 for values and titles, 800 for vitals. No italics, no tracked uppercase labels, no letter-spacing other than a slight tightening on the product name.",
         "section": "typography"
       },
       {
         "name": "The Ground Rule",
-        "body": "The ground is for rails, stages and empty states; data sits on `panel`. Plain `ground` is the filter rail. The checker is where pieces are placed or where nothing is there yet: the builder's board, the item-sheet column before an item is picked, the setup and offline stages, the first load, the search screen before a run. Tables, lists and sheets sit on `panel`, edge to edge, with no ground showing between their rows.",
+        "body": "The ground is for rails, stages and empty states; data sits on `panel`. Plain `ground` is the filter rail. The checker is where pieces are placed or where nothing is there yet: the builder's board, the item-sheet column before an item is picked, the setup and offline stages, the first load, the search tab before a run. Tables, lists and sheets sit on `panel`, edge to edge, with no ground showing between their rows.",
         "section": "layout"
       },
       {
@@ -757,10 +845,11 @@
       "Don't apply a stat tone to a panel, border or button, and don't give a stat a colour outside the tone map.",
       "Don't replace pips with stat pictograms, or item cells with circles, bare images or cards.",
       "Don't add shadows to panels, rows or cells; only floating layers cast one.",
-      "Don't add glow, gradient fills on buttons, panels or text, or a black neon dark theme; the dark ground is the same sage, at night.",
+      "Don't tint the neutrals green: the user asked for dark and light themes without green. Green stays for what the game makes green: valid, Agility and Air, MP.",
+      "Don't add glow, gradient fills on buttons, panels or text, or a black neon dark theme; the dark ground is the same slate, at night.",
       "Don't lay data tables, lists or sheets on the ground or the checker, or box result rows into cards.",
       "Don't show a stuff as valid before its evaluation says so, or hide a failing condition behind colour alone.",
-      "Don't introduce a second typeface, tracked uppercase labels, or weights outside the four in use (a quiet zero at 500 is the one exception)."
+      "Don't introduce another typeface or tracked uppercase labels on Items and Stuff. Use the four documented weights there, with 500 for a quiet zero."
     ]
   }
 }

@@ -13,7 +13,7 @@ function range(lo: number, hi: number, format: (n: number) => string): string {
   return lo === hi ? format(lo) : `${format(lo)} – ${format(hi)}`
 }
 
-function HitCells({ hit, canCrit }: { hit: Hit; canCrit: boolean }) {
+export function HitCells({ hit, canCrit }: { hit: Hit; canCrit: boolean }) {
   const { number } = useI18n()
   return (
     <>
@@ -24,7 +24,7 @@ function HitCells({ hit, canCrit }: { hit: Hit; canCrit: boolean }) {
 }
 
 // What a line does, then who it applies to and when.
-function LineLabel({ line }: { line: AttackLine }) {
+export function LineLabel({ line }: { line: AttackLine }) {
   const { t } = useI18n()
   const element = elementKeys[line.element] ?? "neutral"
   const name =

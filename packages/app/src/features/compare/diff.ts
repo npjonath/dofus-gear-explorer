@@ -14,6 +14,7 @@ import type {
   Stat,
   WeaponElement,
 } from "../../api/types"
+import { modsKey } from "../../lib/equip"
 import { isEmptyMods } from "../../store"
 
 // What changes from one stuff to another. Nothing here knows a game rule:
@@ -125,15 +126,6 @@ function wornAt(gear: Gear, position: string): Worn | undefined {
   }
 }
 
-// Forgemagic as text that only depends on what was forged, not on the order
-// it was written in.
-function modsKey(mods: ItemMods | undefined): string {
-  if (!mods) return ""
-  const lines = Object.entries(mods.lines ?? {}).sort(([a], [b]) => a.localeCompare(b))
-  const exos = (mods.exos ?? []).map((exo) => [exo.statId, exo.value]).sort((a, b) => a[0]! - b[0]! || a[1]! - b[1]!)
-  const draco = mods.draco ? [mods.draco.rune, mods.draco.from ?? "", mods.draco.to ?? ""] : null
-  return JSON.stringify([lines, exos, mods.transcendence ?? 0, draco, mods.element ?? ""])
-}
 
 /** The lines of an item that do not count the same on both sides. */
 export function diffLines(from: readonly ForgedLine[], to: readonly ForgedLine[]): LineDelta[] {

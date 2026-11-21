@@ -172,6 +172,9 @@ func (s *Stat) ForgeMax() int {
 type Passive struct {
 	Name        Texts
 	Description Texts
+	// SpellID is the spell a fight starts with for whoever wears the item:
+	// what sets the passive's effects waiting.
+	SpellID int
 }
 
 // Rune is a transcendence rune: one fixed bonus that seals the item.
@@ -216,6 +219,7 @@ type EffectDef struct {
 }
 
 type ItemType struct {
+	RawZone     string
 	ID          int
 	SuperTypeID int
 	Slot        Slot
@@ -308,6 +312,8 @@ type Catalog struct {
 	// SpellsByBreed lists the spells of each class in game order; key zero
 	// holds the common spells.
 	SpellsByBreed map[int][]*Spell
+	// StartSpells lists, per class, the spells its fights start with.
+	StartSpells map[int][]*Spell
 
 	// StatIndex maps a stat id to its position in dense stat vectors.
 	StatIndex map[int]int32
@@ -337,6 +343,7 @@ func NewCatalog(ds *Dataset) *Catalog {
 		BreedByID:     make(map[int]*Breed, len(ds.Breeds)),
 		SpellByID:     make(map[int]*Spell, len(ds.Spells)),
 		SpellsByBreed: map[int][]*Spell{},
+		StartSpells:   map[int][]*Spell{},
 		StatIndex:     make(map[int]int32, len(ds.Stats)),
 		ItemVector:    make(map[int][]StatValue, len(ds.Items)),
 		SetVectors:    make(map[int][][]StatValue, len(ds.Sets)),
@@ -365,6 +372,9 @@ func NewCatalog(ds *Dataset) *Catalog {
 		sp := &ds.Spells[i]
 		c.SpellByID[sp.ID] = sp
 		c.SpellsByBreed[sp.BreedID] = append(c.SpellsByBreed[sp.BreedID], sp)
+		if sp.StartsFor != 0 {
+			c.StartSpells[sp.StartsFor] = append(c.StartSpells[sp.StartsFor], sp)
+		}
 	}
 	for _, list := range c.SpellsByBreed {
 		sort.SliceStable(list, func(a, b int) bool { return list[a].Order < list[b].Order })
